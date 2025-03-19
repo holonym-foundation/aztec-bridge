@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: radial-gradient(50% 50% at 50% 50%, #f2e7d4 0%, #f2f2f2 100%);
+  font-family: 'inter', sans-serif;
+}

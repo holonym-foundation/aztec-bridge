@@ -9,12 +9,12 @@
     "start": "node --import tsx index.ts"
   },
   "dependencies": {
-    "@aztec/accounts": "0.80.0",
-    "@aztec/aztec.js": "0.80.0",
-    "@aztec/ethereum": "0.80.0",
-    "@aztec/l1-artifacts": "0.80.0",
-    "@aztec/noir-contracts.js": "0.80.0",
-    "@aztec/types": "0.76.4",
+    "@aztec/accounts": "0.81.0",
+    "@aztec/aztec.js": "0.81.0",
+    "@aztec/ethereum": "0.81.0",
+    "@aztec/l1-artifacts": "0.81.0",
+    "@aztec/noir-contracts.js": "0.81.0",
+    "@aztec/types": "0.81.0",
     "@types/node": "^22.13.10",
     "tsx": "^4.19.3",
     "typescript": "^5.0.4",

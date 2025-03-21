@@ -34,6 +34,7 @@ import { TokenBridgeContract } from '@aztec/noir-contracts.js/TokenBridge'
 import { useWallet } from './useWallet'
 import { getInitialTestAccountsWallets } from '@aztec/accounts/testing'
 import { TokenPortalAbi } from '@aztec/l1-artifacts/TokenPortalAbi'
+import { CleanHandsSBTContract } from '../constants/contract-interfaces/CleanHandsSBT'
 
 const logger = createLogger('useBridge')
 
@@ -78,6 +79,7 @@ interface BridgeState {
   publicClient: PublicClient | null
   l2Wallets: any
   l1ContractAddresses: any
+  aztecCleanHandsContract: any
 }
 
 export const useBridge = () => {
@@ -95,6 +97,7 @@ export const useBridge = () => {
     publicClient: null,
     l2Wallets: null,
     l1ContractAddresses: null,
+    aztecCleanHandsContract: null,
   })
 
   const updateState = (updates: Partial<BridgeState>) => {
@@ -127,6 +130,63 @@ export const useBridge = () => {
       updateState({ status: 'Failed to setup sandbox', loading: false })
     }
   }
+
+  // ----------------- Clean Hands -----------------
+  
+  const deployCleanHandsSBT = async () => {
+    try {
+      updateState({ loading: true, status: 'Deploying Clean Hands SBT contract...' })
+      if (!state.pxe || !wallet)
+        throw new Error('PXE or wallet not initialized')
+
+      const ownerWallet = state.l2Wallets?.[0]
+
+      const contract = await CleanHandsSBTContract.deploy(ownerWallet, ownerWallet.getAddress())
+        .send()
+        .deployed();
+
+      updateState({
+        aztecCleanHandsContract: contract,
+        status: 'Clean Hands SBT contract deployed successfully',
+        loading: false,
+      })
+    } catch (error) {
+      logger.error('Failed to deploy Clean Hands SBT contract:', error)
+      updateState({ status: 'Failed to deploy Clean Hands SBT contract', loading: false })
+    }
+  }
+
+  const mintCleanHandsSBT = async () => {
+    try {
+      // Mint a Clean Hands SBT to the SBT contract owner
+
+      updateState({ loading: true, status: 'Minting Clean Hands SBT...' })
+      if (!state.pxe || !state.aztecCleanHandsContract || !wallet)
+        throw new Error('PXE or wallet not initialized')
+
+      const ownerWallet = state.l2Wallets?.[0]
+
+      const contract = state.aztecCleanHandsContract;
+      const expiry = Math.floor((new Date().getTime() + 1000 * 60 * 60 * 24 * 365) / 1000);
+      await contract.methods.mint(
+        ownerWallet.getAddress(),
+        123456789,
+        987654321, // In production, action nullifier is poseidon(userSecret, actionId)
+        expiry,
+      ).send().wait();
+
+      updateState({
+        aztecCleanHandsContract: contract,
+        status: `Minted SBT to ${ownerWallet.getAddress()}`,
+        loading: false,
+      })
+    } catch (error) {
+      logger.error('Failed to mint Clean Hands SBT:', error)
+      updateState({ status: 'Failed to mint Clean Hands SBT contract', loading: false })
+    }
+  }
+  
+  // ----------------- END: Clean Hands -----------------
 
   const deployL2Token = async () => {
     try {
@@ -223,7 +283,7 @@ export const useBridge = () => {
   const deployBridgeContract = async () => {
     try {
       updateState({ loading: true, status: 'Deploying bridge contract...' })
-      if (!state.pxe || !state.l2TokenContract || !state.l1PortalContractAddress || !wallet) {
+      if (!state.pxe || !state.l2TokenContract || !state.l1PortalContractAddress || !state.aztecCleanHandsContract || !wallet) {
         throw new Error('Required contracts or wallet not initialized')
       }
 
@@ -234,7 +294,8 @@ export const useBridge = () => {
       const bridge = await deployBridge(
         ownerWallet,
         state.l2TokenContract.address,
-        EthAddress.fromString(state.l1PortalContractAddress)
+        EthAddress.fromString(state.l1PortalContractAddress),
+        state.aztecCleanHandsContract.address
       )
       updateState({
         bridgeContract: bridge,
@@ -412,6 +473,8 @@ export const useBridge = () => {
     deployL1Token,
     deployPortal,
     deployBridgeContract,
+    deployCleanHandsSBT,
+    mintCleanHandsSBT,
     bridgeTokensToL2,
     withdrawTokensToL1,
   }

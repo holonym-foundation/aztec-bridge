@@ -15,6 +15,8 @@ export default function BridgePage() {
     l1PortalContractAddress,
     bridgeContract,
     setup,
+    deployCleanHandsSBT,
+    mintCleanHandsSBT,
     deployL2Token,
     deployL1Token,
     deployPortal,
@@ -80,6 +82,12 @@ export default function BridgePage() {
               <h2 className='text-lg font-semibold mb-2'>Deploy Contracts</h2>
               <div className='space-y-1.5'>
                 <TextButton
+                  onClick={deployCleanHandsSBT}
+                  disabled={loading || !pxe}
+                  className='w-full'>
+                  Deploy Clean Hands SBT
+                </TextButton>
+                <TextButton
                   onClick={deployL2Token}
                   disabled={loading || !pxe}
                   className='w-full'>
@@ -104,6 +112,18 @@ export default function BridgePage() {
                   }
                   className='w-full'>
                   Deploy Bridge
+                </TextButton>
+              </div>
+            </div>
+
+            <div className='bg-white rounded-lg p-3'>
+              <h2 className='text-lg font-semibold mb-2'>Mint SBT</h2>
+              <div className='space-y-1.5'>
+                <TextButton
+                  onClick={mintCleanHandsSBT}
+                  disabled={loading || !pxe}
+                  className='w-full'>
+                  Mint Clean Hands SBT
                 </TextButton>
               </div>
             </div>

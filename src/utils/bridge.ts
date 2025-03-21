@@ -2,7 +2,8 @@ import { createPXEClient, EthAddress, waitForPXE, L1TokenPortalManager, Fr, PXE,
 import { deployL1Contract } from '@aztec/ethereum';
 import { TestERC20Abi, TestERC20Bytecode, TokenPortalAbi, TokenPortalBytecode } from '@aztec/l1-artifacts';
 import { TokenContract } from "@aztec/noir-contracts.js/Token";
-import { TokenBridgeContract } from "@aztec/noir-contracts.js/TokenBridge";
+// import { TokenBridgeContract } from "@aztec/noir-contracts.js/TokenBridge";
+import { TokenBridgeContract } from "../constants/contract-interfaces/TokenBridge";
 import { PublicClient, WalletClient } from 'viem';
 
 const PXE_URL = 'http://localhost:8080';
@@ -46,9 +47,11 @@ export const deployL2Token = async (ownerWallet: Wallet, ownerAztecAddress: Azte
 export const deployBridge = async (
   ownerWallet: Wallet, 
   l2TokenAddress: AztecAddress, 
-  portalAddress: EthAddress
+  portalAddress: EthAddress,
+  cleanHandsSBTContractAddress: AztecAddress,
 ): Promise<TokenBridgeContract> => {
-  return await TokenBridgeContract.deploy(ownerWallet, l2TokenAddress, portalAddress).send().deployed();
+  // return await TokenBridgeContract.deploy(ownerWallet, l2TokenAddress, portalAddress).send().deployed();
+  return await TokenBridgeContract.deploy(ownerWallet, l2TokenAddress, portalAddress, cleanHandsSBTContractAddress).send().deployed();
 };
 
 export const bridgeTokens = async (

@@ -1,0 +1,1 @@
+export const cleanHandsEVMAttester = '0xB1f50c6C34C72346b1229e5C80587D0D659556Fd'

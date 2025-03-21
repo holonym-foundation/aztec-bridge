@@ -41,3 +41,13 @@ export type SignProtocolAttestationsQueryResponse = {
   statusCode: number
   success: boolean
 }
+
+export type CleanHandsSBTAztec = {
+  id: bigint
+  recipient: AztecAddress
+  expiry: bigint
+  action_id: bigint
+  action_nullifier: bigint
+  revoked: boolean
+  minter: AztecAddress
+}

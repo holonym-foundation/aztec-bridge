@@ -40,3 +40,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+aztec-contracts/token_bridge/target

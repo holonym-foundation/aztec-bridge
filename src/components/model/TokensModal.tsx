@@ -4,7 +4,7 @@ import StyledImage from '../StyedImage';
 const TOKENS = [
   {
     id: 1,
-    img: '/assets/images/svg/USDC.svg',
+    img: '/assets/svg/USDC.svg',
     title: 'USDC',
     about: 'Ethereum',
     amount: '$50.27',
@@ -12,7 +12,7 @@ const TOKENS = [
   },
   {
     id: 2,
-    img: '/assets/images/svg/USDT.svg',
+    img: '/assets/svg/USDT.svg',
     title: 'USDT',
     about: 'Ethereum',
     amount: '$14.02',
@@ -20,7 +20,7 @@ const TOKENS = [
   },
   {
     id: 3,
-    img: '/assets/images/svg/ETH.svg',
+    img: '/assets/svg/ETH.svg',
     title: 'ETH',
     about: 'Ethereum',
     amount: '$970.10',
@@ -28,7 +28,7 @@ const TOKENS = [
   },
   {
     id: 4,
-    img: '/assets/images/svg/XDAI.svg',
+    img: '/assets/svg/XDAI.svg',
     title: 'XDAI',
     about: 'Ethereum',
     amount: '$0.00',
@@ -36,7 +36,7 @@ const TOKENS = [
   },
   {
     id: 5,
-    img: '/assets/images/svg/ETH.svg',
+    img: '/assets/svg/ETH.svg',
     title: 'ETH',
     about: 'Ethereum',
     amount: '$970.10',
@@ -44,7 +44,7 @@ const TOKENS = [
   },
   {
     id: 6,
-    img: '/assets/images/svg/ETH.svg',
+    img: '/assets/svg/ETH.svg',
     title: 'ETH',
     about: 'Ethereum',
     amount: '$970.10',
@@ -52,7 +52,7 @@ const TOKENS = [
   },
   {
     id: 7,
-    img: '/assets/images/svg/ETH.svg',
+    img: '/assets/svg/ETH.svg',
     title: 'ETH',
     about: 'Ethereum',
     amount: '$970.10',
@@ -60,7 +60,7 @@ const TOKENS = [
   },
   {
     id: 8,
-    img: '/assets/images/svg/ETH.svg',
+    img: '/assets/svg/ETH.svg',
     title: 'ETH',
     about: 'Ethereum',
     amount: '$970.10',
@@ -68,7 +68,7 @@ const TOKENS = [
   },
   {
     id: 7,
-    img: '/assets/images/svg/ETH.svg',
+    img: '/assets/svg/ETH.svg',
     title: 'ETH',
     about: 'Ethereum',
     amount: '$970.10',
@@ -76,7 +76,7 @@ const TOKENS = [
   },
   {
     id: 8,
-    img: '/assets/images/svg/ETH.svg',
+    img: '/assets/svg/ETH.svg',
     title: 'ETH',
     about: 'Ethereum',
     amount: '$970.10',
@@ -87,7 +87,7 @@ const TOKENS = [
 interface IProps {
   tokensData: any;
   setTokensData: (val: any) => void;
-  isSend: string | null;
+  isSend: boolean | null;
   handleClose: () => void;
 }
 
@@ -98,7 +98,7 @@ export default function TokensModal({ setTokensData, tokensData, isSend, handleC
       <div className='p-5 '>
         <div className='bg-latest-grey-800 w-full  flex justify-between items-center rounded-[8px] py-1.5 px-2.5'>
           <div className='flex gap-1'>
-            <StyledImage src='/assets/images/svg/search.svg' alt='' className='h-8 w-8' />
+            <StyledImage src='/assets/svg/search.svg' alt='' className='h-8 w-8' />
             <input
               type='text'
               placeholder='search'
@@ -106,7 +106,7 @@ export default function TokensModal({ setTokensData, tokensData, isSend, handleC
             />
           </div>
           <button onClick={handleClose}>
-            <StyledImage src='/assets/images/svg/cross.svg' alt='' className='h-3 w-3' />
+            <StyledImage src='/assets/svg/cross.svg' alt='' className='h-3 w-3' />
           </button>
         </div>
       </div>
@@ -117,7 +117,7 @@ export default function TokensModal({ setTokensData, tokensData, isSend, handleC
             return (
               <div
                 onClick={() => {
-                  if (isSend === 'send') {
+                  if (isSend) {
                     setTokensData({ ...tokensData, send: items });
                   } else {
                     setTokensData({ ...tokensData, received: items });

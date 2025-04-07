@@ -14,11 +14,13 @@ export default function BridgePage() {
     l2TokenContract,
     l1PortalContractAddress,
     bridgeContract,
+    feeJuicePaymentMethod,
     setup,
     deployL2Token,
     deployL1Token,
     deployPortal,
     deployBridgeContract,
+    setupFeeJuiceForL2,
     bridgeTokensToL2,
     withdrawTokensToL1,
   } = useBridge()
@@ -67,17 +69,17 @@ export default function BridgePage() {
               </div>
             )}
 
-            {/* Setup Section */}
+            {/* Step 1: Setup Section */}
             <div className='bg-white rounded-lg p-3'>
-              <h2 className='text-lg font-semibold mb-2'>Initial Setup</h2>
+              <h2 className='text-lg font-semibold mb-2'>1. Initial Setup</h2>
               <TextButton onClick={setup} disabled={loading} className='w-full'>
                 Setup Sandbox
               </TextButton>
             </div>
 
-            {/* Contract Deployment Section */}
+            {/* Step 2: L2 Token Contract and Fee Juice */}
             <div className='bg-white rounded-lg p-3'>
-              <h2 className='text-lg font-semibold mb-2'>Deploy Contracts</h2>
+              <h2 className='text-lg font-semibold mb-2'>2. L2 Setup</h2>
               <div className='space-y-1.5'>
                 <TextButton
                   onClick={deployL2Token}
@@ -86,10 +88,23 @@ export default function BridgePage() {
                   Deploy L2 Token
                 </TextButton>
                 <TextButton
+                  onClick={setupFeeJuiceForL2}
+                  disabled={loading || !pxe || !l2TokenContract}
+                  className='w-full'>
+                  Setup Fee Juice
+                </TextButton>
+              </div>
+            </div>
+
+            {/* Step 3: L1 Token Contract */}
+            <div className='bg-white rounded-lg p-3'>
+              <h2 className='text-lg font-semibold mb-2'>3. L1 Setup</h2>
+              <div className='space-y-1.5'>
+                <TextButton
                   onClick={deployL1Token}
                   disabled={loading || !pxe}
                   className='w-full'>
-                  Deploy L1 Token
+                  Deploy L1 Token & Fee Asset Handler
                 </TextButton>
                 <TextButton
                   onClick={deployPortal}
@@ -97,30 +112,35 @@ export default function BridgePage() {
                   className='w-full'>
                   Deploy Portal
                 </TextButton>
-                <TextButton
-                  onClick={deployBridgeContract}
-                  disabled={
-                    loading || !l2TokenContract || !l1PortalContractAddress
-                  }
-                  className='w-full'>
-                  Deploy Bridge
-                </TextButton>
               </div>
             </div>
 
-            {/* Bridge Operations Section */}
+            {/* Step 4: Bridge Contract */}
             <div className='bg-white rounded-lg p-3'>
-              <h2 className='text-lg font-semibold mb-2'>Bridge Operations</h2>
+              <h2 className='text-lg font-semibold mb-2'>4. Bridge Deployment</h2>
+              <TextButton
+                onClick={deployBridgeContract}
+                disabled={
+                  loading || !l2TokenContract || !l1PortalContractAddress || !feeJuicePaymentMethod
+                }
+                className='w-full'>
+                Deploy Bridge (using Fee Juice)
+              </TextButton>
+            </div>
+
+            {/* Step 5: Bridge Operations */}
+            <div className='bg-white rounded-lg p-3'>
+              <h2 className='text-lg font-semibold mb-2'>5. Bridge Operations</h2>
               <div className='space-y-1.5'>
                 <div className='flex items-center gap-2 mb-2'>
                   <StyledImage
-                    src='/assets/images/svg/ethLogo.svg'
+                    src='/assets/svg/ethLogo.svg'
                     alt='ETH'
                     className='h-5 w-5'
                   />
                   <span className='text-sm'>→</span>
                   <StyledImage
-                    src='/assets/images/svg/aztec.svg'
+                    src='/assets/svg/aztec.svg'
                     alt='Aztec'
                     className='h-5 w-5'
                   />
@@ -134,13 +154,13 @@ export default function BridgePage() {
 
                 <div className='flex items-center gap-2 my-2'>
                   <StyledImage
-                    src='/assets/images/svg/aztec.svg'
+                    src='/assets/svg/aztec.svg'
                     alt='Aztec'
                     className='h-5 w-5'
                   />
                   <span className='text-sm'>→</span>
                   <StyledImage
-                    src='/assets/images/svg/ethLogo.svg'
+                    src='/assets/svg/ethLogo.svg'
                     alt='ETH'
                     className='h-5 w-5'
                   />
@@ -151,6 +171,24 @@ export default function BridgePage() {
                   className='w-full'>
                   Withdraw to L1
                 </TextButton>
+              </div>
+            </div>
+
+            {/* Fee Juice Status */}
+            <div className='bg-white rounded-lg p-3'>
+              <h2 className='text-lg font-semibold mb-2'>Fee Juice Status</h2>
+              <div className='text-sm'>
+                {feeJuicePaymentMethod ? (
+                  <div className='flex items-center gap-2'>
+                    <span className='inline-block w-3 h-3 rounded-full bg-green-500'></span>
+                    <span>Fee Juice is set up and ready to use</span>
+                  </div>
+                ) : (
+                  <div className='flex items-center gap-2'>
+                    <span className='inline-block w-3 h-3 rounded-full bg-gray-400'></span>
+                    <span>Fee Juice not configured</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

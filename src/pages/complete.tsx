@@ -25,10 +25,13 @@ export default function CompletePage() {
       <RootStyle>
         <div>
           <div className=" bg-latest-grey-200 p-5">
-            <p className="text-center text-20 "> Bridge</p>
+          <div  className='flex   items-center gap-3 max-w-[150px] mx-auto rounded-full bg-white  px-4 py-1'>
+          <StyledImage src='/assets/svg/bridgeIcon.svg' alt='' className='h-5 w-5 ' />
+          <p className=' font-bold text-20 '> BRIDGE</p>
+          </div>
             <div className="bg-white rounded-md pb-[46px] mt-5 ">
               <div className="pt-10  flex items-center justify-center">
-                <StyledImage src="/assets/images/svg/transactionComplete.svg" alt="" className="h-[56px] w-[56px]" />
+                <StyledImage src="/assets/svg/transactionComplete.svg" alt="" className="h-[56px] w-[56px]" />
               </div>
               <p className="text-center font-semibold text-md mt-5">
                 Transaction completed
@@ -41,7 +44,7 @@ export default function CompletePage() {
                     From
                   </p>
                   <div className="flex  gap-2 mt-3">
-                    <StyledImage src="/assets/images/svg/ethLogo.svg" alt="" className="h-6 w-6" />
+                    <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-6 w-6" />
                     <p className="text-16 font-medium text-latest-black-100  w-[106px]">
                       Polygon
                     </p>
@@ -52,7 +55,7 @@ export default function CompletePage() {
                     To
                   </p>
                   <div className="flex  gap-2 mt-3">
-                    <StyledImage src="/assets/images/svg/aztec.svg" alt="" className="h-6 w-6" />
+                    <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-6 w-6" />
                     <p className="text-16 font-medium text-latest-black-100  w-[106px]">
                       Aztec
                     </p>
@@ -74,7 +77,7 @@ export default function CompletePage() {
               <TextButton className="" onClick={()=>router.push('/')}>Back to Main Screen</TextButton>
             </div>
             <div className="flex   justify-center gap-2 pb-3">
-              <StyledImage src="/assets/images/svg/silk0.4.svg" alt="" className="w-[14px] h-4" />
+              <StyledImage src="/assets/svg/silk0.4.svg" alt="" className="w-[14px] h-4" />
               <p className="text-12  font-medium text-latest-grey-600  ">
                 Secured by Human Wallet
               </p>

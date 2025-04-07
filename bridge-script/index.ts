@@ -3,6 +3,8 @@
 import { getInitialTestAccountsWallets } from '@aztec/accounts/testing';
 import {
   EthAddress,
+  FeeJuicePaymentMethod,
+  FeeJuicePaymentMethodWithClaim,
   Fr,
   L1TokenManager,
   L1TokenPortalManager,
@@ -10,7 +12,10 @@ import {
   createPXEClient,
   waitForPXE,
 } from '@aztec/aztec.js';
+import { L1FeeJuicePortalManager } from "@aztec/aztec.js";
 import { createL1Clients, deployL1Contract } from '@aztec/ethereum';
+import { FeeJuiceContract } from "@aztec/noir-contracts.js/FeeJuice";
+
 import {
   FeeAssetHandlerAbi,
   FeeAssetHandlerBytecode,
@@ -27,6 +32,8 @@ import { getContract } from 'viem';
 // docs:end:imports
 // docs:start:utils
 const MNEMONIC = 'test test test test test test test test test test test junk';
+const FEE_FUNDING_FOR_TESTER_ACCOUNT = 1000000000000000000n;
+
 const { ETHEREUM_HOSTS = 'http://localhost:8545' } = process.env;
 
 const { walletClient, publicClient } = createL1Clients(ETHEREUM_HOSTS.split(','), MNEMONIC);
@@ -81,6 +88,8 @@ async function main() {
   // docs:start:setup
   const logger = createLogger('aztec:token-bridge-tutorial');
   const pxe = await setupSandbox();
+  const nodeInfo = (await pxe.getNodeInfo())
+
   const wallets = await getInitialTestAccountsWallets(pxe);
   const ownerWallet = wallets[0];
   const ownerAztecAddress = wallets[0].getAddress();
@@ -92,6 +101,7 @@ async function main() {
   logger.info(`Rollup Address: ${l1ContractAddresses.rollupAddress}`);
   // docs:end:setup
 
+
   // Deploy L2 token contract
   // docs:start:deploy-l2-token
   const l2TokenContract = await TokenContract.deploy(ownerWallet, ownerAztecAddress, 'L2 Token', 'L2', 18)
@@ -99,6 +109,45 @@ async function main() {
     .deployed();
   logger.info(`L2 token contract deployed at ${l2TokenContract.address}`);
   // docs:end:deploy-l2-token
+
+
+
+
+
+// ------------------------------------
+
+  // const newWallet = wallets[1]
+  // const feeJuiceReceipient = newWallet.getAddress()
+  // logger.info(`Fee Juice Receipient: ${feeJuiceReceipient}`)
+
+  const ownerL2Balance = await l2TokenContract.methods.balance_of_public(ownerAztecAddress).simulate()
+  logger.info(`Owner L2 balance: ${ownerL2Balance}`);
+
+
+  // Setup and bridge fee asset to L2 to get fee juice
+
+  logger.info('Bridge fee asset to L2 to get fee juice')
+  const feeJuicePortalManager = await L1FeeJuicePortalManager.new(
+    pxe,
+    publicClient,
+    walletClient,
+    logger,
+);
+
+  const feeJuiceClaim = await feeJuicePortalManager.bridgeTokensPublic(ownerAztecAddress, FEE_FUNDING_FOR_TESTER_ACCOUNT, true);
+
+  const feeJuice = await FeeJuiceContract.at(nodeInfo.protocolContractAddresses.feeJuice, wallets[0])
+  logger.info(`Fee Juice minted to ${ownerAztecAddress} on L2.`)
+  const feeJuiceBalance = await feeJuice.methods.balance_of_public(ownerAztecAddress).simulate()
+
+    // Claim Fee Juice & Pay Fees yourself
+  // const claimAndPay = new FeeJuicePaymentMethodWithClaim(ownerWallet, feeJuiceClaim)
+
+    // Pay fees yourself
+  const useFeeJuice = new FeeJuicePaymentMethod(ownerAztecAddress) 
+
+  logger.info(`Fee Juice balance: ${feeJuiceBalance}`)
+// ------------------------------------
 
   // Deploy L1 token contract & mint tokens
   // docs:start:deploy-l1-token
@@ -129,7 +178,7 @@ async function main() {
     l2TokenContract.address,
     l1PortalContractAddress,
   )
-    .send()
+    .send({ fee: { paymentMethod: useFeeJuice } }) // Pay with FeeJuice
     .deployed();
   logger.info(`L2 token bridge contract deployed at ${l2BridgeContract.address}`);
   // docs:end:deploy-l2-bridge
@@ -161,6 +210,8 @@ async function main() {
   // docs:start:l1-bridge-public
   const claim = await l1PortalManager.bridgeTokensPublic(ownerAztecAddress, MINT_AMOUNT, true);
 
+
+
   // Do 2 unrleated actions because
   // https://github.com/AztecProtocol/aztec-packages/blob/7e9e2681e314145237f95f79ffdc95ad25a0e319/yarn-project/end-to-end/src/shared/cross_chain_test_harness.ts#L354-L355
   await l2TokenContract.methods.mint_to_public(ownerAztecAddress, 0n).send().wait();
@@ -171,10 +222,25 @@ async function main() {
   // docs:start:claim
   await l2BridgeContract.methods
     .claim_public(ownerAztecAddress, MINT_AMOUNT, claim.claimSecret, claim.messageLeafIndex)
-    .send()
+    .send(
+      // { fee: { paymentMethod: claimAndPay } }
+    )
     .wait();
   const balance = await l2TokenContract.methods.balance_of_public(ownerAztecAddress).simulate();
   logger.info(`Public L2 balance of ${ownerAztecAddress} is ${balance}`);
+
+  // Claim Fee Juice & Pay Fees yourself
+  // const claim2 = await feeJuicePortalManager.bridgeTokensPublic(feeJuiceReceipient, FEE_FUNDING_FOR_TESTER_ACCOUNT, true);
+  // const claimAndPay = new FeeJuicePaymentMethodWithClaim(newWallet, claim2)
+  // await l2BridgeContract.methods
+  // .claim_public(feeJuiceReceipient, MINT_AMOUNT, claim2.claimSecret, claim2.messageLeafIndex)
+  // .send(
+  //   { fee: { paymentMethod: claimAndPay } }
+  // )
+  // .wait();
+
+  
+
   // docs:end:claim
 
   logger.info('Withdrawing funds from L2');

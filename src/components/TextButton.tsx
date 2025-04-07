@@ -16,7 +16,7 @@ const TextButton = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={clsxm(
-          'bg-black text-white flex gap-2 py-3 rounded-lg items-center justify-center w-full font-semibold h-full hover:bg-silk-600',
+          'bg-black text-white flex gap-2 py-[10px] rounded-lg items-center justify-center w-full font-semibold h-full hover:bg-silk-600',
           className,
         )}
         disabled={isLoading || buttonDisabled}

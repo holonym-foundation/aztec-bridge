@@ -5,6 +5,11 @@ import { TokenContract } from "@aztec/noir-contracts.js/Token";
 import { TokenBridgeContract } from "@aztec/noir-contracts.js/TokenBridge";
 import { FeeJuiceContract } from "@aztec/noir-contracts.js/FeeJuice";
 import { PublicClient, WalletClient, getContract } from 'viem';
+import PortalSBTJson from '../constants/PortalSBT.json'
+
+// Fix the bytecode format
+const PortalSBTAbi = PortalSBTJson.abi
+const PortalSBTBytecode = PortalSBTJson.bytecode.object
 
 const PXE_URL = 'http://localhost:8080';
 // Create logger but not used to avoid linter errors
@@ -86,6 +91,16 @@ export const deployBridge = async (
   }
 };
 
+
+export const deployPortalSBT = async (walletClient: WalletClient, publicClient: PublicClient): Promise<EthAddress> => {
+  return await deployL1Contract(
+    walletClient,
+    publicClient,
+    PortalSBTAbi,
+    PortalSBTBytecode,
+    []
+  ).then(({ address }) => address);
+};
 export const setupFeeJuice = async (
   pxe: PXE,
   publicClient: PublicClient,

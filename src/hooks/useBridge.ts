@@ -10,6 +10,7 @@ import {
   withdrawTokens,
   FEE_FUNDING_FOR_TESTER_ACCOUNT,
   MINT_AMOUNT,
+  deployPortalSBT,
 } from '@/utils/bridge'
 import {
   createPublicClient,
@@ -38,6 +39,13 @@ import { getInitialTestAccountsWallets } from '@aztec/accounts/testing'
 import { TokenPortalAbi } from '@aztec/l1-artifacts/TokenPortalAbi'
 import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi'
 
+import PortalSBTJson from '../constants/PortalSBT.json'
+import { deployL1Contract } from '@aztec/ethereum';
+
+// Fix the bytecode format
+const PortalSBTAbi = PortalSBTJson.abi
+const PortalSBTBytecode = PortalSBTJson.bytecode.object
+
 const logger = createLogger('useBridge')
 
 // from here: https://github.com/AztecProtocol/aztec-packages/blob/ecbd59e58006533c8885a8b2fadbd9507489300c/yarn-project/end-to-end/src/fixtures/utils.ts#L534
@@ -64,10 +72,13 @@ interface BridgeState {
   loading: boolean
   status: string
   pxe: PXE | null
+  l1WalletAddress: string | null
+  l2WalletAddress: string | null
   l1TokenContract: string | null
   l2TokenContract: TokenContract | null
   l1PortalContractAddress: string | null
   l1Portal: ReturnType<typeof getContract> | null
+  l1PortalSBTContract: ReturnType<typeof getContract> | null
   bridgeContract: TokenBridgeContract | null
   walletClient: WalletClient | null
   publicClient: PublicClient | null
@@ -90,10 +101,13 @@ export const useBridge = () => {
     loading: false,
     status: '',
     pxe: null,
+    l1WalletAddress: null,
+    l2WalletAddress: null,
     l1TokenContract: null,
     l2TokenContract: null,
     l1PortalContractAddress: null,
     l1Portal: null,
+    l1PortalSBTContract: null,
     bridgeContract: null,
     walletClient: null,
     publicClient: null,
@@ -118,6 +132,7 @@ export const useBridge = () => {
 
   const setupEverything = async () => {
     try {
+
       // Initialize state to show we're starting the process
       updateState({
         loading: true,
@@ -191,6 +206,8 @@ export const useBridge = () => {
           walletClient,
           publicClient
         )
+ console.log("l1PortalContractAddress ", l1PortalContractAddress);
+
 
         const l1Portal = getContract({
           address: l1PortalContractAddress.toString(),
@@ -242,10 +259,29 @@ export const useBridge = () => {
         const mintAmount = await l1TokenManager.getMintAmount()
         const minting = await l1TokenManager.mint(ownerEthAddress)
 
+
+        updateState({ status: 'Deploying Portal SBT...', setupProgress: 7 })
+        const l1PortalSBTContractAddress = await deployPortalSBT(
+          walletClient,
+          publicClient,
+        )
+
+        console.log("l1PortalSBTContractAddress ", l1PortalSBTContractAddress);
+
+
+        const l1PortalSBTContract = getContract({
+          address: l1PortalSBTContractAddress.toString(),
+          abi: PortalSBTAbi,
+          client: walletClient,
+        })
+
+
         updateState({
           pxe,
           walletClient,
           publicClient,
+          l1WalletAddress: ownerEthAddress,
+          l2WalletAddress: ownerAztecAddress.toString(),
           l2Wallets: wallets,
           l1ContractAddresses,
           l2TokenContract,
@@ -255,10 +291,11 @@ export const useBridge = () => {
           feeAssetHandler: feeAssetHandlerAddress.toString(),
           l1PortalContractAddress: l1PortalContractAddress.toString(),
           l1Portal,
+          l1PortalSBTContract,
           bridgeContract: bridge,
           status: 'Contracts setup complete! Ready to bridge tokens.',
           loading: false,
-          setupProgress: 7,
+          setupProgress: 8,
           setupComplete: true,
           l1Balance: mintAmount.toString(),
           l2Balance: '0',
@@ -754,6 +791,91 @@ export const useBridge = () => {
     )
   }
 
+  /**
+   * Check if a user has an SBT
+   * @param address The address to check (defaults to the current wallet address)
+   */
+  const hasSBT = async (address?: string) => {
+    if (!state.l1PortalSBTContract?.address)
+      throw new Error('hasSBT: SBT contract not initialized')
+    if (!state.publicClient)
+      throw new Error('hasSBT: Public client not initialized')
+    
+    try {
+      updateState({ loading: true, status: 'Checking SBT status...' })
+      
+      // If no address provided, use the current wallet address
+      const addressToCheck = address || state.l1WalletAddress
+      if (!addressToCheck)
+        throw new Error('hasSBT: No address provided and wallet client has no account address')
+      
+      // Format both addresses as hex strings
+      const formattedUserAddress = addressToCheck.toLowerCase() as `0x${string}`
+      console.log("state.l1PortalSBTContract ", state.l1PortalSBTContract);
+
+      // const formattedContractAddress = state.l1PortalSBTContract.address.toLowerCase() as `0x${string}`
+      
+      // // Create a contract instance with read capabilities
+      // const contract = getContract({
+      //   address: formattedContractAddress,
+      //   abi: PortalSBTAbi,
+      //   client: state.publicClient,
+      // })
+      
+      // Call the hasSoulboundToken function
+      const hasToken = await state.l1PortalSBTContract.read.hasSoulboundToken([formattedUserAddress])
+      
+      logger.info(`SBT status for ${addressToCheck}: ${hasToken}`)
+      updateState({ 
+        status: `SBT status checked: ${hasToken ? 'Has SBT' : 'No SBT'}`, 
+        loading: false 
+      })
+      
+      return hasToken
+    } catch (error) {
+      logger.error('Failed to check SBT status:', error)
+      updateState({ 
+        status: 'Failed to check SBT status', 
+        loading: false 
+      })
+      return false
+    }
+  }
+
+  /**
+   * Mint an SBT for the caller
+   */
+  const mintSBT = async () => {
+    if (!state.l1PortalSBTContract?.address)
+      throw new Error('mintSBT: SBT contract not initialized')
+    if (!state.walletClient)
+      throw new Error('mintSBT: Wallet client not initialized')
+
+    try {
+      updateState({ loading: true, status: 'Minting SBT...' })
+      
+
+      // Call the mint function
+      const tx = await state.l1PortalSBTContract.write.mint()
+      if (!tx) throw new Error('Failed to mint SBT: Transaction failed')
+      
+      logger.info(`SBT minted successfully: ${tx}`)
+      updateState({ 
+        status: 'SBT minted successfully', 
+        loading: false 
+      })
+      
+      return true
+    } catch (error) {
+      logger.error('Failed to mint SBT:', error)
+      updateState({ 
+        status: 'Failed to mint SBT', 
+        loading: false 
+      })
+      return false
+    }
+  }
+
   return {
     ...state,
     setup,
@@ -767,5 +889,7 @@ export const useBridge = () => {
     setupEverything,
     getL1TokenBalance,
     mintL1Tokens,
+    mintSBT,
+    hasSBT,
   }
 }

@@ -5,6 +5,7 @@ import StyledImage from '@/components/StyedImage'
 import TextButton from '@/components/TextButton'
 import { useWallet } from '@/hooks/useWallet'
 import { useBridge } from '@/hooks/useBridge'
+import SBT from '@/components/model/SBT'
 import clsxm from '@/utils/clsxm'
 import { useState, useEffect, ChangeEvent } from 'react'
 import { MINT_AMOUNT } from '@/utils/bridge'
@@ -47,9 +48,13 @@ export default function Home() {
   const [selectNetwork, setSelectNetwork] = useState<boolean>(false)
   const [selectToken, setSelectToken] = useState<boolean>(false)
   const [isSend, setIsSend] = useState<null | boolean>(null)
-  const { isConnected, connect } = useWallet()
+  const [showSBTModal, setShowSBTModal] = useState(false)
+  const [checkingSBT, setCheckingSBT] = useState(false)
+  const { isConnected, connect, address } = useWallet()
   const {
     loading,
+    l1WalletAddress,
+    l2WalletAddress,
     setupProgress,
     setupError,
     setupComplete,
@@ -60,6 +65,8 @@ export default function Home() {
     l2Wallets,
     l1Balance,
     l2Balance,
+    hasSBT,
+    mintSBT,
   } = useBridge()
 
   const [networkData, setNetworkData] = useState(networks)
@@ -71,6 +78,7 @@ export default function Home() {
   const [usdValue, setUsdValue] = useState<string>('$0.00')
   const [localL1Balance, setLocalL1Balance] = useState(l1Balance)
   const [localL2Balance, setLocalL2Balance] = useState(l2Balance)
+  const [hasSoulboundToken, setHasSoulboundToken] = useState<boolean | null>(null)
 
   const stepLabels = [
     'Setting up sandbox...',
@@ -80,6 +88,7 @@ export default function Home() {
     'Deploying portal...',
     'Deploying bridge contract...',
     'Minting L1 tokens...',
+    'Deploying Portal SBT...',
     'Ready to bridge!',
   ]
 
@@ -87,6 +96,35 @@ export default function Home() {
     setLocalL1Balance(l1Balance)
     setLocalL2Balance(l2Balance)
   }, [l1Balance, l2Balance])
+
+  const checkSBTAndProceed = async () => {
+    if (!inputAmount || parseFloat(inputAmount) <= 0) {
+      alert('Please enter a valid amount')
+      return
+    }
+
+    if (parseFloat(inputAmount) > parseFloat(l1Balance)) {
+      alert(`Amount exceeds available L1 balance of ${l1Balance} ETH`)
+      return
+    }
+
+    setCheckingSBT(true)
+    try {
+      const hasToken = await hasSBT(l1WalletAddress || '')
+      setHasSoulboundToken(hasToken)
+      
+      if (!hasToken) {
+        setShowSBTModal(true)
+      } else {
+        // User has an SBT, proceed with bridging
+        handleBridgeOrWithdraw()
+      }
+    } catch (error) {
+      console.error('Failed to check SBT status:', error)
+    } finally {
+      setCheckingSBT(false)
+    }
+  }
 
   const handleBridgeOrWithdraw = async () => {
     try {
@@ -130,6 +168,14 @@ export default function Home() {
     }
   }
 
+  const handleSBTMinted = async () => {
+    setHasSoulboundToken(true)
+    setShowSBTModal(false)
+    await mintSBT()
+    // Proceed with bridging after successful minting
+    handleBridgeOrWithdraw()
+  }
+
   const handleSwap = () => {
     setTokensData({ send: tokensData?.received, received: tokensData?.send })
     setNetworkData({ send: networkData?.received, received: networkData?.send })
@@ -144,6 +190,8 @@ export default function Home() {
       }
 
       await setupEverything()
+      
+
     } catch (error) {
       console.error('Failed to setup bridge:', error)
     }
@@ -173,6 +221,15 @@ export default function Home() {
             tokensData={tokensData}
             isSend={isSend}
             handleClose={() => setSelectToken(false)}
+          />
+        )}
+        {showSBTModal && (
+          <SBT
+            address={l1WalletAddress || ''}
+            buttonText="Get SBT on Ethereum"
+            chain="Ethereum"
+            onMint={handleSBTMinted}
+            onClose={() => setShowSBTModal(false)}
           />
         )}
 
@@ -453,62 +510,63 @@ export default function Home() {
                 </TextButton>
               ) : (
                 <TextButton
-                  onClick={handleBridgeOrWithdraw}
+                  onClick={hasSoulboundToken ? handleBridgeOrWithdraw : checkSBTAndProceed}
                   disabled={
-                    bridging || !inputAmount || parseFloat(inputAmount) <= 0
-                  }>
-                  {bridging ? (
+                    bridging || checkingSBT || !inputAmount || parseFloat(inputAmount) <= 0
+                  }
+                  >
+                  {checkingSBT ? (
+                    <div className='flex justify-center gap-2'>
+                      <Oval
+                        height='20'
+                        width='20'
+                        color='#ccc'
+                        wrapperStyle={{}}
+                        wrapperClass=''
+                        visible={true}
+                        ariaLabel='oval-loading'
+                        secondaryColor='#ccc'
+                        strokeWidth={6}
+                        strokeWidthSecondary={6}
+                      />
+                      Checking SBT Status...
+                    </div>
+                  ) : bridging ? (
                     isWithdrawing ? (
-                      <>
-                        <div className='flex justify-center gap-2'>
-                          <Oval
-                            height='20'
-                            width='20'
-                            color='#ccc'
-                            wrapperStyle={
-                              {
-                                //
-                              }
-                            }
-                            wrapperClass=''
-                            visible={true}
-                            ariaLabel='oval-loading'
-                            secondaryColor='#ccc'
-                            strokeWidth={6}
-                            strokeWidthSecondary={6}
-                          />
-
-                            Withdrawing Tokens...
-                        </div>
-                      </>
+                      <div className='flex justify-center gap-2'>
+                        <Oval
+                          height='20'
+                          width='20'
+                          color='#ccc'
+                          wrapperStyle={{}}
+                          wrapperClass=''
+                          visible={true}
+                          ariaLabel='oval-loading'
+                          secondaryColor='#ccc'
+                          strokeWidth={6}
+                          strokeWidthSecondary={6}
+                        />
+                        Withdrawing Tokens...
+                      </div>
                     ) : (
-                      <>
-                        <div className='flex justify-center gap-2'>
-                          <Oval
-                            height='20'
-                            width='20'
-                            color='#ccc'
-                            wrapperStyle={
-                              {
-                                //
-                              }
-                            }
-                            wrapperClass=''
-                            visible={true}
-                            ariaLabel='oval-loading'
-                            secondaryColor='#ccc'
-                            strokeWidth={6}
-                            strokeWidthSecondary={6}
-                          />
-
-                            Bridging Tokens...
-                        </div>
-                      </>
+                      <div className='flex justify-center gap-2'>
+                        <Oval
+                          height='20'
+                          width='20'
+                          color='#ccc'
+                          wrapperStyle={{}}
+                          wrapperClass=''
+                          visible={true}
+                          ariaLabel='oval-loading'
+                          secondaryColor='#ccc'
+                          strokeWidth={6}
+                          strokeWidthSecondary={6}
+                        />
+                        Bridging Tokens...
+                      </div>
                     )
-                  ) : isWithdrawing ? (
-                    'Withdraw Tokens'
                   ) : (
-                    'Bridge Tokens'
+                    isWithdrawing ? 'Withdraw Tokens' : 'Bridge Tokens'
                   )}
                 </TextButton>
               )}

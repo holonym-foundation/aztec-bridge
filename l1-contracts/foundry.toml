@@ -2,10 +2,11 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+solc = "0.8.28"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 remappings = [
   "@oz/=lib/openzeppelin-contracts/contracts/",
-  "@aztec/=lib/aztec-contracts/src",
+  "@aztec/=lib/aztec-contracts/l1-contracts/src",
   "@test/=test"
 ]

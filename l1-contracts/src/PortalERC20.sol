@@ -1,6 +1,6 @@
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@oz/token/ERC20/ERC20.sol";
 
 contract PortalERC20 is ERC20 {
     constructor() ERC20("Portal", "PORTAL") {}

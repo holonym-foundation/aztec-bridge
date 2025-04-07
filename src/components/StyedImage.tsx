@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-empty-object-type */
 import React from 'react';
 
 import NextImage, { ImageProps as NextImageProps } from 'next/image';

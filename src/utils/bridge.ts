@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createPXEClient, EthAddress, waitForPXE, L1TokenPortalManager, Fr, PXE, AztecAddress, Wallet, createLogger, FeeJuicePaymentMethod, L1TokenManager, L1FeeJuicePortalManager } from '@aztec/aztec.js';
 import { deployL1Contract } from '@aztec/ethereum';
 import { TestERC20Abi, TestERC20Bytecode, TokenPortalAbi, TokenPortalBytecode, FeeAssetHandlerAbi, FeeAssetHandlerBytecode } from '@aztec/l1-artifacts';

@@ -43,7 +43,6 @@ const MINT_AMOUNT = BigInt(1e15);
 
 const setupSandbox = async () => {
   const { PXE_URL = 'http://localhost:8080' } = process.env;
-  // eslint-disable-next-line @typescript-eslint/await-thenable
   const pxe = await createPXEClient(PXE_URL);
   await waitForPXE(pxe);
   return pxe;

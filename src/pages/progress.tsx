@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useEffect } from 'react';
 import RootStyle from '@/components/RootStyle';
 import TextButton from '@/components/TextButton';

@@ -79,6 +79,7 @@ export default function Home() {
   const [localL1Balance, setLocalL1Balance] = useState(l1Balance)
   const [localL2Balance, setLocalL2Balance] = useState(l2Balance)
   const [hasSoulboundToken, setHasSoulboundToken] = useState<boolean | null>(null)
+  const [hasAztecSBT, setHasAztecSBT] = useState<boolean | null>(null)
 
   const stepLabels = [
     'Setting up sandbox...',
@@ -103,21 +104,41 @@ export default function Home() {
       return
     }
 
-    if (parseFloat(inputAmount) > parseFloat(l1Balance)) {
-      alert(`Amount exceeds available L1 balance of ${l1Balance} ETH`)
-      return
+    if (isWithdrawing) {
+      if (parseFloat(inputAmount) > parseFloat(l2Balance)) {
+        alert(`Amount exceeds available L2 balance of ${l2Balance} ETH`)
+        return
+      }
+    } else {
+      if (parseFloat(inputAmount) > parseFloat(l1Balance)) {
+        alert(`Amount exceeds available L1 balance of ${l1Balance} ETH`)
+        return
+      }
     }
 
     setCheckingSBT(true)
     try {
-      const hasToken = await hasSBT(l1WalletAddress || '')
-      setHasSoulboundToken(hasToken)
-      
-      if (!hasToken) {
-        setShowSBTModal(true)
+      if (!isWithdrawing) {
+        // When withdrawing, check for Ethereum SBT
+        const hasToken = await hasSBT(l1WalletAddress || '')
+        setHasSoulboundToken(hasToken)
+        
+        if (!hasToken) {
+          setShowSBTModal(true)
+        } else {
+          handleBridgeOrWithdraw()
+        }
       } else {
-        // User has an SBT, proceed with bridging
-        handleBridgeOrWithdraw()
+        // When bridging, check for Aztec SBT
+        // const hasToken = await hasSBT(l2WalletAddress || '')
+        const hasToken = false
+        setHasAztecSBT(hasToken)
+        
+        if (!hasToken) {
+          setShowSBTModal(true)
+        } else {
+          handleBridgeOrWithdraw()
+        }
       }
     } catch (error) {
       console.error('Failed to check SBT status:', error)
@@ -169,7 +190,11 @@ export default function Home() {
   }
 
   const handleSBTMinted = async () => {
-    setHasSoulboundToken(true)
+    if (isWithdrawing) {
+      setHasSoulboundToken(true)
+    } else {
+      setHasAztecSBT(true)
+    }
     setShowSBTModal(false)
     await mintSBT()
     // Proceed with bridging after successful minting
@@ -226,8 +251,8 @@ export default function Home() {
         {showSBTModal && (
           <SBT
             address={l1WalletAddress || ''}
-            buttonText="Get SBT on Ethereum"
-            chain="Ethereum"
+            buttonText={isWithdrawing ? "Get SBT on Aztec" : "Get SBT on Ethereum"}
+            chain={isWithdrawing ? "Aztec" : "Ethereum"}
             onMint={handleSBTMinted}
             onClose={() => setShowSBTModal(false)}
           />
@@ -510,7 +535,9 @@ export default function Home() {
                 </TextButton>
               ) : (
                 <TextButton
-                  onClick={hasSoulboundToken ? handleBridgeOrWithdraw : checkSBTAndProceed}
+                  onClick={isWithdrawing ? 
+                    (hasSoulboundToken ? handleBridgeOrWithdraw : checkSBTAndProceed) : 
+                    (hasAztecSBT ? handleBridgeOrWithdraw : checkSBTAndProceed)}
                   disabled={
                     bridging || checkingSBT || !inputAmount || parseFloat(inputAmount) <= 0
                   }

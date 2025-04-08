@@ -1,0 +1,58 @@
+/* eslint-disable react/no-unescaped-entities */
+import StyledImage from '../StyedImage';
+import TextButton from '../TextButton';
+
+const formatAddress = (address: string) => {
+  if (!address) return '';
+  const start = address.slice(0, 6);
+  const end = address.slice(-4);
+  return `${start}...${end}`;
+};
+
+export default function SBT({ address, buttonText, chain, onMint, onClose }: { address: string, buttonText: string, chain: string, onMint: () => void, onClose: () => void }) {
+  return (
+    <div className='absolute inset-0 bg-latest-grey-1000 z-20'>
+      <div className='absolute bottom-0 right-0 left-0'>
+        <div className='px-2.5 py-3 bg-white rounded-t-lg '>
+          <div className='flex justify-between items-center mx-2.5 py-1'>
+            <p className='text-latest-black-300 font-semibold text-16'>Clean Hands SBT</p>
+            <button onClick={onClose}>
+              {' '}
+              <StyledImage src='/assets/svg/cross.svg' alt='' className='h-[14px] w-[14px] m-[2px]' />{' '}
+            </button>
+          </div>
+          <div className='mt-4 mx-2.5'>
+            <p className='pl-4 text-latest-black-300 text-14 font-medium'>{chain} address</p>
+            <div className='flex gap-2.5 bg-latest-grey-200 p-1 mt-1 rounded-[8px]'>
+              <StyledImage src='/assets/svg/network.svg' alt='' className='h-5 w-5 m-1.5' />
+              <input
+                type='numbers'
+                defaultValue={address}
+                placeholder='address...'
+                className='text-latest-black-300 w-full outline-none  bg-latest-grey-200 font-medium text-16'
+              />
+            </div>
+            <p className='mt-2  py-2 px-4 text-latest-red-200 bg-latest-red-300 text-12 font-medium rounded-[8px]'>
+              You don't have an {chain} SBT yet.
+              <br /> Get one to unlock {chain} Bridge features.
+            </p>
+            <div className='mt-4'>
+              <TextButton onClick={onMint}>{buttonText}</TextButton>
+              <p className='mt-4 text-latest-grey-100 text-12 font-medium'>
+                You will receive a Clean Hands SBT on {chain} <br />
+                at the address {formatAddress(address)}.{' '}
+              </p>
+              <p className='mt-4  text-latest-grey-100 text-12 font-medium'>
+                Proceed with caution. You can only do this once.{' '}
+              </p>
+              <div className='flex   justify-center gap-2 mt-4'>
+                <StyledImage src='/assets/svg/silk0.4.svg' alt='' className='h-4 w-[14px]' />
+                <p className='text-12 font-medium text-latest-grey-600  '>Secured by Human Wallet</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

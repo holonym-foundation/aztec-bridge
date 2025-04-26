@@ -6,6 +6,7 @@ use dep::aztec::macros::aztec;
 
 // Minimal NFT implementation with `AuthWit` support that allows minting in public-only and transfers in both public
 // and private.
+// Modified to support Soulbound Token (SBT) functionality - non-transferable tokens that can only be minted once per address
 #[aztec]
 pub contract NFT {
     use crate::types::nft_note::{NFTNote, PartialNFTNote};
@@ -61,18 +62,23 @@ pub contract NFT {
         nft_exists: Map<Field, PublicMutable<bool, Context>, Context>,
         // A map from token ID to the public owner of the NFT.
         public_owners: Map<Field, PublicMutable<AztecAddress, Context>, Context>,
+        // A map from address to boolean indicating if they have an SBT
+        has_sbt: Map<AztecAddress, PublicMutable<bool, Context>, Context>,
+        // Flag indicating if this is an SBT contract (non-transferable)
+        is_sbt: PublicMutable<bool, Context>,
     }
     // docs:end:storage_struct
 
     // docs:start:constructor
     #[public]
     #[initializer]
-    fn constructor(admin: AztecAddress, name: str<31>, symbol: str<31>) {
+    fn constructor(admin: AztecAddress, name: str<31>, symbol: str<31>, is_sbt: bool) {
         assert(!admin.is_zero(), "invalid admin");
         storage.admin.write(admin);
         storage.minters.at(admin).write(true);
         storage.name.initialize(FieldCompressedString::from_string(name));
         storage.symbol.initialize(FieldCompressedString::from_string(symbol));
+        storage.is_sbt.write(is_sbt);
     }
     // docs:end:constructor
 
@@ -98,9 +104,14 @@ pub contract NFT {
         assert(token_id != 0, "zero token ID not supported");
         assert(storage.minters.at(context.msg_sender()).read(), "caller is not a minter");
         assert(storage.nft_exists.at(token_id).read() == false, "token already exists");
+        
+        // If this is an SBT contract, check if the recipient already has an SBT
+        if (storage.is_sbt.read()) {
+            assert(!storage.has_sbt.at(to).read(), "address already has an SBT");
+            storage.has_sbt.at(to).write(true);
+        }
 
         storage.nft_exists.at(token_id).write(true);
-
         storage.public_owners.at(token_id).write(to);
     }
     // docs:end:mint
@@ -148,6 +159,9 @@ pub contract NFT {
     // docs:start:transfer_in_public
     #[public]
     fn transfer_in_public(from: AztecAddress, to: AztecAddress, token_id: Field, nonce: Field) {
+        // If this is an SBT contract, transfers are not allowed
+        assert(!storage.is_sbt.read(), "SBT: transfer not allowed");
+        
         if (!from.eq(context.msg_sender())) {
             assert_current_call_valid_authwit_public(&mut context, from);
         } else {
@@ -165,6 +179,9 @@ pub contract NFT {
     // docs:start:transfer_to_private
     #[private]
     fn transfer_to_private(to: AztecAddress, token_id: Field) {
+        // If this is an SBT contract, transfers are not allowed
+        assert(!storage.is_sbt.read(), "SBT: transfer not allowed");
+        
         let from = context.msg_sender();
 
         let nft = NFT::at(context.this_address());
@@ -229,6 +246,9 @@ pub contract NFT {
     // docs:start:finalize_transfer_to_private
     #[public]
     fn finalize_transfer_to_private(token_id: Field, partial_note: PartialNFTNote) {
+        // If this is an SBT contract, transfers are not allowed
+        assert(!storage.is_sbt.read(), "SBT: transfer not allowed");
+        
         let from = context.msg_sender();
         _finalize_transfer_to_private(from, token_id, partial_note, &mut context, storage);
     }
@@ -284,6 +304,9 @@ pub contract NFT {
     // docs:start:transfer_in_private
     #[private]
     fn transfer_in_private(from: AztecAddress, to: AztecAddress, token_id: Field, nonce: Field) {
+        // If this is an SBT contract, transfers are not allowed
+        assert(!storage.is_sbt.read(), "SBT: transfer not allowed");
+        
         if (!from.eq(context.msg_sender())) {
             assert_current_call_valid_authwit(&mut context, from);
         } else {
@@ -306,6 +329,9 @@ pub contract NFT {
     // docs:start:transfer_to_public
     #[private]
     fn transfer_to_public(from: AztecAddress, to: AztecAddress, token_id: Field, nonce: Field) {
+        // If this is an SBT contract, transfers are not allowed
+        assert(!storage.is_sbt.read(), "SBT: transfer not allowed");
+        
         if (!from.eq(context.msg_sender())) {
             assert_current_call_valid_authwit(&mut context, from);
         } else {
@@ -363,4 +389,18 @@ pub contract NFT {
         (owned_nft_ids, page_limit_reached)
     }
     // docs:end:get_private_nfts
+    
+    // Check if an address has an SBT
+    #[public]
+    #[view]
+    fn has_soulbound_token(account: AztecAddress) -> bool {
+        storage.has_sbt.at(account).read()
+    }
+    
+    // Check if this is an SBT contract
+    #[public]
+    #[view]
+    fn is_sbt() -> bool {
+        storage.is_sbt.read()
+    }
 }

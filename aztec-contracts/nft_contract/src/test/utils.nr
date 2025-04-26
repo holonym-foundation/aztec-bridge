@@ -13,6 +13,7 @@ use std::test::OracleMock;
 
 pub unconstrained fn setup(
     with_account_contracts: bool,
+    is_sbt: bool,
 ) -> (&mut TestEnvironment, AztecAddress, AztecAddress, AztecAddress) {
     // Setup env, generate keys
     let mut env = TestEnvironment::new();
@@ -34,6 +35,7 @@ pub unconstrained fn setup(
         owner,
         "TestNFT000000000000000000000000",
         "TN00000000000000000000000000000",
+        is_sbt,
     );
     let nft_contract =
         env.deploy_self("NFT").with_public_void_initializer(initializer_call_interface);
@@ -44,9 +46,10 @@ pub unconstrained fn setup(
 
 pub unconstrained fn setup_and_mint(
     with_account_contracts: bool,
+    is_sbt: bool,
 ) -> (&mut TestEnvironment, AztecAddress, AztecAddress, AztecAddress, Field) {
     // Setup
-    let (env, nft_contract_address, owner, recipient) = setup(with_account_contracts);
+    let (env, nft_contract_address, owner, recipient) = setup(with_account_contracts, is_sbt);
     let minted_token_id = 615;
 
     NFT::at(nft_contract_address).mint(owner, minted_token_id).call(&mut env.public());
@@ -57,9 +60,10 @@ pub unconstrained fn setup_and_mint(
 
 pub unconstrained fn setup_mint_and_transfer_to_private(
     with_account_contracts: bool,
+    is_sbt: bool,
 ) -> (&mut TestEnvironment, AztecAddress, AztecAddress, AztecAddress, Field) {
     let (env, nft_contract_address, owner, recipient, minted_token_id) =
-        setup_and_mint(with_account_contracts);
+        setup_and_mint(with_account_contracts, is_sbt);
 
     let note_randomness = random();
 

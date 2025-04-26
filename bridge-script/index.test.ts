@@ -35,7 +35,7 @@ const ownerEthAddress = walletClient.account.address;
 const MINT_AMOUNT = BigInt(1e15);
 
 const setupSandbox = async () => {
-  const { PXE_URL = 'http://localhost:8081' } = process.env;
+  const { PXE_URL = 'http://localhost:8080' } = process.env;
   // eslint-disable-next-line @typescript-eslint/await-thenable
   const pxe = await createPXEClient(PXE_URL);
   await waitForPXE(pxe);
@@ -77,8 +77,9 @@ async function addMinter(l1TokenContract: EthAddress, l1TokenHandler: EthAddress
 }
 // docs:end:utils
 
-async function main() {
-  // docs:start:setup
+describe('e2e_cross_chain_messaging token_bridge_tutorial_test', () => {
+  it('Deploys tokens & bridges to L1 & L2, mints & publicly bridges tokens', async () => {
+    // docs:start:setup
     const logger = createLogger('aztec:token-bridge-tutorial');
     const pxe = await setupSandbox();
     const wallets = await getInitialTestAccountsWallets(pxe);
@@ -225,8 +226,6 @@ async function main() {
     const newL1Balance = await l1TokenManager.getL1TokenBalance(ownerEthAddress);
     logger.info(`New L1 balance of ${ownerEthAddress} is ${newL1Balance}`);
     // docs:end:l1-withdraw
-}
-
-main().catch(console.error);
-
-
+    expect(newL1Balance).toBe(withdrawAmount);
+  }, 60000);
+});

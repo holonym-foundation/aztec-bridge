@@ -16,6 +16,7 @@
     "importHelpers": true,
     "resolveJsonModule": true,
     "composite": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "isolatedModules": true
   }
 }

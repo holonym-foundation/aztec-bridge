@@ -1,0 +1,16 @@
+Steps:
+
+zsh -i <(curl -s https://install.aztec.network)
+
+
+cd aztec-contracts/token_bridge
+aztec-nargo compile
+
+cd aztec-contracts/nft_contract
+aztec-nargo compile
+
+
+
+source .env
+aztec start --port 8081 --pxe --pxe.nodeUrl=$BOOTNODE --pxe.proverEnabled true --l1-chain-id $L1_CHAIN_ID
+

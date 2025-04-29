@@ -26,7 +26,7 @@ jobs:
 
       # Deploy using the updated Vercel GitHub Action
       - name: Deploy to Vercel (Preview)
-        uses: mapbox/vercel-action@v4.0.0
+        uses: mapbox/vercel-action@v1
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}
@@ -49,7 +49,7 @@ jobs:
 
       # Deploy using the updated Vercel GitHub Action
       - name: Deploy to Vercel (Production)
-        uses: mapbox/vercel-action@v4.0.0
+        uses: mapbox/vercel-action@v1
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}

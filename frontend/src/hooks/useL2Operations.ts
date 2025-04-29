@@ -392,6 +392,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
 
       console.log('Initiating withdrawal on L1...')
 
+      return ''
       // we need to wait for 20 to 40 minutes for the transaction to be confirmed on L1
       await manager.withdrawFunds(
         amount,

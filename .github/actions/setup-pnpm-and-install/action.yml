@@ -1,0 +1,37 @@
+name: Setup pnpm and install
+
+inputs:
+  pnpm-version:
+    description: 'PNPM version to use'
+    default: '8'
+    required: false
+    type: string
+  working-directory:
+    description: 'Directory containing package.json'
+    default: '.'
+    required: false
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - uses: pnpm/action-setup@v2
+      with:
+        version: ${{ inputs.pnpm-version }}
+
+    # Setup pnpm cache
+    - name: Get pnpm store directory
+      shell: bash
+      run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - uses: actions/cache@v3
+      name: Setup pnpm cache
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: ${{ runner.os }}-pnpm-store-
+
+    - name: Install Dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: pnpm install

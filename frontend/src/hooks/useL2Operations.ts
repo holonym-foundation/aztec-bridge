@@ -393,53 +393,53 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       console.log('Initiating withdrawal on L1...')
 
       return ''
-      // we need to wait for 20 to 40 minutes for the transaction to be confirmed on L1
-      await manager.withdrawFunds(
-        amount,
-        EthAddress.fromString(l1Address),
-        BigInt(l2TxReceipt.blockNumber!),
-        l2ToL1MessageIndex,
-        siblingPath
-      )
+      // // we need to wait for 20 to 40 minutes for the transaction to be confirmed on L1
+      // await manager.withdrawFunds(
+      //   amount,
+      //   EthAddress.fromString(l1Address),
+      //   BigInt(l2TxReceipt.blockNumber!),
+      //   l2ToL1MessageIndex,
+      //   siblingPath
+      // )
 
-      // Complete the progress and update the toast
-      if (toastIdRef.current !== null) {
-        toast.update(toastIdRef.current, {
-          progress: 1,
-          render: '✅ Withdrawal complete!',
-        })
+      // // Complete the progress and update the toast
+      // if (toastIdRef.current !== null) {
+      //   toast.update(toastIdRef.current, {
+      //     progress: 1,
+      //     render: '✅ Withdrawal complete!',
+      //   })
 
-        setTimeout(() => {
-          if (toastIdRef.current !== null) {
-            toast.done(toastIdRef.current as number | string)
-            toast.dismiss(toastIdRef.current as number | string)
-            toastIdRef.current = null
-          }
-        }, 3000)
-      }
+      //   setTimeout(() => {
+      //     if (toastIdRef.current !== null) {
+      //       toast.done(toastIdRef.current as number | string)
+      //       toast.dismiss(toastIdRef.current as number | string)
+      //       toastIdRef.current = null
+      //     }
+      //   }, 3000)
+      // }
 
-      console.log('Withdrawal completed successfully')
+      // console.log('Withdrawal completed successfully')
 
-      const txHash = l2TxReceipt.txHash.toString()
-      console.log('txHash ', txHash)
+      // const txHash = l2TxReceipt.txHash.toString()
+      // console.log('txHash ', txHash)
 
-      // Create an Aztecscan URL for the transaction
-      const aztecscanUrl = `https://aztecscan.xyz/tx-effects/${txHash}`
-      console.log('View transaction on Aztecscan:', aztecscanUrl)
+      // // Create an Aztecscan URL for the transaction
+      // const aztecscanUrl = `https://aztecscan.xyz/tx-effects/${txHash}`
+      // console.log('View transaction on Aztecscan:', aztecscanUrl)
 
-      // Show a notification with the transaction link info
-      setTimeout(() => {
-        toast.info(`View withdrawal transaction on Aztecscan`, {
-          onClick: () => {
-            window.open(aztecscanUrl, '_blank')
-          },
-          autoClose: 10000,
-          closeOnClick: false,
-          style: { cursor: 'pointer' },
-        })
-      }, 1000)
+      // // Show a notification with the transaction link info
+      // setTimeout(() => {
+      //   toast.info(`View withdrawal transaction on Aztecscan`, {
+      //     onClick: () => {
+      //       window.open(aztecscanUrl, '_blank')
+      //     },
+      //     autoClose: 10000,
+      //     closeOnClick: false,
+      //     style: { cursor: 'pointer' },
+      //   })
+      // }, 1000)
 
-      return txHash
+      // return txHash
     } catch (error) {
       console.error('Withdrawal operation failed:', error)
 

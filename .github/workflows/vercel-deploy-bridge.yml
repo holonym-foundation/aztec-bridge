@@ -24,9 +24,9 @@ jobs:
           pnpm-version: 8
           working-directory: frontend
 
-      # Deploy using the updated Vercel GitHub Action
+      # Deploy using the Vercel GitHub Action
       - name: Deploy to Vercel (Preview)
-        uses: mapbox/vercel-action@v1
+        uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}
@@ -47,9 +47,9 @@ jobs:
           pnpm-version: 8
           working-directory: frontend
 
-      # Deploy using the updated Vercel GitHub Action
+      # Deploy using the Vercel GitHub Action
       - name: Deploy to Vercel (Production)
-        uses: mapbox/vercel-action@v1
+        uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}

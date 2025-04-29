@@ -31,7 +31,7 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}
           vercel-project-id: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
-          working-directory: ./frontend
+          working-directory: frontend
           vercel-args: '--env FAUCET_PRIVATE_KEY=${{ secrets.FAUCET_PRIVATE_KEY }}'
           vercel-version: '33.4.1'
 
@@ -55,7 +55,7 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}
           vercel-project-id: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
-          working-directory: ./frontend
+          working-directory: frontend
           vercel-args: '--prod --env FAUCET_PRIVATE_KEY=${{ secrets.FAUCET_PRIVATE_KEY }}'
           vercel-version: '33.4.1'
       

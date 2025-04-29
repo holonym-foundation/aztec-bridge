@@ -14,7 +14,7 @@
     "@aztec/ethereum": "0.85.0-alpha-testnet.2",
     "@aztec/l1-artifacts": "0.85.0-alpha-testnet.2",
     "@aztec/noir-contracts.js": "0.85.0-alpha-testnet.2",
-    "@nemi-fi/wallet-sdk": "0.85.0-next.3",
+    "@nemi-fi/wallet-sdk": "0.85.0-next.4",
     "@tanstack/react-query": "^5.74.7",
     "@tanstack/react-query-devtools": "^5.74.7",
     "clsx": "^2.1.1",
@@ -49,6 +49,5 @@
     "tailwind-scrollbar": "^4.0.1",
     "tailwindcss": "^3",
     "typescript": "^5"
-  },
-  "packageManager": "pnpm@8.1.0"
+  }
 }

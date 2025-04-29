@@ -122,7 +122,10 @@ export async function POST(request: NextRequest) {
         console.log(`Token mint transaction sent: ${hash}`)
 
         // Wait for the transaction to be mined
-        const receipt = await publicClient.waitForTransactionReceipt({ hash })
+        const receipt = await publicClient.waitForTransactionReceipt({ 
+          hash,
+          timeout: 120_000 // 2 minutes timeout
+        })
         console.log(`Token mint confirmed: ${hash}`, receipt)
 
         return NextResponse.json({

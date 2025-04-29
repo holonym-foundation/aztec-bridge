@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createPublicClient, createWalletClient, http, custom, parseEther } from 'viem'
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  custom,
+  parseEther,
+  formatEther,
+} from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { sepolia } from 'viem/chains'
 import { ADDRESS } from '@/config'
@@ -16,7 +23,7 @@ const FAUCET_AMOUNT = parseEther('0.05')
 // users from requesting tokens more than once in 24 hours
 
 let privateKey = process.env.FAUCET_PRIVATE_KEY
-const rpcUrl = process.env.ETHEREUM_RPC_URL || 'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161'
+const rpcUrl = process.env.ETHEREUM_RPC_URL
 
 if (!privateKey) {
   throw new Error('FAUCET_PRIVATE_KEY is not set')
@@ -49,12 +56,28 @@ export async function POST(request: NextRequest) {
       console.log('Creating account from private key...')
       // Create the account
       const account = privateKeyToAccount(privateKey as `0x${string}`)
-      
+
       // Create public client for reading
       const publicClient = createPublicClient({
         chain: sepolia,
         transport: http(rpcUrl),
       })
+
+      // Check faucet account balance before transaction
+      const faucetBalanceBefore = await publicClient.getBalance({
+        address: account.address,
+      })
+      console.log(
+        `Faucet account balance before: ${formatEther(faucetBalanceBefore)} ETH`
+      )
+
+      // Check recipient balance before transaction
+      const recipientBalanceBefore = await publicClient.getBalance({
+        address: address as `0x${string}`,
+      })
+      console.log(
+        `Recipient balance before: ${formatEther(recipientBalanceBefore)} ETH`
+      )
 
       // Send ETH instead of tokens
       console.log(`Sending ${FAUCET_AMOUNT} ETH to ${address}`)
@@ -63,11 +86,11 @@ export async function POST(request: NextRequest) {
       // Get current nonce for the account
       const nonce = await publicClient.getTransactionCount({
         address: account.address,
-      });
-      
+      })
+
       // Get current gas price
-      const gasPrice = await publicClient.getGasPrice();
-      
+      const gasPrice = await publicClient.getGasPrice()
+
       // Sign the transaction locally
       const signedTx = await account.signTransaction({
         to: address as `0x${string}`,
@@ -75,24 +98,61 @@ export async function POST(request: NextRequest) {
         nonce,
         gasPrice,
         gas: BigInt(21000), // Standard gas limit for ETH transfers
-      });
-      
+      })
+
       // Send the raw transaction
       const hash = await publicClient.sendRawTransaction({
         serializedTransaction: signedTx,
-      });
+      })
 
-      console.log(`Transaction sent: ${hash}`)
+
+      // Wait for transaction to be mined
+      console.log('Waiting for transaction to be mined...')
+      const receipt = await publicClient.waitForTransactionReceipt({ 
+        hash,
+        timeout: 120_000 // 2 minutes timeout
+      })
+      console.log('Transaction mined!')
+      const txHash = receipt.transactionHash
+
+      // Check balances after transaction
+      const faucetBalanceAfter = await publicClient.getBalance({
+        address: account.address,
+      })
+      console.log(
+        `Faucet account balance after: ${formatEther(faucetBalanceAfter)} ETH`
+      )
+
+      const recipientBalanceAfter = await publicClient.getBalance({
+        address: address as `0x${string}`,
+      })
+      console.log(
+        `Recipient balance after: ${formatEther(recipientBalanceAfter)} ETH`
+      )
 
       return NextResponse.json({
         success: true,
-        txHash: hash,
+        txHash: txHash,
         message: `${FAUCET_AMOUNT} ETH sent to ${address} for gas`,
+        balances: {
+          faucet: {
+            before: formatEther(faucetBalanceBefore),
+            after: formatEther(faucetBalanceAfter),
+          },
+          recipient: {
+            before: formatEther(recipientBalanceBefore),
+            after: formatEther(recipientBalanceAfter),
+          },
+        },
       })
     } catch (err) {
       console.error('Error with transaction:', err)
       return NextResponse.json(
-        { error: `Error processing transaction: ${err instanceof Error ? err.message : String(err)}` },
+        {
+          error: `Error processing transaction: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        },
         { status: 500 }
       )
     }

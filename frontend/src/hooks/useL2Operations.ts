@@ -108,11 +108,11 @@ export const useL2TokenBalance = () => {
     refetchOnReconnect: false, // Don't refetch when reconnecting
     // retry: 3, // Number of retry attempts
     retryDelay: 60000, // 60 seconds between retry attempts
-    toastMessages: {
-      pending: 'Fetching Aztec token balances...',
-      success: 'Aztec token balances fetched successfully',
-      error: 'Failed to fetch Aztec token balances',
-    },
+    // toastMessages: {
+    //   pending: 'Fetching Aztec token balances...',
+    //   success: 'Aztec token balances fetched successfully',
+    //   error: 'Failed to fetch Aztec token balances',
+    // },
   })
 }
 
@@ -188,6 +188,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
     let progressInterval: NodeJS.Timeout | null = null
 
     try {
+
+    
       if (!l1Address || !aztecAddress || !aztecAccount?.aztecNode) {
         throw new Error('Required accounts not connected')
       }
@@ -210,7 +212,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       if (!manager) {
         throw new Error('Failed to create L1 portal manager')
       }
-
+      
       console.log('Generating nonce for withdrawal...')
       const isPrivate = true
       const withAuthWitness = true
@@ -225,22 +227,58 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       }
 
       console.log('Setting up authorization...')
-      let authwitRequests: IntentAction[] | undefined = undefined
-      if (withAuthWitness) {
-        authwitRequests = [
-          {
-            caller: l2BridgeContract.address,
-            action: await l2TokenContract.methods
-              .burn_public(
-                AztecAddress.fromString(aztecAccount.address.toString()),
-                amount,
-                nonce
-              )
-              .request(),
-          },
-        ]
-      }
-      console.log('authwitRequests: ', authwitRequests)
+      // let authwitRequests: IntentAction[] | undefined = undefined
+      // if (withAuthWitness) {
+      //   authwitRequests = [
+      //     {
+      //       caller: l2BridgeContract.address,
+      //       action: await l2TokenContract.methods
+      //         .burn_public(
+      //           AztecAddress.fromString(aztecAccount.address.toString()),
+      //           amount,
+      //           nonce
+      //         )
+      //         .request(),
+      //     },
+      //   ]
+      // }
+      // console.log('authwitRequests: ', authwitRequests)
+
+      // Give approval to bridge to burn owner's funds:
+      const authwit = await aztecAccount.setPublicAuthWit(
+        {
+          caller: l2BridgeContract.address,
+          action: await l2TokenContract.methods
+            .burn_public(
+              AztecAddress.fromString(aztecAccount.address.toString()),
+              amount,
+              nonce
+            )
+            .request(),
+        },
+        true
+      )
+
+      // Create a progress simulation for the waiting period
+      let simulatedProgressAuth = 0.25
+      progressInterval = setInterval(() => {
+        // Increment progress smoothly from 25% to 90%
+        if (simulatedProgressAuth < 0.9) {
+          simulatedProgressAuth += 0.01
+      
+                if (toastIdRef.current !== null) {
+                  toast.update(toastIdRef.current, {
+                    progress: simulatedProgressAuth,
+                    render: `Setting up authorization for withdrawal... ${Math.round(
+                      simulatedProgressAuth * 100
+                    )}%`,
+                  })
+                }
+              }
+            }, 2000) // Update every half second
+
+
+      await authwit.send().wait({ timeout: 120000 })
 
       // Update toast progress
       if (toastIdRef.current !== null) {
@@ -257,7 +295,9 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         l2BridgeContract.address,
         EthAddress.ZERO
       )
-      console.log('Retrieved L2 to L1 message: ', l2ToL1Message)
+      console.log('Retrieved L2 to L1 message: ', l2ToL1Message.toString())
+      
+      notify('info', `L2 to L1 message retrieved: ${l2ToL1Message.toString()}`)
 
       // Update toast progress
       if (toastIdRef.current !== null) {
@@ -267,7 +307,6 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         })
       }
 
-      console.log('Initiating exit to L1...')
 
       // Create a progress simulation for the transaction wait
       let simulatedProgress = 0.5
@@ -287,13 +326,16 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         }
       }, 1000)
 
+      console.log('Initiating exit to L1...')
+      notify('info', `Initiating exit to L1...`)
+
       const l2TxReceipt = await l2BridgeContract.methods
         .exit_to_l1_public(
           EthAddress.fromString(l1Address),
           amount,
           EthAddress.ZERO,
           nonce,
-          { authWitnesses: authwitRequests }
+          // { authWitnesses: authwitRequests }
         )
         .send()
         .wait({
@@ -346,7 +388,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         })
       }
 
+      notify('warn', `Waiting for transaction to be confirmed on L1... around 40 minutes`)
+
       console.log('Initiating withdrawal on L1...')
+
+      // we need to wait for 20 to 40 minutes for the transaction to be confirmed on L1
       await manager.withdrawFunds(
         amount,
         EthAddress.fromString(l1Address),

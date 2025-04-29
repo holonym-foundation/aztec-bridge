@@ -19,3 +19,17 @@ export const ADDRESS = {
     }
   },
 } as const;
+
+// L1: {
+//   CHAIN_NAME: 'Sepolia',
+//   NAME: 'Test USDC',
+//   SYMBOL: 'USDC',
+//   TOKEN_CONTRACT: '0x58be6f33a3a0d39f9c49d65655ba5a0478498336',
+// }
+
+// L2: {
+// CHAIN_NAME: 'Aztec Testnet',
+//   NAME: 'Clean USDC',
+//   SYMBOL: 'USDC',
+//   TOKEN_CONTRACT: '0x07611aaf9ff6f0c8195b1bcd22f769b942ab5b3bc746ab05acfc36e817241c8b',
+// }

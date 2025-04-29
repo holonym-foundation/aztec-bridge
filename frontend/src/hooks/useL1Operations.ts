@@ -70,17 +70,24 @@ export function useL1TokenBalance() {
 export function useL1Faucet() {
   const { address: l1Address } = useAccount()
   const queryClient = useQueryClient()
-  const { data: nativeBalance, isLoading: nativeBalanceLoading } =
-    useL1NativeBalance()
-  const { data: tokenBalance, isLoading: tokenBalanceLoading } =
-    useL1TokenBalance()
+  const {
+    data: nativeBalance,
+    isLoading: nativeBalanceLoading,
+    refetch: refetchNativeBalance,
+  } = useL1NativeBalance()
+  const {
+    data: tokenBalance,
+    isLoading: tokenBalanceLoading,
+    refetch: refetchTokenBalance,
+  } = useL1TokenBalance()
   const publicClient = usePublicClient()
   const { data: walletClient } = useWalletClient()
-  const [isStateInitialized, setIsStateInitialized] = useState(true)
-  const [isProcessingGas, setIsProcessingGas] = useState(false)
+
+  const notify = useToast()
 
   const mintNativeAmount = 0.01
   const mintTokenAmount = 0
+
   // Helper function to check if user has gas
   const hasGas = !!nativeBalance && Number(nativeBalance) > mintNativeAmount
 
@@ -102,21 +109,21 @@ export function useL1Faucet() {
     if (!l1Address) throw new Error('Wallet not connected')
 
     console.log('Starting faucet request with state:', {
-      needsGas,
-      needsTokens,
-      hasGas,
       nativeBalance,
       tokenBalance,
+      hasGas,
+      needsGas,
+      needsTokens,
+      isEligibleForFaucet,
+      needsTokensOnly,
     })
 
-    const result: any = { gasProvided: false, tokensMinted: false }
+    let result: any = { gasProvided: false, tokensMinted: false }
 
     // Step 1: If needed, get ETH for gas
     if (needsGas) {
-      console.log('User needs gas. Requesting gas from faucet...')
-      setIsProcessingGas(true)
-
       try {
+        notify('info', 'Getting ETH...')
         // Request gas from faucet
         const response = await fetch('/api/faucet', {
           method: 'POST',
@@ -137,20 +144,37 @@ export function useL1Faucet() {
         result.gasProvided = true
         result.gasHash = gasResult.txHash
         console.log('Gas provided successfully:', gasResult)
+        result = { ...result, ...gasResult }
 
         // Wait for the gas transaction to be processed
         console.log('Waiting for gas transaction to be confirmed...')
-        await new Promise((resolve) => setTimeout(resolve, 3000))
+        await wait(30000) // 30 seconds
 
         // Refresh balances to reflect new gas balance
+        await refetchNativeBalance()
+
         await queryClient.invalidateQueries({
           queryKey: ['l1NativeBalance', l1Address],
         })
 
-        // Wait for the query to complete
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-      } finally {
-        setIsProcessingGas(false)
+        // Create an Aztecscan URL for the transaction
+        const etherscanUrl = `https://sepolia.etherscan.io/tx/${gasResult.txHash}`
+        console.log('View transaction on Ethereum:', etherscanUrl)
+
+        // Using the toast library directly for more control
+        notify('info', `ETH received! Click to view on Ethereum`, {
+          onClick: () => {
+            window.open(etherscanUrl, '_blank')
+          },
+          autoClose: 50000,
+          closeOnClick: false,
+          style: { cursor: 'pointer' },
+        })
+
+        await wait(30000) // 30 seconds
+      } catch (error) {
+        console.log('Error requesting gas:', error)
+        throw error
       }
     }
 
@@ -159,15 +183,16 @@ export function useL1Faucet() {
       // Even if user didn't need tokens initially, if we provided gas, check if they need tokens now
       console.log('Checking if tokens need to be minted...')
 
-      // Double check native balance one more time
       const currentNativeBalance =
-        (queryClient.getQueryData(['l1NativeBalance', l1Address]) as string) ||
-        '0'
-      const hasEnoughGas = Number(currentNativeBalance) > mintNativeAmount
+        result?.balances?.recipient?.after || nativeBalance
+
+      // const hasEnoughGas = Number(currentNativeBalance) >= mintNativeAmount
+      const hasEnoughGas = true
 
       if (hasEnoughGas) {
         console.log('User has gas. Requesting tokens from API...')
         try {
+          notify('info', 'Getting tokens...')
           // Call our mint-tokens API endpoint
           const response = await fetch('/api/mint-tokens', {
             method: 'POST',
@@ -186,6 +211,16 @@ export function useL1Faucet() {
           result.tokensMinted = true
           result.tokenHash = mintResult.txHash
           console.log('Tokens minted successfully via API:', mintResult)
+          await wait(30000) // 30 seconds
+
+          await refetchTokenBalance()
+
+          await queryClient.invalidateQueries({
+            queryKey: ['l1TokenBalance', l1Address],
+          })
+
+          // Wait for the query to complete
+          await wait(30000) // 30 seconds
         } catch (error) {
           console.error('Token minting via API failed:', error)
           result.tokenError =
@@ -222,10 +257,10 @@ export function useL1Faucet() {
           queryClient.invalidateQueries({
             queryKey: ['l1TokenBalance', l1Address],
           })
-        }, 2000)
+        }, 10000) // 10 seconds
       },
       toastMessages: {
-        pending: 'Processing faucet and token request...',
+        pending: 'Processing faucet and token ...',
         success: 'Faucet completed successfully!',
         error: 'Faucet request failed',
       },
@@ -234,9 +269,7 @@ export function useL1Faucet() {
     needsTokens,
     needsTokensOnly,
     isEligibleForFaucet,
-    isProcessingGas,
     hasGas,
-    isStateInitialized,
     nativeBalanceLoading,
     tokenBalanceLoading,
     balancesLoaded,
@@ -404,7 +437,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       console.log('Waiting 2 minutes before proceeding...')
 
       // Create a toast with progress bar for the 2-minute wait
-      toastIdRef.current = toast('Waiting 2 minutes before proceeding...', {
+      toastIdRef.current = toast('Waiting for transaction to be confirmed...', {
         progress: 0,
         closeButton: false,
         autoClose: false,
@@ -424,7 +457,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         if (toastIdRef.current !== null) {
           toast.update(toastIdRef.current, {
             progress: progress,
-            render: `Waiting 2 minutes before proceeding... ${Math.round(
+            render: `Waiting for transaction to be confirmed... ${Math.round(
               progress * 100
             )}%`,
           })
@@ -620,6 +653,8 @@ export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
   const publicClient = usePublicClient()
   const queryClient = useQueryClient()
 
+  const notify = useToast()
+
   const mutationFn = async () => {
     if (!walletClient || !l1Address) {
       throw new Error('Wallet not connected')
@@ -640,6 +675,16 @@ export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
 
       // Wait for confirmation
       const receipt = await publicClient.waitForTransactionReceipt({ hash })
+      const txHash = receipt.transactionHash.toString()
+
+      const etherscanUrl = `https://sepolia.etherscan.io/tx/${txHash}`
+      notify('info', `SBT minted successfully on Ethereum! Click to view on Ethereum`, {
+        onClick: () => {
+          window.open(etherscanUrl, '_blank')
+        },
+        autoClose: 50000,
+        closeOnClick: false,
+      })
 
       logger.info('SBT minted successfully on L1', { receipt })
       return receipt

@@ -2,7 +2,7 @@
 import TextButton from '@/components/TextButton'
 import { useAztecWallet } from '@/hooks/useAztecWallet'
 import { useMetaMask } from '@/hooks/useMetaMask'
-import { ChangeEvent, useCallback, useEffect, useState } from 'react'
+import { ChangeEvent, useCallback, useEffect, useState, useRef } from 'react'
 import { Oval } from 'react-loader-spinner'
 // import { useBridge } from '@/hooks/useBridge'
 import RootStyle from '@/components/RootStyle'
@@ -21,7 +21,7 @@ import {
   useL2HasSoulboundToken,
   useL2MintSoulboundToken,
   useL2TokenBalance,
-  useL2WithdrawTokensToL1
+  useL2WithdrawTokensToL1,
 } from '@/hooks/useL2Operations'
 import { useToast } from '@/hooks/useToast'
 import clsxm from '@/utils/clsxm'
@@ -82,6 +82,7 @@ function BridgeActionButton({
   connectMetaMask,
   isAztecConnected,
   connectAztec,
+  inputRef,
 
   // Balance and amount states
   inputAmount,
@@ -114,7 +115,7 @@ function BridgeActionButton({
   hasL2SBT,
   setShowSBTModal,
   setCurrentSBTChain,
-  
+
   // Operation completion state
   bridgeCompleted = false,
 }: {
@@ -123,6 +124,7 @@ function BridgeActionButton({
   connectMetaMask: () => void
   isAztecConnected: boolean
   connectAztec: () => void
+  inputRef: React.RefObject<HTMLInputElement | null>
 
   // Balance and amount states
   inputAmount: string
@@ -155,20 +157,23 @@ function BridgeActionButton({
   hasL2SBT: boolean | undefined
   setShowSBTModal: (show: boolean) => void
   setCurrentSBTChain: (chain: 'Ethereum' | 'Aztec') => void
-  
+
   // Operation completion state
   bridgeCompleted?: boolean
 }) {
   const [isConnecting, setIsConnecting] = useState(false)
+  const [isOperationPending, setIsOperationPending] = useState(false)
   const notify = useToast()
 
   // Process operations for bridging or withdrawing
   const processBridgeOperation = async () => {
     if (!inputAmount || parseFloat(inputAmount) <= 0) {
       notify('error', 'Please enter a valid amount')
+      inputRef.current?.focus()
       return
     }
 
+    setIsOperationPending(true)
     try {
       const amount = BigInt(inputAmount)
       if (isWithdrawing) {
@@ -178,17 +183,24 @@ function BridgeActionButton({
       }
     } catch (error) {
       // More specific error messaging based on operation type
-      const operationType = isWithdrawing ? 'withdrawal' : 'bridge';
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      
+      const operationType = isWithdrawing ? 'withdrawal' : 'bridge'
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+
       // Check for common error patterns
       if (errorMsg.includes('insufficient')) {
         notify('error', `Insufficient funds for ${operationType} operation`)
       } else if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
         notify('error', `Transaction rejected by user`)
       } else {
-        notify('error', `${operationType.charAt(0).toUpperCase() + operationType.slice(1)} failed: ${errorMsg}`)
+        notify(
+          'error',
+          `${
+            operationType.charAt(0).toUpperCase() + operationType.slice(1)
+          } failed: ${errorMsg}`
+        )
       }
+    } finally {
+      setIsOperationPending(false)
     }
   }
 
@@ -217,11 +229,13 @@ function BridgeActionButton({
     // Step 1: Connect MetaMask if not connected
     if (!isMetaMaskConnected) {
       setIsConnecting(true)
+      setIsOperationPending(true)
       try {
         await connectMetaMask()
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        
+        const errorMsg =
+          error instanceof Error ? error.message : 'Unknown error'
+
         if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
           notify('error', 'MetaMask connection was rejected')
         } else if (errorMsg.includes('install')) {
@@ -231,6 +245,7 @@ function BridgeActionButton({
         }
       } finally {
         setIsConnecting(false)
+        setIsOperationPending(false)
       }
       return
     }
@@ -238,38 +253,46 @@ function BridgeActionButton({
     // Step 2: Connect Aztec if not connected
     if (!isAztecConnected) {
       setIsConnecting(true)
+      setIsOperationPending(true)
       try {
         await connectAztec()
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        
+        const errorMsg =
+          error instanceof Error ? error.message : 'Unknown error'
+
         if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
           notify('error', 'Aztec connection was rejected')
-        } else if (errorMsg.includes('not found') || errorMsg.includes('install')) {
-          notify('error', 'Please install the Aztec wallet extension to continue')
+        } else if (
+          errorMsg.includes('not found') ||
+          errorMsg.includes('install')
+        ) {
+          notify(
+            'error',
+            'Please install the Aztec wallet extension to continue'
+          )
         } else {
           notify('error', `Failed to connect Aztec: ${errorMsg}`)
         }
       } finally {
         setIsConnecting(false)
+        setIsOperationPending(false)
       }
       return
     }
 
     // Step 3: If faucet is needed (no gas or tokens), request it
     if (isStateInitialized && isEligibleForFaucet) {
+      setIsOperationPending(true)
       try {
-        console.log('Requesting faucet with state:', {
-          needsGas,
-          needsTokens: !l1Balance || l1Balance === '0',
-        })
         await requestFaucet()
-        return
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        const errorMsg =
+          error instanceof Error ? error.message : 'Unknown error'
         notify('error', `Faucet request failed: ${errorMsg}`)
-        return
+      } finally {
+        setIsOperationPending(false)
       }
+      return
     }
 
     // Step 4: Check if user has the required SBTs
@@ -280,6 +303,7 @@ function BridgeActionButton({
     // Step 5: Validate input amount before proceeding with bridge/withdraw
     if (!inputAmount || parseFloat(inputAmount) <= 0) {
       notify('error', 'Please enter a valid amount')
+      inputRef.current?.focus()
       return
     }
 
@@ -291,62 +315,70 @@ function BridgeActionButton({
   const getButtonLabel = () => {
     // Show success message when bridge operation completes
     if (bridgeCompleted) {
-      return "Bridge Complete!";
+      return 'Bridge Complete!'
     }
-    
+
     // Priority 1: Show loading states for balance fetching
-    if (isMetaMaskConnected && isAztecConnected && (!isStateInitialized || l1BalanceLoading)) {
-      return 'Loading balances...';
+    if (
+      isMetaMaskConnected &&
+      isAztecConnected &&
+      (!isStateInitialized || l1BalanceLoading)
+    ) {
+      return 'Loading balances...'
     }
 
     // Priority 2: Connection states
-    if (!isMetaMaskConnected) return 'Connect MetaMask';
-    if (!isAztecConnected) return 'Connect Aztec';
+    if (!isMetaMaskConnected) return 'Connect MetaMask'
+    if (!isAztecConnected) return 'Connect Aztec'
 
     // Priority 3: Faucet (gas and tokens)
-    if (needsGas || needsTokensOnly) return needsTokensOnly ? 'Get Tokens' : 'Get Faucet';
+    if (needsGas || needsTokensOnly)
+      return needsTokensOnly ? 'Get Tokens' : 'Get Faucet'
 
     // Priority 4: SBT requirements
     if (isWithdrawing) {
-      if (!hasL2SBT) return 'Get SBT on Aztec';
+      if (!hasL2SBT) return 'Get SBT on Aztec'
     } else {
-      if (hasL1SBT !== true) return 'Get SBT on Ethereum';
+      if (hasL1SBT !== true) return 'Get SBT on Ethereum'
     }
 
     // Priority 5: Bridge operations
-    return isWithdrawing ? 'Withdraw Tokens' : 'Bridge Tokens';
+    return isWithdrawing ? 'Withdraw Tokens' : 'Bridge Tokens'
   }
 
   // Determine if the button should be disabled
   const isButtonDisabled =
     // Disable during loading states
-    (isMetaMaskConnected && 
-     isAztecConnected && 
-     (!isStateInitialized || l1BalanceLoading)) ||
+    (isMetaMaskConnected &&
+      isAztecConnected &&
+      (!isStateInitialized || l1BalanceLoading)) ||
     isConnecting ||
     requestFaucetPending ||
     withdrawTokensToL1Pending ||
     bridgeTokensToL2Pending ||
+    isOperationPending ||
     bridgeCompleted ||
     // Disable bridge/withdraw when amount is invalid and user has all SBTs
-    ((parseFloat(inputAmount) <= 0) && 
-     ((isWithdrawing && hasL2SBT === true) || (!isWithdrawing && hasL1SBT === true)));
+    (parseFloat(inputAmount) <= 0 &&
+      ((isWithdrawing && hasL2SBT === true) ||
+        (!isWithdrawing && hasL1SBT === true)))
 
   // Show loading spinner during operation loading states
-  const showLoadingSpinner = 
-    isConnecting || 
-    requestFaucetPending || 
-    withdrawTokensToL1Pending || 
-    bridgeTokensToL2Pending;
+  const showLoadingSpinner =
+    isConnecting ||
+    requestFaucetPending ||
+    withdrawTokensToL1Pending ||
+    bridgeTokensToL2Pending ||
+    isOperationPending
 
   // Get the loading text for the spinner
   const getLoadingText = () => {
-    if (isConnecting) return 'Connecting...';
-    if (requestFaucetPending) return 'Getting Tokens & ETH...';
-    if (withdrawTokensToL1Pending) return 'Withdrawing Tokens...';
-    if (bridgeTokensToL2Pending) return 'Bridging Tokens...';
-    return 'Loading...';
-  };
+    if (isConnecting) return 'Connecting...'
+    if (requestFaucetPending) return 'Getting Tokens & ETH...'
+    if (withdrawTokensToL1Pending) return 'Withdrawing Tokens...'
+    if (bridgeTokensToL2Pending) return 'Bridging Tokens...'
+    return 'Loading...'
+  }
 
   return (
     <div>
@@ -354,11 +386,11 @@ function BridgeActionButton({
         {showLoadingSpinner ? (
           <LoadingContent label={getLoadingText()} />
         ) : bridgeCompleted ? (
-          <div className="flex items-center gap-2">
+          <div className='flex items-center gap-2'>
             <StyledImage
-              src="/assets/svg/check-circle.svg"
-              alt=""
-              className="h-5 w-5"
+              src='/assets/svg/check-circle.svg'
+              alt=''
+              className='h-5 w-5'
             />
             <span>Bridge Complete!</span>
           </div>
@@ -378,6 +410,7 @@ export default function Home() {
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [inputAmount, setInputAmount] = useState<string>('')
   const [usdValue, setUsdValue] = useState<string>('$0.00')
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Operational state
   const [showSBTModal, setShowSBTModal] = useState(false)
@@ -413,7 +446,7 @@ export default function Home() {
     console.log('L1 SBT minted:', data)
     setShowSBTModal(false)
   }
-  
+
   const mintL2SBTOnSuccess = (data: any) => {
     console.log('L2 SBT minted:', data)
     setShowSBTModal(false)
@@ -421,40 +454,49 @@ export default function Home() {
 
   // L1 (Ethereum) balances and operations
   const { data: l1NativeBalance } = useL1NativeBalance()
-  const { data: l1Balance, isLoading: l1BalanceLoading, refetch: refetchL1Balance } = useL1TokenBalance()
+  const {
+    data: l1Balance,
+    isLoading: l1BalanceLoading,
+    refetch: refetchL1Balance,
+  } = useL1TokenBalance()
   const { data: hasL1SBT } = useL1HasSoulboundToken()
   const { mutate: mintL1SBT, isPending: mintL1SBTPending } =
     useL1MintSoulboundToken(mintL1SBTOnSuccess)
 
   const { mutate: mintL1Tokens, isPending: mintL1TokensPending } =
     useL1MintTokens()
-  
+
   // L2 (Aztec) balances and operations
-  const { data: l2Balance, isLoading: l2BalanceLoading, refetch: refetchL2Balance } = useL2TokenBalance()
+  const {
+    data: l2Balance,
+    isLoading: l2BalanceLoading,
+    refetch: refetchL2Balance,
+  } = useL2TokenBalance()
   const l2PrivateBalance = l2Balance?.privateBalance
   const l2PublicBalance = l2Balance?.publicBalance
   const { data: hasL2SBT } = useL2HasSoulboundToken()
   const { mutate: mintL2SBT, isPending: mintL2SBTPending } =
     useL2MintSoulboundToken(mintL2SBTOnSuccess)
 
-  
   // Bridge success callback
-  const handleBridgeSuccess = useCallback((data:any) => {
-    // Refetch balances after a successful bridge operation
-    refetchL1Balance();
-    refetchL2Balance();
-    setInputAmount('');
-    setBridgeCompleted(true);
-    setTimeout(() => {
-      setBridgeCompleted(false);
-    }, 3000);
-  }, [refetchL1Balance, refetchL2Balance]);
-  
+  const handleBridgeSuccess = useCallback(
+    (data: any) => {
+      // Refetch balances after a successful bridge operation
+      refetchL1Balance()
+      refetchL2Balance()
+      setInputAmount('')
+      setBridgeCompleted(true)
+      setTimeout(() => {
+        setBridgeCompleted(false)
+      }, 3000)
+    },
+    [refetchL1Balance, refetchL2Balance]
+  )
+
   const { mutate: bridgeTokensToL2, isPending: bridgeTokensToL2Pending } =
     useL1BridgeToL2(handleBridgeSuccess)
 
-
-    const { mutate: withdrawTokensToL1, isPending: withdrawTokensToL1Pending } =
+  const { mutate: withdrawTokensToL1, isPending: withdrawTokensToL1Pending } =
     useL2WithdrawTokensToL1(handleBridgeSuccess)
   // Faucet operations
   const {
@@ -465,7 +507,6 @@ export default function Home() {
     needsTokensOnly,
     isEligibleForFaucet,
     hasGas,
-    isStateInitialized,
     nativeBalanceLoading,
     balancesLoaded,
   } = useL1Faucet()
@@ -546,8 +587,9 @@ export default function Home() {
               <p
                 className='font-bold text-20 cursor-pointer'
                 onClick={() => {
-                  // disconnectMetaMask()
-                  // disconnectAztec()
+                  disconnectMetaMask()
+                  disconnectAztec()
+                  window.location.reload()
                   // mintL1Tokens()
                 }}>
                 BRIDGE
@@ -592,23 +634,43 @@ export default function Home() {
               <hr className='text-latest-grey-300 my-3' />
               <div className='flex justify-between my-1'>
                 <input
+                  ref={inputRef}
                   type='text'
                   placeholder='0'
                   value={inputAmount}
                   onChange={handleAmountChange}
                   className='max-w-[150px] placeholder-latest-grey-400 outline-none bg-[transparent] text-32 font-medium'
+                  autoFocus
                 />
-                <div className='flex gap-2 w-max'>
-                  <p className='text-latest-grey-500 text-12 font-medium'>
-                    Balance:
-                  </p>
-                  <div className='flex gap-1'>
-                    <p className='text-latest-grey-500 text-12 font-medium break-all'>
-                      {isWithdrawing ? l2PublicBalance : l1Balance}
-                    </p>
+
+
+                <div className='flex flex-col gap-2'>
+                  <div className='flex gap-2 w-max'>
                     <p className='text-latest-grey-500 text-12 font-medium'>
-                      USDC
+                      Native Balance:
                     </p>
+                    <div className='flex gap-1'>
+                      <p className='text-latest-grey-500 text-12 font-medium break-all'>
+                        {isWithdrawing ? '' : l1NativeBalance || '0'}
+                      </p>
+                      <p className='text-latest-grey-500 text-12 font-medium'>
+                        {isWithdrawing ? '' : 'ETH'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className='flex gap-2 w-full justify-between items-center'>
+                    <p className='text-latest-grey-500 text-12 font-medium'>
+                      Balance:
+                    </p>
+                    <div className='flex gap-1 ml-auto'>
+                      <p className='text-latest-grey-500 text-12 font-medium break-all'>
+                        {isWithdrawing ? l2PublicBalance : l1Balance}
+                      </p>
+                      <p className='text-latest-grey-500 text-12 font-medium'>
+                        USDC
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -782,6 +844,7 @@ export default function Home() {
                 connectMetaMask={connectMetaMask}
                 isAztecConnected={isAztecConnected}
                 connectAztec={connectAztec}
+                inputRef={inputRef}
                 // Balance and amount states
                 inputAmount={inputAmount}
                 l1Balance={l1Balance || '0'}
@@ -795,7 +858,7 @@ export default function Home() {
                 withdrawTokensToL1={withdrawTokensToL1}
                 requestFaucet={requestFaucet}
                 // Loading states
-                isStateInitialized={isStateInitialized && balancesLoaded}
+                isStateInitialized={balancesLoaded}
                 requestFaucetPending={requestFaucetPending}
                 bridgeTokensToL2Pending={bridgeTokensToL2Pending}
                 withdrawTokensToL1Pending={withdrawTokensToL1Pending}

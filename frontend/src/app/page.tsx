@@ -1,33 +1,30 @@
 'use client'
 import TextButton from '@/components/TextButton'
-import Image from 'next/image'
-import { Oval } from 'react-loader-spinner'
-import { ChangeEvent, useEffect, useState, useCallback } from 'react'
-import { useMetaMask } from '@/hooks/useMetaMask'
 import { useAztecWallet } from '@/hooks/useAztecWallet'
+import { useMetaMask } from '@/hooks/useMetaMask'
+import { ChangeEvent, useCallback, useEffect, useState } from 'react'
+import { Oval } from 'react-loader-spinner'
 // import { useBridge } from '@/hooks/useBridge'
-import StyledImage from '@/components/StyledImage'
-import clsxm from '@/utils/clsxm'
 import RootStyle from '@/components/RootStyle'
-import {
-  useL1ContractAddresses,
-  useL2TokenBalance,
-  useL2WithdrawTokensToL1,
-  useL2HasSoulboundToken,
-  useL2MintSoulboundToken,
-} from '@/hooks/useL2Operations'
+import SBT from '@/components/SBT'
+import StyledImage from '@/components/StyledImage'
 import {
   useL1BridgeToL2,
   useL1Faucet,
+  useL1HasSoulboundToken,
+  useL1MintSoulboundToken,
   useL1MintTokens,
   useL1NativeBalance,
   useL1TokenBalance,
-  useL1HasSoulboundToken,
-  useL1MintSoulboundToken,
 } from '@/hooks/useL1Operations'
-import SBT from '@/components/SBT'
-import { parseUnits } from 'viem'
+import {
+  useL2HasSoulboundToken,
+  useL2MintSoulboundToken,
+  useL2TokenBalance,
+  useL2WithdrawTokensToL1
+} from '@/hooks/useL2Operations'
 import { useToast } from '@/hooks/useToast'
+import clsxm from '@/utils/clsxm'
 
 const networks = {
   send: {

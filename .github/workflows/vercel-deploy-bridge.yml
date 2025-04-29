@@ -3,6 +3,7 @@ name: Deploy Aztec Bridge to Vercel
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
+  FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
   # TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   # TURBO_TEAM: ${{ vars.TURBO_TEAM }}
 
@@ -36,7 +37,7 @@ jobs:
 
       - name: Build Project Artifacts
         working-directory: frontend
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }} 
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }} --env FAUCET_PRIVATE_KEY=${{ secrets.FAUCET_PRIVATE_KEY }}
 
       - name: Deploy Project Artifacts to Vercel
         working-directory: frontend
@@ -68,7 +69,7 @@ jobs:
 
       - name: Build Project Artifacts
         working-directory: frontend
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} 
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --env FAUCET_PRIVATE_KEY=${{ secrets.FAUCET_PRIVATE_KEY }}
 
       - name: Deploy to Production
         working-directory: frontend

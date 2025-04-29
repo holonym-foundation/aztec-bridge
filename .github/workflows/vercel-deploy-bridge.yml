@@ -1,11 +1,9 @@
-# note: i set "Ignored build step" in Vercel settings for the project to not build automatically
+# Deploy Aztec Bridge to Vercel following the recommended pattern
 name: Deploy Aztec Bridge to Vercel
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
   FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
-  # TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-  # TURBO_TEAM: ${{ vars.TURBO_TEAM }}
 
 on:
   push:
@@ -14,8 +12,41 @@ on:
 
 jobs:
   Deploy-Preview:
-    permissions: write-all # Best to make this more granular later
+    permissions: write-all
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: ./.github/actions/setup-pnpm-and-install
+        with:
+          pnpm-version: 8
+          working-directory: frontend
+
+      - name: Install Vercel CLI
+        run: pnpm add --global vercel@latest
+
+      - name: Build Next App
+        working-directory: frontend
+        run: pnpm build
+            
+      - name: Pull Preview Environment From Vercel
+        working-directory: frontend
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        working-directory: frontend
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }} 
+      
+      - name: Deploy Project Artifacts to Vercel
+        working-directory: frontend
+        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+  
+  Deploy-Production:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    environment: Production
+    if: github.ref_name == 'main'
+    needs: Deploy-Preview
     steps:
       - uses: actions/checkout@v3
 
@@ -27,47 +58,19 @@ jobs:
       - name: Install Vercel CLI
         run: pnpm add --global vercel@latest
 
-      - name: Change to Frontend Directory
-        run: cd frontend && pwd
-
-      - name: Pull Preview Environment From Vercel
-        run: cd frontend && vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Build Project Artifacts
-        env:
-          FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
-        run: cd frontend && vercel build --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Build Next App
+        working-directory: frontend
+        run: pnpm build
       
-      - name: Deploy Project Artifacts to Vercel
-        run: cd frontend && vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
-
-  Deploy-Production:
-    runs-on: ubuntu-latest
-    environment: Production
-    if: github.ref_name == 'main'
-    needs: Deploy-Preview
-    steps:    
-      - uses: actions/checkout@v3
-
-      - uses: ./.github/actions/setup-pnpm-and-install
-        with:
-          pnpm-version: 8
-          working-directory: frontend
-
-      - name: Install Vercel CLI
-        run: pnpm add --global vercel@latest
-
-      - name: Change to Frontend Directory
-        run: cd frontend && pwd
-
       - name: Pull Production Environment From Vercel
-        run: cd frontend && vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-
+        working-directory: frontend
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        
       - name: Build Project Artifacts
-        env:
-          FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
-        run: cd frontend && vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: frontend
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} 
         
       - name: Deploy to Production
-        run: cd frontend && vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: frontend
+        run: vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
       

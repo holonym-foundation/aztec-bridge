@@ -3,13 +3,15 @@ import TokensModal from '@/components/model/TokensModal'
 import RootStyle from '@/components/RootStyle'
 import StyledImage from '@/components/StyedImage'
 import TextButton from '@/components/TextButton'
-import { useWallet } from '@/hooks/useWallet'
-import { useBridge } from '@/hooks/useBridge'
+import { useMetaMask } from '../hooks/useMetaMask'
+import { useAztecWallet } from '../hooks/useAztecWallet'
 import SBT from '@/components/model/SBT'
 import clsxm from '@/utils/clsxm'
 import { useState, useEffect, ChangeEvent } from 'react'
 import { MINT_AMOUNT } from '@/utils/bridge'
 import { Oval } from 'react-loader-spinner'
+import { useBridge } from '@/hooks/useBridge'
+import { useBridgeV3 } from '@/hooks/useBridgeV3'
 
 const networks = {
   send: {
@@ -35,109 +37,121 @@ const tokens = {
   },
   received: {
     id: 3,
-    img: '/assets/svg/ETH.svg',
-    title: 'ETH',
-    about: 'Ethereum',
+    img: '/assets/svg/USDC.svg',
+    title: 'USDC',
+    about: 'USDC',
     amount: '$970.10',
     percentage: '+1.05%',
   },
 }
 
-export default function Home() {
-  const [isOpen, setIsOpen] = useState(false)
-  const [selectNetwork, setSelectNetwork] = useState<boolean>(false)
-  const [selectToken, setSelectToken] = useState<boolean>(false)
-  const [isSend, setIsSend] = useState<null | boolean>(null)
-  const [showSBTModal, setShowSBTModal] = useState(false)
-  const [checkingSBT, setCheckingSBT] = useState(false)
-  const { isConnected, connect, address } = useWallet()
-  const {
+function LoadingContent({ label }: { label: string }) {
+  return (
+    <div className='flex justify-center gap-2'>
+      <Oval
+        height='20'
+        width='20'
+        color='#ccc'
+        visible={true}
+        ariaLabel='oval-loading'
+        secondaryColor='#ccc'
+        strokeWidth={6}
+        strokeWidthSecondary={6}
+      />
+      <span>{label}</span>
+    </div>
+  )
+}
+
+function BridgeActionButton({
+  inputAmount,
+  setInputAmount,
+}: {
+  inputAmount: string
+  setInputAmount: (amount: string) => void
+}) {
+  // MetaMask integration
+  const { 
+    address: metaMaskAddress, 
+    isConnected: isMetaMaskConnected, 
+    connect: connectMetaMask, 
+    disconnect: disconnectMetaMask 
+  } = useMetaMask();
+  
+  // Aztec wallet integration
+  const { 
+    account: aztecAccount, 
+    address: aztecAddress,
+    isConnected: isAztecConnected, 
+    isConnecting: isAztecConnecting,
+    connect: connectAztec, 
+    disconnect: disconnectAztec 
+  } = useAztecWallet();
+
+
+    const {
     loading,
-    l1WalletAddress,
-    l2WalletAddress,
-    setupProgress,
-    setupError,
-    setupComplete,
-    setupEverything,
-    bridgeTokensToL2,
-    withdrawTokensToL1,
-    l2TokenContract,
-    l2Wallets,
+    error,
     l1Balance,
     l2Balance,
-    hasSBT,
-    mintSBT,
-  } = useBridge()
+    getL1Balance,
+    getL2Balance,
+    bridgeTokensToL2,
+    withdrawTokensToL1,
+    getL2ToL1MessageMembershipWitness,
+    mintL1Tokens,
+    // hasSBT,
+    // mintSBT,
+  } = useBridgeV3()
 
-  const [networkData, setNetworkData] = useState(networks)
-  const [tokensData, setTokensData] = useState(tokens)
-  const [bridging, setBridging] = useState(false)
-  const [bridgeComplete, setBridgeComplete] = useState(false)
+  // Local state for button logic
   const [isWithdrawing, setIsWithdrawing] = useState(false)
-  const [inputAmount, setInputAmount] = useState<string>('')
-  const [usdValue, setUsdValue] = useState<string>('$0.00')
-  const [localL1Balance, setLocalL1Balance] = useState(l1Balance)
-  const [localL2Balance, setLocalL2Balance] = useState(l2Balance)
-  const [hasSoulboundToken, setHasSoulboundToken] = useState<boolean | null>(null)
+  const [hasSoulboundToken, setHasSoulboundToken] = useState<boolean | null>(
+    null
+  )
   const [hasAztecSBT, setHasAztecSBT] = useState<boolean | null>(null)
+  const [bridging, setBridging] = useState(false)
+  const [checkingSBT, setCheckingSBT] = useState(false)
+  const [buttonLoading, setButtonLoading] = useState(false)
 
-  const stepLabels = [
-    'Setting up sandbox...',
-    'Deploying L2 token...',
-    'Setting up fee juice...',
-    'Deploying L1 token & fee asset handler...',
-    'Deploying portal...',
-    'Deploying bridge contract...',
-    'Minting L1 tokens...',
-    'Deploying Portal SBT...',
-    'Ready to bridge!',
-  ]
+  // Balance checks
+  // const hasL1 = !!l1Balance && parseFloat(l1Balance) > 0
+  const hasL1 = true
+  // const hasL2 = !!l2Balance && parseFloat(l2Balance) > 0
+  const hasL2 = true
 
-  useEffect(() => {
-    setLocalL1Balance(l1Balance)
-    setLocalL2Balance(l2Balance)
-  }, [l1Balance, l2Balance])
+  // Faucet placeholder
+  const handleFaucet = () => {
+    alert('Faucet function called (placeholder)')
+  }
 
+  // SBT check and bridge logic
   const checkSBTAndProceed = async () => {
     if (!inputAmount || parseFloat(inputAmount) <= 0) {
       alert('Please enter a valid amount')
       return
     }
-
-    if (isWithdrawing) {
-      if (parseFloat(inputAmount) > parseFloat(l2Balance)) {
-        alert(`Amount exceeds available L2 balance of ${l2Balance} ETH`)
-        return
-      }
-    } else {
-      if (parseFloat(inputAmount) > parseFloat(l1Balance)) {
-        alert(`Amount exceeds available L1 balance of ${l1Balance} ETH`)
-        return
-      }
-    }
-
     setCheckingSBT(true)
     try {
       if (!isWithdrawing) {
-        // When withdrawing, check for Ethereum SBT
-        const hasToken = await hasSBT(l1WalletAddress || '')
+        // const hasToken = await hasSBT()
+        const hasToken = true
         setHasSoulboundToken(hasToken)
-        
         if (!hasToken) {
-          setShowSBTModal(true)
+          alert('You need an SBT to bridge.')
         } else {
-          handleBridgeOrWithdraw()
+          setCheckingSBT(false)
+          await handleBridgeOrWithdraw()
         }
       } else {
-        // When bridging, check for Aztec SBT
-        // const hasToken = await hasSBT(l2WalletAddress || '')
+        // For demo, always false
         const hasToken = false
         setHasAztecSBT(hasToken)
-        
         if (!hasToken) {
-          setShowSBTModal(true)
+          alert('You need an Aztec SBT to withdraw.')
         } else {
-          handleBridgeOrWithdraw()
+          setCheckingSBT(false)
+          await handleBridgeOrWithdraw()
         }
       }
     } catch (error) {
@@ -148,46 +162,172 @@ export default function Home() {
   }
 
   const handleBridgeOrWithdraw = async () => {
+    setBridging(true)
     try {
       if (!inputAmount || parseFloat(inputAmount) <= 0) {
         alert('Please enter a valid amount')
         return
       }
-
       const amount = BigInt(inputAmount)
-
-      if (isWithdrawing) {
-        if (parseFloat(inputAmount) > parseFloat(l2Balance)) {
-          alert(`Amount exceeds available L2 balance of ${l2Balance} ETH`)
-          return
-        }
-
-        setBridging(true)
-        try {
+      try {
+        if (isWithdrawing) {
           await withdrawTokensToL1(amount)
-          setBridgeComplete(true)
-        } finally {
-          setBridging(false)
-        }
-      } else {
-        if (parseFloat(inputAmount) > parseFloat(l1Balance)) {
-          alert(`Amount exceeds available L1 balance of ${l1Balance} ETH`)
-          return
-        }
-
-        setBridging(true)
-        try {
+        } else {
           await bridgeTokensToL2(amount)
-          setBridgeComplete(true)
-        } finally {
-          setBridging(false)
         }
+      } finally {
+        // setBridging(false)
       }
     } catch (error) {
       console.error('Operation failed:', error)
       setBridging(false)
     }
   }
+
+  // Button click logic
+  const handleBridgeActionButton = async () => {
+    if (!isMetaMaskConnected) {
+      setButtonLoading(true)
+      try {
+        await connectMetaMask()
+      } finally {
+        setButtonLoading(false)
+      }
+    } else if (!isAztecConnected) {
+      setButtonLoading(true)
+      try {
+        await connectAztec()
+      } finally {
+        setButtonLoading(false)
+      }
+    } else if (!hasL1 || !hasL2) {
+      handleFaucet()
+    } else {
+      if (isWithdrawing ? hasSoulboundToken : hasAztecSBT) {
+        await handleBridgeOrWithdraw()
+      } else {
+        await checkSBTAndProceed()
+      }
+    }
+  }
+
+  // Button label
+  let buttonLabel = ''
+  if (!isMetaMaskConnected) {
+    buttonLabel = 'Connect MetaMask'
+  } else if (!isAztecConnected) {
+    buttonLabel = 'Connect Aztec'
+  } else if (!hasL1 || !hasL2) {
+    buttonLabel = 'Get Faucet'
+  } else {
+    buttonLabel = isWithdrawing ? 'Withdraw Tokens' : 'Bridge Tokens'
+  }
+
+  // Disabled state
+  // const isDisabled =
+  //   buttonLoading ||
+  //   bridging ||
+  //   checkingSBT ||
+  //   !inputAmount ||
+  //   (parseFloat(inputAmount) <= 0 &&
+  //     buttonLabel === (isWithdrawing ? 'Withdraw Tokens' : 'Bridge Tokens'))
+  const isDisabled = false
+
+  // Loading content
+  if (buttonLoading)
+    return (
+      <TextButton disabled>
+        <LoadingContent label='Connecting...' />
+      </TextButton>
+    )
+  if (checkingSBT)
+    return (
+      <TextButton disabled>
+        <LoadingContent label='Checking SBT Status...' />
+      </TextButton>
+    )
+  if (bridging)
+    return (
+      <TextButton disabled>
+        <LoadingContent
+          label={isWithdrawing ? 'Withdrawing Tokens...' : 'Bridging Tokens...'}
+        />
+      </TextButton>
+    )
+
+  return (
+    <div>
+      <TextButton onClick={handleBridgeActionButton} disabled={isDisabled}>
+        {buttonLabel}
+      </TextButton>
+    </div>
+  )
+}
+
+export default function Home() {
+  const [isOpen, setIsOpen] = useState(false)
+  const [selectNetwork, setSelectNetwork] = useState<boolean>(false)
+  const [selectToken, setSelectToken] = useState<boolean>(false)
+  const [isSend, setIsSend] = useState<null | boolean>(null)
+  const [showSBTModal, setShowSBTModal] = useState(false)
+  const [checkingSBT, setCheckingSBT] = useState(false)
+
+  // MetaMask integration
+  const { 
+    address: metaMaskAddress, 
+    isConnected: isMetaMaskConnected, 
+    connect: connectMetaMask, 
+    disconnect: disconnectMetaMask 
+  } = useMetaMask();
+  
+  // Aztec wallet integration
+  const { 
+    account: aztecAccount, 
+    address: aztecAddress,
+    isConnected: isAztecConnected, 
+    isConnecting: isAztecConnecting,
+    connect: connectAztec, 
+    disconnect: disconnectAztec 
+  } = useAztecWallet();
+
+  const {
+    loading,
+    error,
+    l1Balance,
+    l2Balance,
+    getL1Balance,
+    getL2Balance,
+    bridgeTokensToL2,
+    withdrawTokensToL1,
+    getL2ToL1MessageMembershipWitness,
+    mintL1Tokens,
+    // hasSBT,
+    // mintSBT,
+  } = useBridgeV3()
+
+  // console.log({
+  //   error,
+  //   l1Balance,
+  //   l2Balance,
+  // })
+
+  const [networkData, setNetworkData] = useState(networks)
+  const [tokensData, setTokensData] = useState(tokens)
+  const [bridgeComplete, setBridgeComplete] = useState(false)
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [inputAmount, setInputAmount] = useState<string>('10')
+  const [usdValue, setUsdValue] = useState<string>('$0.00')
+  const [localL1Balance, setLocalL1Balance] = useState(l1Balance)
+  const [localL2Balance, setLocalL2Balance] = useState(l2Balance)
+  const [hasSoulboundToken, setHasSoulboundToken] = useState<boolean | null>(
+    null
+  )
+  const [hasAztecSBT, setHasAztecSBT] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    setLocalL1Balance(l1Balance)
+    setLocalL2Balance(l2Balance)
+  }, [l1Balance, l2Balance])
 
   const handleSBTMinted = async () => {
     if (isWithdrawing) {
@@ -196,9 +336,10 @@ export default function Home() {
       setHasAztecSBT(true)
     }
     setShowSBTModal(false)
-    await mintSBT()
-    // Proceed with bridging after successful minting
-    handleBridgeOrWithdraw()
+    // await mintSBT()
+
+    // Bridge logic now handled in BridgeActionButton
+    // handleBridgeOrWithdraw()
   }
 
   const handleSwap = () => {
@@ -206,20 +347,6 @@ export default function Home() {
     setNetworkData({ send: networkData?.received, received: networkData?.send })
     setIsWithdrawing(!isWithdrawing)
     setInputAmount('')
-  }
-
-  const handleSetupSandbox = async () => {
-    try {
-      if (!isConnected) {
-        await connect()
-      }
-
-      await setupEverything()
-      
-
-    } catch (error) {
-      console.error('Failed to setup bridge:', error)
-    }
   }
 
   const handleAmountChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -250,9 +377,11 @@ export default function Home() {
         )}
         {showSBTModal && (
           <SBT
-            address={l1WalletAddress || ''}
-            buttonText={isWithdrawing ? "Get SBT on Aztec" : "Get SBT on Ethereum"}
-            chain={isWithdrawing ? "Aztec" : "Ethereum"}
+            address={metaMaskAddress || ''}
+            buttonText={
+              isWithdrawing ? 'Get SBT on Aztec' : 'Get SBT on Ethereum'
+            }
+            chain={isWithdrawing ? 'Aztec' : 'Ethereum'}
             onMint={handleSBTMinted}
             onClose={() => setShowSBTModal(false)}
           />
@@ -266,7 +395,11 @@ export default function Home() {
                 alt=''
                 className='h-5 w-5 '
               />
-              <p className=' font-bold text-20 '> BRIDGE</p>
+              <p className=' font-bold text-20  cursor-pointer' onClick={() => {
+                // disconnectMetaMask()
+                // disconnectAztec()
+                mintL1Tokens()
+              }}> BRIDGE</p>
             </div>
 
             <div className='mt-5 bg-white rounded-md p-4 relative'>
@@ -292,7 +425,7 @@ export default function Home() {
                 </div>
                 <div className='mt-4 flex gap-2  items-center rounded-md cursor-pointer bg-latest-grey-200 p-[2px]  '>
                   <StyledImage
-                    src={tokensData?.send?.img || '/assets/svg/ethLogo.svg'}
+                    src={tokensData?.send?.img || '/assets/svg/USDC.svg'}
                     alt=''
                     className='h-6 w-6'
                   />
@@ -313,7 +446,6 @@ export default function Home() {
                   placeholder='0'
                   value={inputAmount}
                   onChange={handleAmountChange}
-                  disabled={!setupComplete || bridging}
                   className=' max-w-[190px] placeholder-latest-grey-400 outline-none bg-[transparent] text-32 font-medium'
                 />
                 <div className='flex gap-2'>
@@ -321,7 +453,7 @@ export default function Home() {
                     Balance:
                   </p>
                   <p className='text-latest-grey-500 text-12 font-medium break-all'>
-                    {isWithdrawing ? l2Balance : l1Balance} ETH
+                    {isWithdrawing ? l2Balance : l1Balance} USDC
                   </p>
                 </div>
               </div>
@@ -389,7 +521,7 @@ export default function Home() {
                   You will receive
                 </p>
                 <p className='text-black text-14 font-semibold'>
-                  {inputAmount}
+                  {inputAmount} USDC
                 </p>
               </div>
 
@@ -398,7 +530,7 @@ export default function Home() {
                   Current Balance:
                 </p>
                 <p className='text-latest-grey-500 text-12 font-medium break-all'>
-                  {isWithdrawing ? l1Balance : l2Balance} ETH
+                  {isWithdrawing ? l1Balance : l2Balance} USDC
                 </p>
               </div>
             </div>
@@ -487,116 +619,11 @@ export default function Home() {
             </div>
           </div>
           <div className='bg-white rounded-md pt-4 px-5'>
-            {/* {setupProgress > 0 && setupProgress !== 7 && (
-              <div className='mb-3 text-center'>
-                <p
-                  className={`text-14 font-medium ${setupComplete ? 'text-green-600' : 'text-blue-600'}`}>
-                  {setupComplete
-                    ? 'Ready to bridge!'
-                    : 
-                </p>
-                {setupError && (
-                  <p className='text-red-500 text-12 mt-1'>{setupError}</p>
-                )}
-              </div>
-            )} */}
-
             <div className='pb-4'>
-              {!setupComplete ? (
-                <TextButton onClick={handleSetupSandbox} disabled={loading}>
-                  {loading ? (
-                    <>
-                      <div className='flex justify-center gap-2'>
-                        <Oval
-                          height='20'
-                          width='20'
-                          color='#ccc'
-                          wrapperStyle={
-                            {
-                              //
-                            }
-                          }
-                          wrapperClass=''
-                          visible={true}
-                          ariaLabel='oval-loading'
-                          secondaryColor='#ccc'
-                          strokeWidth={6}
-                          strokeWidthSecondary={6}
-                        />
-
-                        <p className='text-14 font-medium text-white'>
-                          {stepLabels[setupProgress]}
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    'Setup Sandbox'
-                  )}
-                </TextButton>
-              ) : (
-                <TextButton
-                  onClick={isWithdrawing ? 
-                    (hasSoulboundToken ? handleBridgeOrWithdraw : checkSBTAndProceed) : 
-                    (hasAztecSBT ? handleBridgeOrWithdraw : checkSBTAndProceed)}
-                  disabled={
-                    bridging || checkingSBT || !inputAmount || parseFloat(inputAmount) <= 0
-                  }
-                  >
-                  {checkingSBT ? (
-                    <div className='flex justify-center gap-2'>
-                      <Oval
-                        height='20'
-                        width='20'
-                        color='#ccc'
-                        wrapperStyle={{}}
-                        wrapperClass=''
-                        visible={true}
-                        ariaLabel='oval-loading'
-                        secondaryColor='#ccc'
-                        strokeWidth={6}
-                        strokeWidthSecondary={6}
-                      />
-                      Checking SBT Status...
-                    </div>
-                  ) : bridging ? (
-                    isWithdrawing ? (
-                      <div className='flex justify-center gap-2'>
-                        <Oval
-                          height='20'
-                          width='20'
-                          color='#ccc'
-                          wrapperStyle={{}}
-                          wrapperClass=''
-                          visible={true}
-                          ariaLabel='oval-loading'
-                          secondaryColor='#ccc'
-                          strokeWidth={6}
-                          strokeWidthSecondary={6}
-                        />
-                        Withdrawing Tokens...
-                      </div>
-                    ) : (
-                      <div className='flex justify-center gap-2'>
-                        <Oval
-                          height='20'
-                          width='20'
-                          color='#ccc'
-                          wrapperStyle={{}}
-                          wrapperClass=''
-                          visible={true}
-                          ariaLabel='oval-loading'
-                          secondaryColor='#ccc'
-                          strokeWidth={6}
-                          strokeWidthSecondary={6}
-                        />
-                        Bridging Tokens...
-                      </div>
-                    )
-                  ) : (
-                    isWithdrawing ? 'Withdraw Tokens' : 'Bridge Tokens'
-                  )}
-                </TextButton>
-              )}
+              <BridgeActionButton
+                inputAmount={inputAmount}
+                setInputAmount={setInputAmount}
+              />
             </div>
             <div className='flex justify-center gap-2 pb-3'>
               <StyledImage

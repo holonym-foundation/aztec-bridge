@@ -24,16 +24,20 @@ jobs:
           pnpm-version: 8
           working-directory: frontend
 
-      # Deploy using the Vercel GitHub Action
-      - name: Deploy to Vercel (Preview)
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}
-          vercel-project-id: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
-          working-directory: frontend
-          vercel-args: '--env FAUCET_PRIVATE_KEY=${{ secrets.FAUCET_PRIVATE_KEY }}'
-          vercel-version: '33.4.1'
+      - name: Install Vercel CLI
+        run: pnpm add --global vercel@latest
+
+      - name: Pull Preview Environment From Vercel
+        working-directory: frontend
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        working-directory: frontend
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }} --env FAUCET_PRIVATE_KEY=${{ secrets.FAUCET_PRIVATE_KEY }}
+      
+      - name: Deploy Project Artifacts to Vercel
+        working-directory: frontend
+        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
 
   Deploy-Production:
     runs-on: ubuntu-latest
@@ -48,14 +52,18 @@ jobs:
           pnpm-version: 8
           working-directory: frontend
 
-      # Deploy using the Vercel GitHub Action
-      - name: Deploy to Vercel (Production)
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}
-          vercel-project-id: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
-          working-directory: frontend
-          vercel-args: '--prod --env FAUCET_PRIVATE_KEY=${{ secrets.FAUCET_PRIVATE_KEY }}'
-          vercel-version: '33.4.1'
+      - name: Install Vercel CLI
+        run: pnpm add --global vercel@latest
+
+      - name: Pull Production Environment From Vercel
+        working-directory: frontend
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        working-directory: frontend
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --env FAUCET_PRIVATE_KEY=${{ secrets.FAUCET_PRIVATE_KEY }}
+        
+      - name: Deploy to Production
+        working-directory: frontend
+        run: vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
       

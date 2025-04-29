@@ -5,9 +5,16 @@ zsh -i <(curl -s https://install.aztec.network)
 
 cd aztec-contracts/token_bridge
 aztec-nargo compile
+aztec codegen target -o src/artifacts
+
 
 cd aztec-contracts/nft_contract
 aztec-nargo compile
+aztec codegen target -o src/artifacts
+
+cd aztec-contracts/token
+aztec-nargo compile
+aztec codegen target -o src/artifacts
 
 
 

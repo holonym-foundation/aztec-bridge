@@ -1,5 +1,6 @@
 # Deploy Aztec Bridge to Vercel following the recommended pattern
 name: Deploy Aztec Bridge to Vercel
+
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
@@ -16,11 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
-      - uses: ./.github/actions/setup-pnpm-and-install
-        with:
-          pnpm-version: 8
-          working-directory: ./frontend
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@8 --activate
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: pnpm install
 
       - name: Install Vercel CLI
         run: pnpm add --global vercel@latest
@@ -28,19 +33,19 @@ jobs:
       - name: Build Next App
         working-directory: ./frontend
         run: pnpm build
-            
+
       - name: Pull Preview Environment From Vercel
         working-directory: ./frontend
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project Artifacts
         working-directory: ./frontend
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }} 
-      
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
       - name: Deploy Project Artifacts to Vercel
         working-directory: ./frontend
         run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
-  
+
   Deploy-Production:
     permissions: write-all
     runs-on: ubuntu-latest
@@ -50,10 +55,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: ./.github/actions/setup-pnpm-and-install
-        with:
-          pnpm-version: 8
-          working-directory: ./frontend
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@8 --activate
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: pnpm install
 
       - name: Install Vercel CLI
         run: pnpm add --global vercel@latest
@@ -61,16 +70,15 @@ jobs:
       - name: Build Next App
         working-directory: ./frontend
         run: pnpm build
-      
+
       - name: Pull Production Environment From Vercel
         working-directory: ./frontend
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-        
+
       - name: Build Project Artifacts
         working-directory: ./frontend
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} 
-        
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
       - name: Deploy to Production
         working-directory: ./frontend
         run: vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
-      

@@ -19,10 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # Change directory to frontend
-      - name: Setup Working Directory
-        run: cd frontend && echo "FRONTEND_PATH=$(pwd)" >> $GITHUB_ENV
-
       - uses: ./.github/actions/setup-pnpm-and-install
         with:
           pnpm-version: 8
@@ -31,23 +27,17 @@ jobs:
       - name: Install Vercel CLI
         run: pnpm install -g vercel@latest
 
-      - name: Build
+      - name: Create Project Configuration
+        run: |
+          mkdir -p frontend/.vercel
+          echo '{"orgId": "${{ secrets.VERCEL_ORG_ID }}", "projectId": "${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}"}' > frontend/.vercel/project.json
+
+      # Now deploy using a much simpler approach
+      - name: Deploy to Vercel (Preview)
         working-directory: frontend
-        run: pnpm run build
-
-      - name: Pull Preview Environment From Vercel
-        run: cd frontend && vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Add environment variables to Vercel Project
-        run: cd frontend && vercel env add FAUCET_PRIVATE_KEY preview ${{ secrets.FAUCET_PRIVATE_KEY }} --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Build Project Artifacts
-        run: cd frontend && vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel --token=${{ secrets.VERCEL_TOKEN }} --confirm
         env:
           FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
-
-      - name: Deploy Project Artifacts to Vercel
-        run: cd frontend && vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
 
   Deploy-Production:
     runs-on: ubuntu-latest
@@ -57,10 +47,6 @@ jobs:
     steps:    
       - uses: actions/checkout@v3
 
-      # Change directory to frontend
-      - name: Setup Working Directory
-        run: cd frontend && echo "FRONTEND_PATH=$(pwd)" >> $GITHUB_ENV
-
       - uses: ./.github/actions/setup-pnpm-and-install
         with:
           pnpm-version: 8
@@ -69,21 +55,15 @@ jobs:
       - name: Install Vercel CLI
         run: pnpm install -g vercel@latest
 
-      - name: Build
+      - name: Create Project Configuration
+        run: |
+          mkdir -p frontend/.vercel
+          echo '{"orgId": "${{ secrets.VERCEL_ORG_ID }}", "projectId": "${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}"}' > frontend/.vercel/project.json
+
+      # Now deploy using a much simpler approach
+      - name: Deploy to Vercel (Production)
         working-directory: frontend
-        run: pnpm run build
-
-      - name: Pull Production Environment From Vercel
-        run: cd frontend && vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Add environment variables to Vercel Project
-        run: cd frontend && vercel env add FAUCET_PRIVATE_KEY production ${{ secrets.FAUCET_PRIVATE_KEY }} --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Build Project Artifacts
-        run: cd frontend && vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel --token=${{ secrets.VERCEL_TOKEN }} --prod --confirm
         env:
           FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
-
-      - name: Deploy to Production
-        run: cd frontend && vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
       

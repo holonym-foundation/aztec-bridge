@@ -24,24 +24,15 @@ jobs:
           pnpm-version: 8
           working-directory: frontend
 
-      - name: Install Vercel CLI
-        run: pnpm install -g vercel@latest
-
-      - name: Create Project Configuration
-        run: |
-          mkdir -p frontend/.vercel
-          echo '{"orgId": "${{ secrets.VERCEL_ORG_ID }}", "projectId": "${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}"}' > frontend/.vercel/project.json
-
-      # Get the actual absolute path to the frontend directory
-      - name: Get Absolute Path
-        id: get_path
-        run: echo "FRONTEND_PATH=$(pwd)/frontend" >> $GITHUB_OUTPUT
-
-      # Deploy using absolute path
+      # Deploy using official Vercel GitHub Action
       - name: Deploy to Vercel (Preview)
-        run: vercel deploy ${{ steps.get_path.outputs.FRONTEND_PATH }} --token=${{ secrets.VERCEL_TOKEN }} --yes
-        env:
-          FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}
+          vercel-project-id: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
+          working-directory: ./frontend
+          vercel-args: '--env FAUCET_PRIVATE_KEY=${{ secrets.FAUCET_PRIVATE_KEY }}'
 
   Deploy-Production:
     runs-on: ubuntu-latest
@@ -56,22 +47,13 @@ jobs:
           pnpm-version: 8
           working-directory: frontend
 
-      - name: Install Vercel CLI
-        run: pnpm install -g vercel@latest
-
-      - name: Create Project Configuration
-        run: |
-          mkdir -p frontend/.vercel
-          echo '{"orgId": "${{ secrets.VERCEL_ORG_ID }}", "projectId": "${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}"}' > frontend/.vercel/project.json
-
-      # Get the actual absolute path to the frontend directory
-      - name: Get Absolute Path
-        id: get_path
-        run: echo "FRONTEND_PATH=$(pwd)/frontend" >> $GITHUB_OUTPUT
-
-      # Deploy using absolute path
+      # Deploy using official Vercel GitHub Action
       - name: Deploy to Vercel (Production)
-        run: vercel deploy ${{ steps.get_path.outputs.FRONTEND_PATH }} --token=${{ secrets.VERCEL_TOKEN }} --prod --yes
-        env:
-          FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}
+          vercel-project-id: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
+          working-directory: ./frontend
+          vercel-args: '--prod --env FAUCET_PRIVATE_KEY=${{ secrets.FAUCET_PRIVATE_KEY }}'
       

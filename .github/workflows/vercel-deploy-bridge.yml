@@ -32,22 +32,18 @@ jobs:
         run: pnpm run build
 
       - name: Pull Preview Environment From Vercel
-        working-directory: frontend
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }} --cwd frontend
 
       - name: Add environment variables to Vercel
-        working-directory: frontend
-        run: vercel env add FAUCET_PRIVATE_KEY preview ${{ secrets.FAUCET_PRIVATE_KEY }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel env add FAUCET_PRIVATE_KEY preview ${{ secrets.FAUCET_PRIVATE_KEY }} --token=${{ secrets.VERCEL_TOKEN }} --cwd frontend
 
       - name: Build Project Artifacts
-        working-directory: frontend
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }} --cwd frontend
         env:
           FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
 
       - name: Deploy Project Artifacts to Vercel
-        working-directory: frontend
-        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --cwd frontend
 
   Deploy-Production:
     runs-on: ubuntu-latest
@@ -70,19 +66,15 @@ jobs:
         run: pnpm run build
 
       - name: Pull Production Environment From Vercel
-        working-directory: frontend
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --cwd frontend
 
       - name: Add environment variables to Vercel
-        working-directory: frontend
-        run: vercel env add FAUCET_PRIVATE_KEY production ${{ secrets.FAUCET_PRIVATE_KEY }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel env add FAUCET_PRIVATE_KEY production ${{ secrets.FAUCET_PRIVATE_KEY }} --token=${{ secrets.VERCEL_TOKEN }} --cwd frontend
 
       - name: Build Project Artifacts
-        working-directory: frontend
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd frontend
         env:
           FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
 
       - name: Deploy to Production
-        working-directory: frontend
-        run: vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }}      
+        run: vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --cwd frontend      

@@ -1,11 +1,4 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-/* eslint-disable sonarjs/no-duplicate-string */
-// @ts-nocheck
-import type { Config } from 'tailwindcss'
-
-// import defaultTheme from 'tailwindcss/defaultTheme'
-
-function withOpacity(variableName: string) {
+function withOpacity(variableName) {
   return ({ opacityValue }) => {
     if (opacityValue !== undefined) {
       return `rgba(var(${variableName}), ${opacityValue})`
@@ -344,4 +337,4 @@ module.exports = {
       nocompatible: true
     })
   ]
-} satisfies Config
+}

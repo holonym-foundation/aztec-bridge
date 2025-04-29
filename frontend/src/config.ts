@@ -18,6 +18,4 @@ export const ADDRESS = {
       SPONSORED_FEE_PAYMENT_CONTRACT: '0x0b27e30667202907fc700d50e9bc816be42f8141fae8b9f2281873dbdb9fc2e5',
     }
   },
-  SECRET: '0x06abcfa657c7cb3fbd2adbbea36a25feebe95aede7beb83103f69a86412a7728',
-  SALT: '0x0c6f174d48f7d228f1b25c9abd30296bdfb21cb0554195840fb97236a407212c',
 } as const;

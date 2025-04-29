@@ -11,9 +11,6 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { sepolia } from 'viem/chains'
 import { ADDRESS } from '@/config'
 
-// Configure Vercel function timeout (300 seconds for Pro plan)
-export const maxDuration = 300
-
 // Configure environment variables in a .env.local file
 // IMPORTANT: The FAUCET_PRIVATE_KEY must include the '0x' prefix
 // Example: FAUCET_PRIVATE_KEY=0x1234...

@@ -5,9 +5,6 @@ import { sepolia } from 'viem/chains'
 import { ADDRESS } from '@/config'
 import { TestERC20Abi } from '@aztec/l1-artifacts'
 
-// Configure Vercel function timeout (300 seconds for Pro plan)
-export const maxDuration = 300
-
 // Amount of tokens to mint (100,000)
 const MINT_AMOUNT = BigInt(100000)
 

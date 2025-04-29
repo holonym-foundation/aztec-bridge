@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "src/app/api/faucet/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/mint-tokens/route.ts": {
+      "maxDuration": 300
+    }
+  }
+} 

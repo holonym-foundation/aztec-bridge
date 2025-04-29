@@ -6,6 +6,11 @@ inputs:
     default: '8'
     required: false
     type: string
+  working-directory:
+    description: 'Directory containing package.json'
+    default: '.'
+    required: false
+    type: string
 
 runs:
   using: "composite"
@@ -28,4 +33,5 @@ runs:
 
     - name: Install Dependencies
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
       run: pnpm install

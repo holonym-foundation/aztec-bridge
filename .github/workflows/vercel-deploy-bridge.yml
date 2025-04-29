@@ -32,10 +32,14 @@ jobs:
           mkdir -p frontend/.vercel
           echo '{"orgId": "${{ secrets.VERCEL_ORG_ID }}", "projectId": "${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}"}' > frontend/.vercel/project.json
 
-      # Now deploy using a much simpler approach
+      # Get the actual absolute path to the frontend directory
+      - name: Get Absolute Path
+        id: get_path
+        run: echo "FRONTEND_PATH=$(pwd)/frontend" >> $GITHUB_OUTPUT
+
+      # Deploy using absolute path
       - name: Deploy to Vercel (Preview)
-        working-directory: frontend
-        run: vercel --token=${{ secrets.VERCEL_TOKEN }} --confirm
+        run: vercel deploy ${{ steps.get_path.outputs.FRONTEND_PATH }} --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
           FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
 
@@ -60,10 +64,14 @@ jobs:
           mkdir -p frontend/.vercel
           echo '{"orgId": "${{ secrets.VERCEL_ORG_ID }}", "projectId": "${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}"}' > frontend/.vercel/project.json
 
-      # Now deploy using a much simpler approach
+      # Get the actual absolute path to the frontend directory
+      - name: Get Absolute Path
+        id: get_path
+        run: echo "FRONTEND_PATH=$(pwd)/frontend" >> $GITHUB_OUTPUT
+
+      # Deploy using absolute path
       - name: Deploy to Vercel (Production)
-        working-directory: frontend
-        run: vercel --token=${{ secrets.VERCEL_TOKEN }} --prod --confirm
+        run: vercel deploy ${{ steps.get_path.outputs.FRONTEND_PATH }} --token=${{ secrets.VERCEL_TOKEN }} --prod --yes
         env:
           FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
       

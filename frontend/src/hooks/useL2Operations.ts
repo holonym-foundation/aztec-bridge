@@ -84,10 +84,10 @@ export const useL2TokenBalance = () => {
         .simulate(),
     ])
 
-    // const publicBalanceFormat = formatUnits(publicBalance as bigint, l2TokenMetadata.decimals)
-    // const privateBalanceFormat = formatUnits(privateBalance as bigint, l2TokenMetadata.decimals)
-    const publicBalanceFormat = publicBalance.toString()
-    const privateBalanceFormat = privateBalance.toString()
+    const publicBalanceFormat = formatUnits(publicBalance as bigint, l2TokenMetadata.decimals)
+    const privateBalanceFormat = formatUnits(privateBalance as bigint, l2TokenMetadata.decimals)
+    // const publicBalanceFormat = publicBalance.toString()
+    // const privateBalanceFormat = privateBalance.toString()
 
     return {
       publicBalance: publicBalanceFormat,

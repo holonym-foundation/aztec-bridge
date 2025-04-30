@@ -12,7 +12,7 @@ import { useToast, useToastQuery, useToastMutation } from './useToast'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { toast } from 'react-toastify'
-import { formatEther } from 'viem'
+import { formatEther, formatUnits } from 'viem'
 
 // Fix the bytecode format
 const PortalSBTAbi = PortalSBTJson.abi
@@ -59,7 +59,10 @@ export function useL1TokenBalance() {
       functionName: 'balanceOf',
       args: [l1Address],
     })
-    return balance.toString()
+
+    // TODO: this should come from token
+    const balanceFormat = formatUnits(balance as bigint, 6)
+    return balanceFormat
   }
 
   return useToastQuery({
@@ -202,6 +205,8 @@ export function useL1Faucet() {
         console.log('User has gas. Requesting tokens from API...')
         try {
           notify('info', 'Getting tokens...')
+          await wait(30000) // 30 seconds
+
           // Call our mint-tokens API endpoint
           const response = await fetch('/api/mint-tokens', {
             method: 'POST',
@@ -695,6 +700,7 @@ export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
           },
           autoClose: 50000,
           closeOnClick: false,
+          style: { cursor: 'pointer' },
         }
       )
 

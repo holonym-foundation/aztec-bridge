@@ -4,7 +4,7 @@ import StyledImage from './StyledImage'
 import { Oval } from 'react-loader-spinner'
 import { BridgeDirection } from '@/types/bridge'
 import { useToast } from '@/hooks/useToast'
-
+import { parseUnits } from 'viem'
 function LoadingContent({ label }: { label: string }) {
   return (
     <div className='flex justify-center gap-2'>
@@ -137,7 +137,9 @@ function BridgeActionButton({
 
     setIsOperationPending(true)
     try {
-      const amount = BigInt(inputAmount)
+      // const amount = BigInt(inputAmount)
+      // this should come from token
+      const amount = parseUnits(inputAmount, 6)
       const operationType = getOperationType(direction)
 
       if (direction === BridgeDirection.L2_TO_L1) {

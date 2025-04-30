@@ -17,6 +17,8 @@ export interface Token {
   img: string;
   title: string;
   symbol: string;
+  decimals: number;
+  address: string;
 }
 
 export interface BridgeSectionState {

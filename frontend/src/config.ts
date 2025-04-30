@@ -98,6 +98,8 @@ export const L1_TOKENS: Token[] = [
     img: '/assets/svg/USDC.svg',
     title: 'Test USDC',
     symbol: 'USDC',
+    decimals: 6,
+    address: '0x24ca8bf6d17d0f6844eacee733fa183d343c1dc4',
   },
   // {
   //   id: 2,
@@ -125,6 +127,8 @@ export const L2_TOKENS: Token[] = [
     img: '/assets/svg/USDC.svg',
     title: 'Clean USDC',
     symbol: 'USDC',
+    decimals: 6,
+    address: '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
   },
   // {
   //   id: 2,

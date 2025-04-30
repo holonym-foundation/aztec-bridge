@@ -188,8 +188,6 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
     let progressInterval: NodeJS.Timeout | null = null
 
     try {
-
-    
       if (!l1Address || !aztecAddress || !aztecAccount?.aztecNode) {
         throw new Error('Required accounts not connected')
       }
@@ -297,7 +295,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       )
       console.log('Retrieved L2 to L1 message: ', l2ToL1Message.toString())
       
-      notify('info', `L2 to L1 message retrieved: ${l2ToL1Message.toString()}`)
+      // notify('info', `L2 to L1 message retrieved: ${l2ToL1Message.toString()}`)
 
       // Update toast progress
       if (toastIdRef.current !== null) {
@@ -384,60 +382,115 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       if (toastIdRef.current !== null) {
         toast.update(toastIdRef.current, {
           progress: 0.9,
-          render: 'Completing withdrawal on Ethereum...',
+          render: 'Waiting for L1 confirmation (40 minutes)...',
         })
+        // Close this toast after a short delay
+        setTimeout(() => {
+          toast.dismiss(toastIdRef.current as number | string)
+          toastIdRef.current = null
+        }, 2000)
       }
 
-      notify('warn', `Waiting for transaction to be confirmed on L1... around 40 minutes`)
+      // Create a new toast for the 40-minute wait
+      const waitToastId = toast('Waiting for L1 confirmation...', {
+        progress: 0,
+        autoClose: false,
+        closeButton: false,
+      })
 
+      // Start the 40-minute wait progress
+      const waitTime = 40 * 60 * 1000 // 40 minutes in milliseconds
+      const startTime = Date.now()
+      const endTime = startTime + waitTime
+      
+      // Update progress every 30 seconds
+      progressInterval = setInterval(() => {
+        const currentTime = Date.now()
+        const elapsed = currentTime - startTime
+        const progress = Math.min(elapsed / waitTime, 0.99) // Progress from 0% to 99%
+        
+        const minutesRemaining = Math.ceil((endTime - currentTime) / (60 * 1000))
+        toast.update(waitToastId, {
+          progress,
+          render: `Waiting for L1 confirmation (${minutesRemaining} minutes remaining)...`,
+        })
+      }, 30000) // Update every 30 seconds
+
+      // Wait for the full 40 minutes
+      await new Promise(resolve => setTimeout(resolve, waitTime))
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
+
+      // Show completion message
+      toast.update(waitToastId, {
+        progress: 1,
+        render: '✅ L1 confirmation complete!',
+        autoClose: 3000,
+      })
+
+      // Create a new toast for the next steps
+      const nextStepsToastId = toast('Proceeding with withdrawal...', {
+        progress: 0,
+        autoClose: false,
+        closeButton: false,
+      })
+
+      await wait(5000)
       console.log('Initiating withdrawal on L1...')
 
-      return ''
-      // // we need to wait for 20 to 40 minutes for the transaction to be confirmed on L1
-      // await manager.withdrawFunds(
-      //   amount,
-      //   EthAddress.fromString(l1Address),
-      //   BigInt(l2TxReceipt.blockNumber!),
-      //   l2ToL1MessageIndex,
-      //   siblingPath
-      // )
+      // Update toast progress
+      toast.update(nextStepsToastId, {
+        progress: 0.2,
+        render: 'Initiating withdrawal on L1...',
+      })
 
-      // // Complete the progress and update the toast
-      // if (toastIdRef.current !== null) {
-      //   toast.update(toastIdRef.current, {
-      //     progress: 1,
-      //     render: '✅ Withdrawal complete!',
-      //   })
+      // we need to wait for 20 to 40 minutes for the transaction to be confirmed on L1
+      await manager.withdrawFunds(
+        amount,
+        EthAddress.fromString(l1Address),
+        BigInt(l2TxReceipt.blockNumber!),
+        l2ToL1MessageIndex,
+        siblingPath
+      )
 
-      //   setTimeout(() => {
-      //     if (toastIdRef.current !== null) {
-      //       toast.done(toastIdRef.current as number | string)
-      //       toast.dismiss(toastIdRef.current as number | string)
-      //       toastIdRef.current = null
-      //     }
-      //   }, 3000)
-      // }
+      // Update toast to show completion
+      toast.update(nextStepsToastId, {
+        progress: 1,
+        render: '✅ Withdrawal complete!',
+        autoClose: 3000,
+      })
 
-      // console.log('Withdrawal completed successfully')
+      // Clean up all toasts
+      if (toastIdRef.current) {
+        toast.dismiss(toastIdRef.current)
+      }
+      if (waitToastId) {
+        toast.dismiss(waitToastId)
+      }
+      toast.dismiss(nextStepsToastId)
 
-      // const txHash = l2TxReceipt.txHash.toString()
-      // console.log('txHash ', txHash)
+      console.log('Withdrawal completed successfully')
 
-      // // Create an Aztecscan URL for the transaction
-      // const aztecscanUrl = `https://aztecscan.xyz/tx-effects/${txHash}`
-      // console.log('View transaction on Aztecscan:', aztecscanUrl)
+      const txHash = l2TxReceipt.txHash.toString()
+      console.log('txHash ', txHash)
 
-      // // Show a notification with the transaction link info
-      // setTimeout(() => {
-      //   toast.info(`View withdrawal transaction on Aztecscan`, {
-      //     onClick: () => {
-      //       window.open(aztecscanUrl, '_blank')
-      //     },
-      //     autoClose: 10000,
-      //     closeOnClick: false,
-      //     style: { cursor: 'pointer' },
-      //   })
-      // }, 1000)
+      // Create an Aztecscan URL for the transaction
+      const aztecscanUrl = `https://aztecscan.xyz/tx-effects/${txHash}`
+      console.log('View transaction on Aztecscan:', aztecscanUrl)
+
+      // Show a notification with the transaction link info
+      setTimeout(() => {
+        toast.info(`View withdrawal transaction on Aztecscan`, {
+          onClick: () => {
+            window.open(aztecscanUrl, '_blank')
+          },
+          autoClose: 10000,
+          closeOnClick: false,
+          style: { cursor: 'pointer' },
+        })
+      }, 1000)
 
       // return txHash
     } catch (error) {

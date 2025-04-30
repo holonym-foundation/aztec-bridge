@@ -13,12 +13,14 @@ const MINT_AMOUNT = BigInt(100000)
 
 // Get environment variables
 let privateKey = process.env.FAUCET_PRIVATE_KEY
-const rpcUrl =
-  process.env.ETHEREUM_RPC_URL ||
-  'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161'
+const rpcUrl = process.env.ETHEREUM_RPC_URL
 
 if (!privateKey) {
   throw new Error('FAUCET_PRIVATE_KEY is not set')
+}
+
+if (!rpcUrl) {
+  throw new Error('ETHEREUM_RPC_URL is not set')
 }
 
 // Make sure it has 0x prefix

@@ -32,6 +32,10 @@ if (!privateKey) {
   throw new Error('FAUCET_PRIVATE_KEY is not set')
 }
 
+if (!rpcUrl) {
+  throw new Error('ETHEREUM_RPC_URL is not set')
+}
+
 // Make sure it has 0x prefix
 if (!privateKey.startsWith('0x')) {
   privateKey = `0x${privateKey}`

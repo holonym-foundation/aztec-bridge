@@ -382,7 +382,7 @@ function BridgeActionButton({
 
   return (
     <div>
-      <TextButton onClick={handleButtonClick} disabled={isButtonDisabled}>
+      <TextButton onClick={handleButtonClick} disabled={isButtonDisabled} className=''>
         {showLoadingSpinner ? (
           <LoadingContent label={getLoadingText()} />
         ) : bridgeCompleted ? (
@@ -842,7 +842,8 @@ export default function Home() {
                 // Connection states
                 isMetaMaskConnected={isMetaMaskConnected}
                 connectMetaMask={connectMetaMask}
-                isAztecConnected={isAztecConnected}
+                // isAztecConnected={isAztecConnected}
+                isAztecConnected={true}
                 connectAztec={connectAztec}
                 inputRef={inputRef}
                 // Balance and amount states

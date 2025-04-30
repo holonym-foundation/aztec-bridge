@@ -9,7 +9,7 @@ import { TestERC20Abi } from '@aztec/l1-artifacts'
 export const maxDuration = 300
 
 // Amount of tokens to mint (100,000)
-const MINT_AMOUNT = BigInt(100000)
+const MINT_AMOUNT = BigInt(1000000)
 
 // Get environment variables
 let privateKey = process.env.FAUCET_PRIVATE_KEY

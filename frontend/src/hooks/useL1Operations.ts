@@ -306,11 +306,11 @@ export function useL1MintTokens() {
       )
     }
 
-    if (hasTokens) {
-      throw new Error('You already have tokens')
-    }
+    // if (hasTokens) {
+    //   throw new Error('You already have tokens')
+    // }
 
-    const mintAmount = BigInt(100000)
+    const mintAmount = BigInt(1000000000000000000)
 
     console.log('Minting tokens for address:', l1Address)
 
@@ -320,6 +320,7 @@ export function useL1MintTokens() {
       abi: TestERC20Abi,
       functionName: 'mint',
       args: [l1Address, mintAmount],
+      account: l1Address as `0x${string}`,
     })
 
     // Send the transaction

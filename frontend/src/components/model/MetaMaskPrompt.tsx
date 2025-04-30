@@ -23,8 +23,7 @@ export default function MetaMaskPrompt({ onClose }: { onClose: () => void }) {
           </div>
           <div className='mt-4 mx-2.5'>
             <p className='text-latest-grey-600 text-14 mb-6'>
-              To use our app seamlessly and protect your information, please
-              install MetaMask Wallet
+              To use our app seamlessly, please install MetaMask Wallet
             </p>
 
             <div className='bg-latest-grey-200 p-4 rounded-lg mb-6 flex items-center gap-4'>

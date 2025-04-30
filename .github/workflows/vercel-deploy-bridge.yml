@@ -4,6 +4,8 @@ env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
   FAUCET_PRIVATE_KEY: ${{ secrets.FAUCET_PRIVATE_KEY }}
+  ETHEREUM_RPC_URL: ${{ secrets.ETHEREUM_RPC_URL }}
+  ETHEREUM_RPC_URL_2: ${{ secrets.ETHEREUM_RPC_URL_2 }}
 
 on:
   push:

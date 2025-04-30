@@ -109,7 +109,7 @@ export function useL1Faucet() {
     balancesLoaded &&
     (!nativeBalance || Number(nativeBalance) <= mintNativeAmount)
   const needsTokens =
-    balancesLoaded && tokenBalance && BigInt(tokenBalance) <= mintTokenAmount
+    balancesLoaded && tokenBalance && Number(tokenBalance) <= mintTokenAmount
 
   // User is eligible for faucet if they need gas OR tokens
   // Check if user has gas but still needs tokens - they should be eligible for tokens only
@@ -296,7 +296,7 @@ export function useL1MintTokens() {
   const hasGas = !!nativeBalance && Number(nativeBalance) > 0.01
 
   // Check if user already has tokens
-  const hasTokens = !!tokenBalance && BigInt(tokenBalance || '0') > 0
+  const hasTokens = !!tokenBalance && Number(tokenBalance) > 0
 
   // User is eligible to mint tokens if they have gas but no tokens
   const isEligibleForTokens = hasGas && !hasTokens
@@ -366,7 +366,7 @@ export function useL1MintTokens() {
 // -----------------------------------
 
 export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
-  const { address: l1Address } = useAccount()
+  const { address: l1Address , isConnected: isMetaMaskConnected} = useAccount()
   const { account: aztecAccount, address: aztecAddress } = useAztecWallet()
   const publicClient = usePublicClient()
   const { data: walletClient } = useWalletClient()
@@ -399,7 +399,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
     )
 
     return manager
-  }, [publicClient, walletClient, l1ContractAddresses])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicClient, walletClient, l1ContractAddresses, isMetaMaskConnected])
 
   const mutationFn = async (amount: bigint) => {
     // For tracking toast progress

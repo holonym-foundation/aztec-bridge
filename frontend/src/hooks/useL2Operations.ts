@@ -108,11 +108,11 @@ export const useL2TokenBalance = () => {
     refetchOnReconnect: false, // Don't refetch when reconnecting
     // retry: 3, // Number of retry attempts
     retryDelay: 60000, // 60 seconds between retry attempts
-    // toastMessages: {
-    //   pending: 'Fetching Aztec token balances...',
-    //   success: 'Aztec token balances fetched successfully',
-    //   error: 'Failed to fetch Aztec token balances',
-    // },
+    toastMessages: {
+      pending: 'Fetching Aztec token balances...',
+      success: 'Aztec token balances fetched successfully',
+      error: 'Failed to fetch Aztec token balances',
+    },
   })
 }
 

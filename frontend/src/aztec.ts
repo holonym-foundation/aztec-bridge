@@ -1,7 +1,7 @@
 import { AztecWalletSdk, obsidion } from '@nemi-fi/wallet-sdk'
 
-const aztecNode = "https://l2.testnet.nemi.fi";
-// const aztecNode = 'https://registry.obsidion.xyz/node'
+// const aztecNode = "https://l2.testnet.nemi.fi";
+const aztecNode = 'https://registry.obsidion.xyz/node'
 
 // Create the Aztec Wallet SDK instance without pino-based logging
 export const sdk = new AztecWalletSdk({

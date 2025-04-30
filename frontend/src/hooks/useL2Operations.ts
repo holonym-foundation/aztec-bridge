@@ -102,17 +102,18 @@ export const useL2TokenBalance = () => {
     // enabled: !!isConnected && !!aztecAddress && !!l2TokenContract && !!l2TokenMetadata,
     enabled: !!aztecAddress && !!l2TokenContract && !!l2TokenMetadata,
     staleTime: Infinity, // Data never goes stale automatically
-    gcTime: Infinity, // Cache never expires (renamed from cacheTime in v4)
+    // gcTime: Infinity, // Cache never expires (renamed from cacheTime in v4)
+    gcTime: 1000 * 60 * 60 * 24, // 24 hours
     refetchOnWindowFocus: false, // Don't refetch when window regains focus
     refetchOnMount: true, // Allow refetch when component mounts
     refetchOnReconnect: false, // Don't refetch when reconnecting
     // retry: 3, // Number of retry attempts
     retryDelay: 60000, // 60 seconds between retry attempts
-    toastMessages: {
-      pending: 'Fetching Aztec token balances...',
-      success: 'Aztec token balances fetched successfully',
-      error: 'Failed to fetch Aztec token balances',
-    },
+    // toastMessages: {
+    //   pending: 'Fetching Aztec token balances...',
+    //   success: 'Aztec token balances fetched successfully',
+    //   error: 'Failed to fetch Aztec token balances',
+    // },
   })
 }
 
@@ -427,7 +428,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       toast.update(waitToastId, {
         progress: 1,
         render: '✅ L1 confirmation complete!',
-        autoClose: 3000,
+        autoClose: 10000, // 10 seconds
       })
 
       // Create a new toast for the next steps
@@ -459,7 +460,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       toast.update(nextStepsToastId, {
         progress: 1,
         render: '✅ Withdrawal complete!',
-        autoClose: 3000,
+        autoClose: 10000, // 10 seconds
       })
 
       // Clean up all toasts

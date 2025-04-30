@@ -603,7 +603,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         onClick: () => {
           window.open(aztecscanUrl, '_blank')
         },
-        autoClose: 50000,
+        autoClose: 10000, // 10 seconds
         closeOnClick: false,
         style: { cursor: 'pointer' },
       })
@@ -699,7 +699,7 @@ export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
           onClick: () => {
             window.open(etherscanUrl, '_blank')
           },
-          autoClose: 50000,
+          autoClose: 10000, // 10 seconds
           closeOnClick: false,
           style: { cursor: 'pointer' },
         }

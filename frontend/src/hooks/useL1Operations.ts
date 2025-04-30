@@ -94,8 +94,8 @@ export function useL1Faucet() {
 
   const notify = useToast()
 
-  const mintNativeAmount = 1
-  const mintTokenAmount = 1000000000000
+  const mintNativeAmount = 0.01
+  const mintTokenAmount = 0
 
   // Helper function to check if user has gas
   const hasGas = !!nativeBalance && Number(nativeBalance) > mintNativeAmount

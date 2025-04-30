@@ -842,8 +842,7 @@ export default function Home() {
                 // Connection states
                 isMetaMaskConnected={isMetaMaskConnected}
                 connectMetaMask={connectMetaMask}
-                // isAztecConnected={isAztecConnected}
-                isAztecConnected={true}
+                isAztecConnected={isAztecConnected}
                 connectAztec={connectAztec}
                 inputRef={inputRef}
                 // Balance and amount states

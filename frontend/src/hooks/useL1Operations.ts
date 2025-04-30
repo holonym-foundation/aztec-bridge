@@ -12,20 +12,29 @@ import { useToast, useToastQuery, useToastMutation } from './useToast'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { toast } from 'react-toastify'
+import { formatEther } from 'viem'
 
 // Fix the bytecode format
 const PortalSBTAbi = PortalSBTJson.abi
 
 export const useL1NativeBalance = () => {
   const { address: l1Address } = useAccount()
-  const { data: nativeBalance } = useBalance({
-    address: l1Address,
-  })
+  // const { data: nativeBalance } = useBalance({
+  //   address: l1Address,
+  // })
+
+  const publicClient = usePublicClient()
 
   const queryKey = ['l1NativeBalance', l1Address]
   const queryFn = async () => {
-    const balance = nativeBalance?.formatted
-    const formattedBalance = truncateDecimals(balance as string)
+    if (!l1Address) return null
+
+    const balance = await publicClient.getBalance({
+      address: l1Address,
+    })
+
+    const balanceFormetEther = formatEther(balance)
+    const formattedBalance = truncateDecimals(balanceFormetEther)
     return formattedBalance
   }
 
@@ -85,8 +94,8 @@ export function useL1Faucet() {
 
   const notify = useToast()
 
-  const mintNativeAmount = 0.01
-  const mintTokenAmount = 0
+  const mintNativeAmount = 1
+  const mintTokenAmount = 1000000000000
 
   // Helper function to check if user has gas
   const hasGas = !!nativeBalance && Number(nativeBalance) > mintNativeAmount
@@ -147,15 +156,15 @@ export function useL1Faucet() {
         result = { ...result, ...gasResult }
 
         // Wait for the gas transaction to be processed
-        console.log('Waiting for gas transaction to be confirmed...')
+        // console.log('Waiting for gas transaction to be confirmed...')
         await wait(30000) // 30 seconds
 
         // Refresh balances to reflect new gas balance
         await refetchNativeBalance()
 
-        await queryClient.invalidateQueries({
-          queryKey: ['l1NativeBalance', l1Address],
-        })
+        // await queryClient.invalidateQueries({
+        //   queryKey: ['l1NativeBalance', l1Address],
+        // })
 
         // Create an Aztecscan URL for the transaction
         const etherscanUrl = `https://sepolia.etherscan.io/tx/${gasResult.txHash}`
@@ -166,12 +175,12 @@ export function useL1Faucet() {
           onClick: () => {
             window.open(etherscanUrl, '_blank')
           },
-          autoClose: 50000,
+          autoClose: 10000, // 10 seconds
           closeOnClick: false,
           style: { cursor: 'pointer' },
         })
 
-        await wait(30000) // 30 seconds
+        // await wait(30000) // 30 seconds
       } catch (error) {
         console.log('Error requesting gas:', error)
         throw error
@@ -211,31 +220,24 @@ export function useL1Faucet() {
           result.tokensMinted = true
           result.tokenHash = mintResult.txHash
           console.log('Tokens minted successfully via API:', mintResult)
-          await wait(30000) // 30 seconds
+          // await wait(30000) // 30 seconds
 
           await refetchTokenBalance()
 
-          await queryClient.invalidateQueries({
-            queryKey: ['l1TokenBalance', l1Address],
-          })
+          // await queryClient.invalidateQueries({
+          //   queryKey: ['l1TokenBalance', l1Address],
+          // })
 
           // Wait for the query to complete
-          await wait(30000) // 30 seconds
+          // await wait(30000) // 30 seconds
         } catch (error) {
           console.error('Token minting via API failed:', error)
-          result.tokenError =
-            error instanceof Error ? error.message : 'Unknown error'
+          throw error
 
-          // If this is the only operation and it failed, rethrow
-          if (!result.gasProvided) {
-            throw error
-          }
         }
       } else {
         console.log('User still does not have enough gas for receiving tokens')
-        if (!result.gasProvided) {
-          throw new Error('Not enough ETH for gas to receive tokens')
-        }
+        throw new Error('Not enough ETH for gas to receive tokens')
       }
     }
 
@@ -678,13 +680,17 @@ export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
       const txHash = receipt.transactionHash.toString()
 
       const etherscanUrl = `https://sepolia.etherscan.io/tx/${txHash}`
-      notify('info', `SBT minted successfully on Ethereum! Click to view on Ethereum`, {
-        onClick: () => {
-          window.open(etherscanUrl, '_blank')
-        },
-        autoClose: 50000,
-        closeOnClick: false,
-      })
+      notify(
+        'info',
+        `SBT minted successfully on Ethereum! Click to view on Ethereum`,
+        {
+          onClick: () => {
+            window.open(etherscanUrl, '_blank')
+          },
+          autoClose: 50000,
+          closeOnClick: false,
+        }
+      )
 
       logger.info('SBT minted successfully on L1', { receipt })
       return receipt

@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
       console.log('Waiting for transaction to be mined...')
       const receipt = await publicClient.waitForTransactionReceipt({ 
         hash,
-        timeout: 120_000 // 2 minutes timeout
+        timeout: 300_000 // 5 minutes timeout
       })
       console.log('Transaction mined!')
       const txHash = receipt.transactionHash

@@ -13,7 +13,7 @@ const MINT_AMOUNT = BigInt(100000)
 
 // Get environment variables
 let privateKey = process.env.FAUCET_PRIVATE_KEY
-const rpcUrl = process.env.ETHEREUM_RPC_URL
+const rpcUrl = process.env.ETHEREUM_RPC_URL_2
 
 if (!privateKey) {
   throw new Error('FAUCET_PRIVATE_KEY is not set')
@@ -129,9 +129,9 @@ export async function POST(request: NextRequest) {
         // Wait for the transaction to be mined
         const receipt = await publicClient.waitForTransactionReceipt({ 
           hash,
-          timeout: 120_000 // 2 minutes timeout
+        timeout: 300_000 // 5 minutes timeout
         })
-        console.log(`Token mint confirmed: ${hash}`, receipt)
+        console.log(`Token mint confirmed: ${hash}`)
 
         return NextResponse.json({
           success: true,

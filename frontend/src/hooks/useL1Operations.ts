@@ -406,7 +406,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       }
 
       if (!l2BridgeContract) {
-        throw new Error('L2 bridge contract not connected')
+        throw new Error('L2 bridge contract not initialized. Please wait for contract initialization to complete.')
       }
 
       if (!publicClient) {
@@ -417,6 +417,11 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         throw new Error('Wallet client not connected')
       }
 
+      // Check if contract store is properly initialized
+      if (!l1ContractAddresses?.outboxAddress) {
+        throw new Error('L1 contract addresses not initialized. Please wait for contract initialization to complete.')
+      }
+
       console.log('Initiating bridge tokens to L2...')
       const manager = getL1PortalManager()
       if (!manager) {
@@ -424,7 +429,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       }
 
       // First toast notification for initiating the bridge
-      // notify('info', 'Initiating bridge L1 transaction...')
+      notify('info', 'Initiating bridge L1 transaction...')
 
       const claim = await manager.bridgeTokensPublic(
         AztecAddress.fromString(aztecAddress as string),
@@ -483,7 +488,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         autoClose: false,
       })
 
-      notify('info', 'Claiming tokens on Aztec...')
+      // notify('info', 'Claiming tokens on Aztec...')
 
       // Type assertion to ensure l2BridgeContract is not null
       if (!l2BridgeContract) {

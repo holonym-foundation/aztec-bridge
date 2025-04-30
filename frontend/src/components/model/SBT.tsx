@@ -1,5 +1,5 @@
-import StyledImage from './StyledImage';
-import TextButton from './TextButton';
+import StyledImage from '../StyledImage';
+import TextButton from '../TextButton';
 import { Oval } from 'react-loader-spinner';
 
 const formatAddress = (address: string) => {

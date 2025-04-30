@@ -13,7 +13,7 @@ const MINT_AMOUNT = BigInt(1000000)
 
 // Get environment variables
 let privateKey = process.env.FAUCET_PRIVATE_KEY
-const rpcUrl = process.env.ETHEREUM_RPC_URL_2
+const rpcUrl = process.env.ETHEREUM_RPC_URL
 
 if (!privateKey) {
   throw new Error('FAUCET_PRIVATE_KEY is not set')

@@ -40,6 +40,7 @@ import BridgeHeader from '@/components/BridgeHeader'
 import { motion, AnimatePresence } from 'framer-motion'
 import BridgeActionButton from '@/components/BridgeActionButton'
 import { L1_NETWORKS, L2_NETWORKS, L1_TOKENS, L2_TOKENS } from '@/config'
+import MetaMaskPrompt from '@/components/model/MetaMaskPrompt'
 
  const DEFAULT_BRIDGE_STATE: BridgeState = {
   from: { network: L1_NETWORKS[0], token: L1_TOKENS[0] },
@@ -226,6 +227,17 @@ export default function Home() {
     }
   }
 
+  // Check for MetaMask on component mount
+  const [showMetaMaskPrompt, setShowMetaMaskPrompt] = useState(false)
+  useEffect(() => {
+    const checkMetaMask = async () => {
+      if (typeof window !== 'undefined' && !window.ethereum) {
+        setShowMetaMaskPrompt(true)
+      }
+    }
+    checkMetaMask()
+  }, [])
+
   // Component mount and client-side hydration
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
@@ -236,6 +248,9 @@ export default function Home() {
   return (
     <>
       <RootStyle>
+        {showMetaMaskPrompt && (
+          <MetaMaskPrompt onClose={() => setShowMetaMaskPrompt(false)} />
+        )}
         {selectNetwork && (
           <NetworkModal
             setNetworkData={handleSelectNetwork}

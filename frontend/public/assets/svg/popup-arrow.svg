@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150">
+  <!-- Arrow stem -->
+  <path d="M100 10 L100 130" stroke="#FF0033" stroke-width="6" />
+  <!-- Arrow head -->
+  <path d="M70 40 L100 10 L130 40" stroke="#FF0033" stroke-width="6" fill="none" />
+</svg> 

@@ -25,9 +25,9 @@ export default function SBT({
   isPending?: boolean
 }) {
   return (
-    <div className='absolute inset-0 bg-latest-grey-1000 z-20'>
+    <div className='absolute inset-0 bg-latest-grey-1000 z-20 rounded-lg'>
       <div className='absolute bottom-0 right-0 left-0'>
-        <div className='px-2.5 py-3 bg-white rounded-t-lg'>
+        <div className='px-2.5 py-3 bg-white rounded-lg'>
           <div className='flex justify-between items-center mx-2.5 py-1'>
             <p className='text-latest-black-300 font-semibold text-16'>
               Clean Hands SBT

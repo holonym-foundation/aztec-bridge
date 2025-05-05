@@ -43,6 +43,22 @@ import { L1_NETWORKS, L2_NETWORKS, L1_TOKENS, L2_TOKENS } from '@/config'
 import MetaMaskPrompt from '@/components/model/MetaMaskPrompt'
 import BalanceCard from '@/components/BalanceCard'
 import { logInfo, logError } from '@/utils/datadog'
+import PopupBlockedAlert from '@/components/model/PopupBlockedAlert'
+
+// Function to check if popups are blocked
+const isPopupBlocked = (): Promise<boolean> => {
+  return new Promise(resolve => {
+    const popup = window.open('about:blank', '_blank', 'width=1,height=1');
+    setTimeout(() => {
+      if (!popup || popup.closed || popup.closed === undefined) {
+        resolve(true); // Popups are blocked
+      } else {
+        popup.close();
+        resolve(false); // Popups are allowed
+      }
+    }, 50);
+  });
+};
 
 const DEFAULT_BRIDGE_STATE: BridgeState = {
   from: { network: L1_NETWORKS[0], token: L1_TOKENS[0] },
@@ -75,6 +91,8 @@ export default function Home() {
     'Ethereum'
   )
   const [bridgeCompleted, setBridgeCompleted] = useState(false)
+  const [arePopupsBlocked, setArePopupsBlocked] = useState<boolean | null>(null)
+  const [showPopupBlockedAlert, setShowPopupBlockedAlert] = useState(false)
 
   // Notification system
   const notify = useToast()
@@ -256,6 +274,24 @@ export default function Home() {
     checkMetaMask()
   }, [])
   
+  // Check if popups are blocked immediately after page load
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Immediately check if popups are blocked
+      isPopupBlocked().then(blocked => {
+        setArePopupsBlocked(blocked);
+        if (blocked) {
+          console.log('Popups are blocked for this site');
+          logInfo('Popups are blocked', { blocked });
+          setShowPopupBlockedAlert(true);
+        } else {
+          console.log('Popups are allowed for this site');
+          logInfo('Popups are allowed', { blocked });
+        }
+      });
+    }
+  }, [])
+  
   if (!mounted) return null
 
   return (
@@ -263,6 +299,9 @@ export default function Home() {
       <RootStyle>
         {showMetaMaskPrompt && (
           <MetaMaskPrompt onClose={() => setShowMetaMaskPrompt(false)} />
+        )}
+        {showPopupBlockedAlert && (
+          <PopupBlockedAlert onClose={() => setShowPopupBlockedAlert(false)} />
         )}
         {selectNetwork && (
           <NetworkModal

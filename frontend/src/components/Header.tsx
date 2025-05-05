@@ -103,10 +103,13 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
       </div>
 
       {showDropdown && (
-        <div className='absolute right-0 mt-2 shadow-lg z-10 min-w-[180px] py-2  rounded-[12px] border border-[#D4D4D4] bg-white'>
+        <div className='absolute right-0 mt-2 shadow-lg z-10 min-w-[180px] py-2  rounded-[12px] border border-[#D4D4D4] bg-white '>
           <div
-            className='flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer relative transition-colors duration-150'
+            className='flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer relative transition-colors duration-150 hover:bg-latest-grey-300'
             onClick={handleCopyAddress}>
+              <div>
+                
+              </div>
             <svg
               width='16'
               height='16'
@@ -144,7 +147,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
             <span>{copied ? 'Copied!' : 'Copy Address'}</span>
           </div>
           <div
-            className='flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer text-red-500 transition-colors duration-150'
+            className='flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer text-red-500 transition-colors duration-150 hover:bg-latest-grey-300'
             onClick={handleDisconnect}>
             <svg
               width='16'

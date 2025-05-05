@@ -289,7 +289,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
   }
 
   return (
-    <header className='w-full px-4 py-3 flex justify-between items-center relative'>
+    <header className='w-full px-4 pt-3 flex justify-between items-center relative'>
       <div className='flex-shrink-0'>
         <Link href='/' className="hover:opacity-80 transition-opacity duration-200">
           <Image

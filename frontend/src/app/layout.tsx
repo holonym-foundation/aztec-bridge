@@ -34,9 +34,10 @@ export default function RootLayout({
               // privatePayments="Private Payments"
             />
             <div className="flex-grow">
+            {/* <div className="py-2"> */}
               {children}
             </div>
-            <Footer className="py-6" />
+            <Footer className="" />
           </main>
         </Providers>
       </body>

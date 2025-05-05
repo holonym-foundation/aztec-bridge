@@ -11,7 +11,7 @@ const Footer: React.FC<FooterProps> = ({ className }) => {
   return (
     <footer className={`relative w-full text-xs ${className || ''}`}>
       {/* Desktop Footer */}
-      <div className='hidden md:flex justify-between items-center w-full px-10 py-4 relative'>
+      <div className='hidden md:flex justify-between items-center w-full px-10 relative'>
         {/* Left Side Links */}
         <div className='flex gap-x-4 gap-y-2 flex-wrap'>
           <Link

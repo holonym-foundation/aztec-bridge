@@ -97,7 +97,7 @@ export default function SBT({
                 />
                 <p className='text-12 font-medium text-latest-grey-600'>
                   {' '}
-                  secured by human.tech
+                  Secured by human.tech
                 </p>
               </div>
             </div>

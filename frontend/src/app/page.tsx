@@ -42,11 +42,11 @@ import BridgeActionButton from '@/components/BridgeActionButton'
 import { L1_NETWORKS, L2_NETWORKS, L1_TOKENS, L2_TOKENS } from '@/config'
 import MetaMaskPrompt from '@/components/model/MetaMaskPrompt'
 
- const DEFAULT_BRIDGE_STATE: BridgeState = {
+const DEFAULT_BRIDGE_STATE: BridgeState = {
   from: { network: L1_NETWORKS[0], token: L1_TOKENS[0] },
   to: { network: L2_NETWORKS[0], token: L2_TOKENS[0] },
   direction: BridgeDirection.L1_TO_L2,
-}; 
+}
 
 const variants = {
   hidden: { opacity: 0, y: 100 },
@@ -56,7 +56,8 @@ const variants = {
 
 export default function Home() {
   // UI state
-  const [bridgeConfig, setBridgeConfig] = useState<BridgeState>(DEFAULT_BRIDGE_STATE)
+  const [bridgeConfig, setBridgeConfig] =
+    useState<BridgeState>(DEFAULT_BRIDGE_STATE)
   const [inputAmount, setInputAmount] = useState<string>('')
   const [usdValue, setUsdValue] = useState<string>('$0.00')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -284,7 +285,7 @@ export default function Home() {
           />
         )}
 
-        <div className='grid grid-rows-[max-content_1fr_min-content] h-full'>
+        <div className='grid grid-rows-[max-content_1fr_max-content] h-full'>
           <div className='mt-4'>
             <BridgeHeader
               onClick={() => {

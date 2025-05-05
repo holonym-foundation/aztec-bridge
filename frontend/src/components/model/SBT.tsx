@@ -1,27 +1,27 @@
-import StyledImage from '../StyledImage';
-import TextButton from '../TextButton';
-import { Oval } from 'react-loader-spinner';
+import StyledImage from '../StyledImage'
+import TextButton from '../TextButton'
+import { Oval } from 'react-loader-spinner'
 
 const formatAddress = (address: string) => {
-  if (!address) return '';
-  const start = address.slice(0, 6);
-  const end = address.slice(-4);
-  return `${start}...${end}`;
-};
+  if (!address) return ''
+  const start = address.slice(0, 6)
+  const end = address.slice(-4)
+  return `${start}...${end}`
+}
 
-export default function SBT({ 
-  address, 
-  buttonText, 
-  chain, 
-  onMint, 
+export default function SBT({
+  address,
+  buttonText,
+  chain,
+  onMint,
   onClose,
-  isPending = false 
-}: { 
-  address: string, 
-  buttonText: string, 
-  chain: string, 
-  onMint: () => void, 
-  onClose: () => void,
+  isPending = false,
+}: {
+  address: string
+  buttonText: string
+  chain: string
+  onMint: () => void
+  onClose: () => void
   isPending?: boolean
 }) {
   return (
@@ -29,15 +29,27 @@ export default function SBT({
       <div className='absolute bottom-0 right-0 left-0'>
         <div className='px-2.5 py-3 bg-white rounded-t-lg'>
           <div className='flex justify-between items-center mx-2.5 py-1'>
-            <p className='text-latest-black-300 font-semibold text-16'>Clean Hands SBT</p>
+            <p className='text-latest-black-300 font-semibold text-16'>
+              Clean Hands SBT
+            </p>
             <button onClick={onClose} disabled={isPending}>
-              <StyledImage src='/assets/svg/cross.svg' alt='' className='h-[14px] w-[14px] m-[2px]' />
+              <StyledImage
+                src='/assets/svg/cross.svg'
+                alt=''
+                className='h-[14px] w-[14px] m-[2px]'
+              />
             </button>
           </div>
           <div className='mt-4 mx-2.5'>
-            <p className='pl-4 text-latest-black-300 text-14 font-medium'>{chain} address</p>
+            <p className='pl-4 text-latest-black-300 text-14 font-medium'>
+              {chain} address
+            </p>
             <div className='flex gap-2.5 bg-latest-grey-200 p-1 mt-1 rounded-[8px]'>
-              <StyledImage src='/assets/svg/network.svg' alt='' className='h-5 w-5 m-1.5' />
+              <StyledImage
+                src='/assets/svg/network.svg'
+                alt=''
+                className='h-5 w-5 m-1.5'
+              />
               <input
                 type='numbers'
                 defaultValue={address}
@@ -78,13 +90,20 @@ export default function SBT({
                 Proceed with caution. You can only do this once.
               </p>
               <div className='flex justify-center gap-2 mt-4'>
-                <StyledImage src='/assets/svg/silk0.4.svg' alt='' className='h-4 w-[14px]' />
-                <p className='text-12 font-medium text-latest-grey-600'>Secured by Human Wallet</p>
+                <StyledImage
+                  src='/assets/svg/silk0.4.svg'
+                  alt=''
+                  className='h-4 w-[14px]'
+                />
+                <p className='text-12 font-medium text-latest-grey-600'>
+                  {' '}
+                  secured by human.tech
+                </p>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  );
+  )
 }

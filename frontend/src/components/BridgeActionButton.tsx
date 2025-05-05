@@ -298,7 +298,7 @@ function BridgeActionButton({
 
     // Priority 3: Faucet (gas and tokens)
     if (needsGas || needsTokensOnly)
-      return needsTokensOnly ? 'Get Tokens' : 'Get Faucet'
+      return needsTokensOnly ? 'Get Tokens' : 'Get Testnet ETH for Demo'
 
     // Priority 4: SBT requirements
     const requiredChain = getSBTChainForDirection(direction)
@@ -340,7 +340,7 @@ function BridgeActionButton({
   // Get the loading text for the spinner
   const getLoadingText = () => {
     if (isConnecting) return 'Connecting...'
-    if (requestFaucetPending) return 'Getting Tokens & ETH...'
+    if (requestFaucetPending) return 'Getting Eth & Testnet USDC...'
     if (withdrawTokensToL1Pending) return 'Withdrawing Tokens...'
     if (bridgeTokensToL2Pending) return 'Bridging Tokens...'
     return 'Loading...'

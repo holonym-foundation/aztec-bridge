@@ -1,5 +1,5 @@
-import React from 'react';
-import StyledImage from './StyledImage';
+import React from 'react'
+import StyledImage from './StyledImage'
 
 const BridgeFooter: React.FC = () => (
   <div className='flex justify-center gap-2 pb-3'>
@@ -8,8 +8,11 @@ const BridgeFooter: React.FC = () => (
       alt=''
       className='h-4 w-[14px]'
     />
-    <p className='text-12 font-medium text-latest-grey-600'>Secured by Human Wallet</p>
+    <p className='text-12 font-medium text-latest-grey-600'>
+      {' '}
+      secured by human.tech
+    </p>
   </div>
-);
+)
 
-export default BridgeFooter; 
+export default BridgeFooter

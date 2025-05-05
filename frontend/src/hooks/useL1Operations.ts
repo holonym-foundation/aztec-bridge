@@ -644,12 +644,39 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         clearInterval(progressInterval)
       }
       
-      // Check specifically for the error signature 0xfb8f41b2
+      // Check for specific error signatures
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes('0xfb8f41b2')) {
+      
+      // Check for the functionSelector error (network congestion)
+      if (errorMessage.includes('"path":["revertReason","functionErrorStack",0,"functionSelector"]') || 
+          errorMessage.includes('invalid_type') && errorMessage.includes('functionSelector')) {
+        
+        // Show congestion error toast
+        notify('error', 'The Aztec Testnet is congested right now. Unfortunately your transaction was dropped.', {
+          autoClose: false,
+        });
+        
+        // Log bridge failure with network congestion data
+        logError('Bridge from L1 to L2 failed due to network congestion', {
+          direction: 'L1_TO_L2',
+          fromNetwork: 'Ethereum',
+          toNetwork: 'Aztec',
+          fromToken: 'USDC',
+          toToken: 'USDC',
+          amount: amount.toString(),
+          l1Address: l1Address,
+          l2Address: aztecAddress?.toString(),
+          error: 'Network congestion caused transaction to be dropped',
+          errorType: 'congestion'
+        });
+        
+        throw new Error('The Aztec Testnet is congested right now. Unfortunately your transaction was dropped.');
+      }
+      // Check for the 0xfb8f41b2 error signature
+      else if (errorMessage.includes('0xfb8f41b2')) {
         
         // Show a specific error toast for this case
-        notify('error', 'Bridge transaction failed. Please reload the page and try again with a smaller amount.', {
+        notify('error', 'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page and try with a 25% smaller amount.', {
           autoClose: false,
         });
         
@@ -667,7 +694,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           errorSignature: '0xfb8f41b2'
         });
         
-        throw new Error('Bridge transaction failed. Please reload the page and try again with a smaller amount.');
+        throw new Error('Bridge transaction failed (error: 0xfb8f41b2). Please reload the page and try with a 25% smaller amount.');
       }
       
       // Regular error logging for other errors

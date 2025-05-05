@@ -445,7 +445,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicClient, walletClient, l1ContractAddresses, isMetaMaskConnected])
 
-  const mutationFn = async (amount: bigint) => {
+  const mutationFn = async (amount: bigint): Promise<string> => {
     // For tracking toast progress
     let progressInterval: NodeJS.Timeout | null = null
 
@@ -644,7 +644,33 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         clearInterval(progressInterval)
       }
       
-      // Log bridge failure with enhanced data
+      // Check specifically for the error signature 0xfb8f41b2
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('0xfb8f41b2')) {
+        
+        // Show a specific error toast for this case
+        notify('error', 'Bridge transaction failed. Please reload the page and try again with a smaller amount.', {
+          autoClose: false,
+        });
+        
+        // Log bridge failure with specialized error data
+        logError('Bridge from L1 to L2 failed with contract error', {
+          direction: 'L1_TO_L2',
+          fromNetwork: 'Ethereum',
+          toNetwork: 'Aztec',
+          fromToken: 'USDC',
+          toToken: 'USDC',
+          amount: amount.toString(),
+          l1Address: l1Address,
+          l2Address: aztecAddress?.toString(),
+          error: 'Contract reverted with signature 0xfb8f41b2. Recommend reload and smaller amount.',
+          errorSignature: '0xfb8f41b2'
+        });
+        
+        throw new Error('Bridge transaction failed. Please reload the page and try again with a smaller amount.');
+      }
+      
+      // Regular error logging for other errors
       logError('Bridge from L1 to L2 failed', {
         direction: 'L1_TO_L2',
         fromNetwork: 'Ethereum',
@@ -655,9 +681,9 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         l1Address: l1Address,
         l2Address: aztecAddress?.toString(),
         error: error instanceof Error ? error.message : 'Unknown error'
-      })
+      });
       
-      throw error
+      throw error;
     }
   }
 

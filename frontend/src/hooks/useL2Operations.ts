@@ -24,8 +24,8 @@ import { logInfo, logError } from '@/utils/datadog'
 
 // Define types for balance queries
 export interface L2TokenBalanceData {
-  publicBalance: string;
-  privateBalance: string;
+  publicBalance: string
+  privateBalance: string
 }
 
 export const useL2NativeBalance = () => {
@@ -58,36 +58,50 @@ export const useL2TokenBalance = () => {
 
   // Query function without tracking state
   const queryFn = async (): Promise<L2TokenBalanceData> => {
-    if (!l2TokenContract) {
-      throw new Error('L2 token contract not found')
-    }
-    if (!aztecAddress) {
-      throw new Error('Aztec address not found')
-    }
-    if (!l2TokenMetadata) {
-      throw new Error('L2 token metadata not found')
-    }
+    try {
+      if (!l2TokenContract) {
+        throw new Error('L2 token contract not found')
+      }
+      if (!aztecAddress) {
+        throw new Error('Aztec address not found')
+      }
+      if (!l2TokenMetadata) {
+        throw new Error('L2 token metadata not found')
+      }
 
-    console.log('Fetching L2 balances...')
+      console.log('Fetching L2 balances...')
 
-    const [privateBalance, publicBalance] = await Promise.all([
-      l2TokenContract.methods
-        .balance_of_private(AztecAddress.fromString(aztecAddress))
-        .simulate(),
-      l2TokenContract.methods
-        .balance_of_public(AztecAddress.fromString(aztecAddress))
-        .simulate(),
-    ])
+      const [privateBalance, publicBalance] = await Promise.all([
+        l2TokenContract.methods
+          .balance_of_private(AztecAddress.fromString(aztecAddress))
+          .simulate(),
+        l2TokenContract.methods
+          .balance_of_public(AztecAddress.fromString(aztecAddress))
+          .simulate(),
+      ])
 
-    const publicBalanceFormat = formatUnits(publicBalance as bigint, l2TokenMetadata.decimals)
-    const privateBalanceFormat = formatUnits(privateBalance as bigint, l2TokenMetadata.decimals)
+      const publicBalanceFormat = formatUnits(
+        publicBalance as bigint,
+        l2TokenMetadata.decimals
+      )
+      const privateBalanceFormat = formatUnits(
+        privateBalance as bigint,
+        l2TokenMetadata.decimals
+      )
 
-    console.log('publicBalanceFormat: ', publicBalanceFormat)
-    console.log('privateBalanceFormat: ', privateBalanceFormat)
-    
-    return {
-      publicBalance: publicBalanceFormat,
-      privateBalance: privateBalanceFormat,
+      console.log('publicBalanceFormat: ', publicBalanceFormat)
+      console.log('privateBalanceFormat: ', privateBalanceFormat)
+
+      return {
+        publicBalance: publicBalanceFormat,
+        privateBalance: privateBalanceFormat,
+      }
+    } catch (error) {
+      console.log('Error fetching L2 token balance:', error)
+      return {
+        publicBalance: '0',
+        privateBalance: '0',
+      }
     }
   }
 
@@ -208,7 +222,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       if (!manager) {
         throw new Error('Failed to create L1 portal manager')
       }
-      
+
       console.log('Generating nonce for withdrawal...')
       const isPrivate = true
       const withAuthWitness = true
@@ -261,18 +275,17 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         // Increment progress smoothly from 25% to 90%
         if (simulatedProgressAuth < 0.9) {
           simulatedProgressAuth += 0.01
-      
-                if (toastIdRef.current !== null) {
-                  toast.update(toastIdRef.current, {
-                    progress: simulatedProgressAuth,
-                    render: `Setting up authorization for withdrawal... ${Math.round(
-                      simulatedProgressAuth * 100
-                    )}%`,
-                  })
-                }
-              }
-            }, 2000) // Update every half second
 
+          if (toastIdRef.current !== null) {
+            toast.update(toastIdRef.current, {
+              progress: simulatedProgressAuth,
+              render: `Setting up authorization for withdrawal... ${Math.round(
+                simulatedProgressAuth * 100
+              )}%`,
+            })
+          }
+        }
+      }, 2000) // Update every half second
 
       await authwit.send().wait({ timeout: 120000 })
 
@@ -292,7 +305,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         EthAddress.ZERO
       )
       console.log('Retrieved L2 to L1 message: ', l2ToL1Message.toString())
-      
+
       // notify('info', `L2 to L1 message retrieved: ${l2ToL1Message.toString()}`)
 
       // Update toast progress
@@ -302,7 +315,6 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
           render: 'Initiating exit transaction on Aztec...',
         })
       }
-
 
       // Create a progress simulation for the transaction wait
       let simulatedProgress = 0.5
@@ -330,7 +342,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
           EthAddress.fromString(l1Address),
           amount,
           EthAddress.ZERO,
-          nonce,
+          nonce
           // { authWitnesses: authwitRequests }
         )
         .send()
@@ -400,14 +412,16 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       const waitTime = 40 * 60 * 1000 // 40 minutes in milliseconds
       const startTime = Date.now()
       const endTime = startTime + waitTime
-      
+
       // Update progress every 30 seconds
       progressInterval = setInterval(() => {
         const currentTime = Date.now()
         const elapsed = currentTime - startTime
         const progress = Math.min(elapsed / waitTime, 0.99) // Progress from 0% to 99%
-        
-        const minutesRemaining = Math.ceil((endTime - currentTime) / (60 * 1000))
+
+        const minutesRemaining = Math.ceil(
+          (endTime - currentTime) / (60 * 1000)
+        )
         toast.update(waitToastId, {
           progress,
           render: `Waiting for L1 confirmation (${minutesRemaining} minutes remaining)...`,
@@ -415,7 +429,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       }, 30000) // Update every 30 seconds
 
       // Wait for the full 40 minutes
-      await new Promise(resolve => setTimeout(resolve, waitTime))
+      await new Promise((resolve) => setTimeout(resolve, waitTime))
       if (progressInterval) {
         clearInterval(progressInterval)
         progressInterval = null
@@ -504,7 +518,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         aztecscanUrl,
       })
 
-      console.log('All done. Completing withdrawal with transaction hash:', txHash)
+      console.log(
+        'All done. Completing withdrawal with transaction hash:',
+        txHash
+      )
       // toast.dismiss(toastIdRef.current as string | number)
 
       return txHash
@@ -531,7 +548,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         amount: amount.toString(),
         l1Address: l1Address,
         l2Address: aztecAddress?.toString(),
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       })
 
       throw error
@@ -543,7 +560,9 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
     onSuccess: (txHash) => {
       // Refresh balances
       queryClient.invalidateQueries({ queryKey: ['l1TokenBalance', l1Address] })
-      queryClient.invalidateQueries({ queryKey: ['l2TokenBalance', aztecAddress] })
+      queryClient.invalidateQueries({
+        queryKey: ['l2TokenBalance', aztecAddress],
+      })
 
       // Log successful withdrawal completion with enhanced data
       logInfo('Withdrawal from L2 to L1 callback', {

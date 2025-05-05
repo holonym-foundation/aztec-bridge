@@ -330,7 +330,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
                 address={aztecAddress}
                 isConnected={isAztecConnected}
                 walletIcon='/assets/svg/aztec-wallet-logo.svg'
-                networkIcon='/assets/svg/network-logo.svg'
+                // networkIcon='/assets/svg/network-logo.svg'
                 onDisconnect={disconnectAztec}
                 walletType='aztec'
               />
@@ -394,6 +394,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
                   address={aztecAddress}
                   isConnected={isAztecConnected}
                   walletIcon='/assets/svg/aztec-wallet-logo.svg'
+                  // networkIcon='/assets/svg/network-logo.svg'
                   onDisconnect={disconnectAztec}
                   walletType='aztec'
                 />

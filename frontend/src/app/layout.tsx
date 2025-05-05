@@ -6,6 +6,9 @@ import './globals.css'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 
+import { init as initDatadog } from '@/utils/datadog'
+initDatadog()
+
 export const metadata: Metadata = {
   title: 'Human Bridge',
   description: 'Human Bridge',

@@ -23,6 +23,12 @@ importers:
       '@aztec/noir-contracts.js':
         specifier: 0.85.0-alpha-testnet.2
         version: 0.85.0-alpha-testnet.2(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.24.3)
+      '@datadog/browser-logs':
+        specifier: ^4.45.0
+        version: 4.50.1(@datadog/browser-rum@4.50.1)
+      '@datadog/browser-rum':
+        specifier: ^4.45.0
+        version: 4.50.1(@datadog/browser-logs@4.50.1)
       '@nemi-fi/wallet-sdk':
         specifier: 0.85.0-next.5
         version: 0.85.0-next.5(@types/react@19.1.2)(bufferutil@4.0.9)(react@19.1.0)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.24.3)
@@ -225,6 +231,28 @@ packages:
 
   '@coinbase/wallet-sdk@4.3.0':
     resolution: {integrity: sha512-T3+SNmiCw4HzDm4we9wCHCxlP0pqCiwKe4sOwPH3YAK2KSKjxPRydKu6UQJrdONFVLG7ujXvbd/6ZqmvJb8rkw==}
+
+  '@datadog/browser-core@4.50.1':
+    resolution: {integrity: sha512-2ypS19XngsMu6W4qUBtDwvImFz886Im+PziOnEycO1w41TVS5LH8/vWBMvjSf8Suer+CeRjRN9IOu0ocRx9BVw==}
+
+  '@datadog/browser-logs@4.50.1':
+    resolution: {integrity: sha512-uSM+T+hAQDH4lUjWNNyj8MfhQKp+sFo88UBaHUzpg0Kio/gZ+tIL7/HmTLCN5eLDWNJfH8eJuCb5Gtcvo14Pkg==}
+    peerDependencies:
+      '@datadog/browser-rum': 4.50.1
+    peerDependenciesMeta:
+      '@datadog/browser-rum':
+        optional: true
+
+  '@datadog/browser-rum-core@4.50.1':
+    resolution: {integrity: sha512-ABCzEjNiBq3izapvSq6uujdx9h7L4RM44n22qDhwSIBlQY6Psf9VlzlQ5fueCALoj2LgVy4rYDj5RHfGaF/lAQ==}
+
+  '@datadog/browser-rum@4.50.1':
+    resolution: {integrity: sha512-Gcs8fMoufOr4Xlhwx0g6CHvgcXVNeCM+IyAtRAwoCBeezRhL18Jo1LALE+nsLegNKgNLO1f4vjm5TBx1WsnXWQ==}
+    peerDependencies:
+      '@datadog/browser-logs': 4.50.1
+    peerDependenciesMeta:
+      '@datadog/browser-logs':
+        optional: true
 
   '@ecies/ciphers@0.2.3':
     resolution: {integrity: sha512-tapn6XhOueMwht3E2UzY0ZZjYokdaw9XtL9kEyjhQ/Fb9vL9xTFbOaI+fV0AWvTpYu4BNloC6getKW6NtSg4mA==}
@@ -4375,6 +4403,25 @@ snapshots:
       clsx: 1.2.1
       eventemitter3: 5.0.1
       preact: 10.26.5
+
+  '@datadog/browser-core@4.50.1': {}
+
+  '@datadog/browser-logs@4.50.1(@datadog/browser-rum@4.50.1)':
+    dependencies:
+      '@datadog/browser-core': 4.50.1
+    optionalDependencies:
+      '@datadog/browser-rum': 4.50.1(@datadog/browser-logs@4.50.1)
+
+  '@datadog/browser-rum-core@4.50.1':
+    dependencies:
+      '@datadog/browser-core': 4.50.1
+
+  '@datadog/browser-rum@4.50.1(@datadog/browser-logs@4.50.1)':
+    dependencies:
+      '@datadog/browser-core': 4.50.1
+      '@datadog/browser-rum-core': 4.50.1
+    optionalDependencies:
+      '@datadog/browser-logs': 4.50.1(@datadog/browser-rum@4.50.1)
 
   '@ecies/ciphers@0.2.3(@noble/ciphers@1.3.0)':
     dependencies:

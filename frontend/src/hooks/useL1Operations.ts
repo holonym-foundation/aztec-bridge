@@ -13,6 +13,8 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { toast } from 'react-toastify'
 import { formatEther, formatUnits } from 'viem'
+import { datadogLogs } from '@datadog/browser-logs'
+import { logInfo, logError } from '@/utils/datadog'
 
 // Fix the bytecode format
 const PortalSBTAbi = PortalSBTJson.abi
@@ -120,97 +122,39 @@ export function useL1Faucet() {
 
   // Main faucet function - handles both gas and tokens
   const requestFaucet = async () => {
-    if (!l1Address) throw new Error('Wallet not connected')
+    try {
+      console.log('Requesting faucet funds...')
+      
+      // Log faucet request with enhanced data
+      logInfo('Faucet request initiated', {
+        l1Address: l1Address,
+        address: l1Address, // keep original property
+        needsGas,
+        needsTokens,
+        network: 'Ethereum',
+        token: 'USDC'
+      })
 
-    console.log('Starting faucet request with state:', {
-      nativeBalance,
-      tokenBalance,
-      hasGas,
-      needsGas,
-      needsTokens,
-      isEligibleForFaucet,
-      needsTokensOnly,
-    })
+      if (!l1Address) throw new Error('Wallet not connected')
 
-    let result: any = { gasProvided: false, tokensMinted: false }
+      console.log('Starting faucet request with state:', {
+        nativeBalance,
+        tokenBalance,
+        hasGas,
+        needsGas,
+        needsTokens,
+        isEligibleForFaucet,
+        needsTokensOnly,
+      })
 
-    // Step 1: If needed, get ETH for gas
-    if (needsGas) {
-      try {
-        notify('info', 'Getting ETH...')
-        // Request gas from faucet
-        const response = await fetch('/api/faucet', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ address: l1Address }),
-        })
+      let result: any = { gasProvided: false, tokensMinted: false }
 
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(
-            errorData.error || 'Failed to request ETH from faucet'
-          )
-        }
-
-        const gasResult = await response.json()
-        result.gasProvided = true
-        result.gasHash = gasResult.txHash
-        console.log('Gas provided successfully:', gasResult)
-        result = { ...result, ...gasResult }
-
-        // Wait for the gas transaction to be processed
-        // console.log('Waiting for gas transaction to be confirmed...')
-        await wait(30000) // 30 seconds
-
-        // Refresh balances to reflect new gas balance
-        await refetchNativeBalance()
-
-        // await queryClient.invalidateQueries({
-        //   queryKey: ['l1NativeBalance', l1Address],
-        // })
-
-        // Create an Aztecscan URL for the transaction
-        const etherscanUrl = `https://sepolia.etherscan.io/tx/${gasResult.txHash}`
-        console.log('View transaction on Ethereum:', etherscanUrl)
-
-        // Using the toast library directly for more control
-        notify('info', `ETH received! Click to view on Ethereum`, {
-          onClick: () => {
-            window.open(etherscanUrl, '_blank')
-          },
-          autoClose: 10000, // 10 seconds
-          closeOnClick: false,
-          style: { cursor: 'pointer' },
-        })
-
-        // await wait(30000) // 30 seconds
-      } catch (error) {
-        console.log('Error requesting gas:', error)
-        throw error
-      }
-    }
-
-    // Step 2: If needed, mint tokens
-    if (needsTokens || (needsGas && result.gasProvided)) {
-      // Even if user didn't need tokens initially, if we provided gas, check if they need tokens now
-      console.log('Checking if tokens need to be minted...')
-
-      const currentNativeBalance =
-        result?.balances?.recipient?.after || nativeBalance
-
-      // const hasEnoughGas = Number(currentNativeBalance) >= mintNativeAmount
-      const hasEnoughGas = true
-
-      if (hasEnoughGas) {
-        console.log('User has gas. Requesting tokens from API...')
+      // Step 1: If needed, get ETH for gas
+      if (needsGas) {
         try {
-          notify('info', 'Getting tokens...')
-          await wait(30000) // 30 seconds
-
-          // Call our mint-tokens API endpoint
-          const response = await fetch('/api/mint-tokens', {
+          notify('info', 'Getting ETH...')
+          // Request gas from faucet
+          const response = await fetch('/api/faucet', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -220,34 +164,121 @@ export function useL1Faucet() {
 
           if (!response.ok) {
             const errorData = await response.json()
-            throw new Error(errorData.error || 'Failed to mint tokens via API')
+            throw new Error(
+              errorData.error || 'Failed to request ETH from faucet'
+            )
           }
 
-          const mintResult = await response.json()
-          result.tokensMinted = true
-          result.tokenHash = mintResult.txHash
-          console.log('Tokens minted successfully via API:', mintResult)
-          // await wait(30000) // 30 seconds
+          const gasResult = await response.json()
+          result.gasProvided = true
+          result.gasHash = gasResult.txHash
+          console.log('Gas provided successfully:', gasResult)
+          result = { ...result, ...gasResult }
 
-          await refetchTokenBalance()
+          // Wait for the gas transaction to be processed
+          // console.log('Waiting for gas transaction to be confirmed...')
+          await wait(30000) // 30 seconds
+
+          // Refresh balances to reflect new gas balance
+          await refetchNativeBalance()
 
           // await queryClient.invalidateQueries({
-          //   queryKey: ['l1TokenBalance', l1Address],
+          //   queryKey: ['l1NativeBalance', l1Address],
           // })
 
-          // Wait for the query to complete
+          // Create an Etherscan URL for the transaction
+          const etherscanUrl = `https://sepolia.etherscan.io/tx/${gasResult.txHash}`
+          console.log('View transaction on Ethereum:', etherscanUrl)
+
+          // Using the toast library directly for more control
+          notify('info', `ETH received! Click to view on Ethereum`, {
+            onClick: () => {
+              window.open(etherscanUrl, '_blank')
+            },
+            autoClose: 10000, // 10 seconds
+            closeOnClick: false,
+            style: { cursor: 'pointer' },
+          })
+
           // await wait(30000) // 30 seconds
         } catch (error) {
-          console.error('Token minting via API failed:', error)
+          console.log('Error requesting gas:', error)
           throw error
         }
-      } else {
-        console.log('User still does not have enough gas for receiving tokens')
-        throw new Error('Not enough ETH for gas to receive tokens')
       }
-    }
 
-    return result
+      // Step 2: If needed, mint tokens
+      if (needsTokens || (needsGas && result.gasProvided)) {
+        // Even if user didn't need tokens initially, if we provided gas, check if they need tokens now
+        console.log('Checking if tokens need to be minted...')
+
+        const currentNativeBalance =
+          result?.balances?.recipient?.after || nativeBalance
+
+        // const hasEnoughGas = Number(currentNativeBalance) >= mintNativeAmount
+        const hasEnoughGas = true
+
+        if (hasEnoughGas) {
+          console.log('User has gas. Requesting tokens from API...')
+          try {
+            notify('info', 'Getting tokens...')
+            await wait(30000) // 30 seconds
+
+            // Call our mint-tokens API endpoint
+            const response = await fetch('/api/mint-tokens', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ address: l1Address }),
+            })
+
+            if (!response.ok) {
+              const errorData = await response.json()
+              throw new Error(errorData.error || 'Failed to mint tokens via API')
+            }
+
+            const mintResult = await response.json()
+            result.tokensMinted = true
+            result.tokenHash = mintResult.txHash
+            console.log('Tokens minted successfully via API:', mintResult)
+            // await wait(30000) // 30 seconds
+
+            await refetchTokenBalance()
+
+            // await queryClient.invalidateQueries({
+            //   queryKey: ['l1TokenBalance', l1Address],
+            // })
+
+            // Wait for the query to complete
+            // await wait(30000) // 30 seconds
+          } catch (error) {
+            console.error('Token minting via API failed:', error)
+            throw error
+          }
+        } else {
+          console.log('User still does not have enough gas for receiving tokens')
+          throw new Error('Not enough ETH for gas to receive tokens')
+        }
+      }
+
+      return { success: true }
+    } catch (error) {
+      console.error('Faucet request failed:', error)
+      
+      // Log faucet failure with enhanced data
+      logError('Faucet request failed', {
+        l1Address: l1Address,
+        address: l1Address, // keep original property
+        needsGas,
+        needsTokens,
+        network: 'Ethereum',
+        token: 'USDC',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+      
+      throw error
+    }
   }
 
   return {
@@ -255,6 +286,17 @@ export function useL1Faucet() {
       mutationFn: requestFaucet,
       onSuccess: (data) => {
         console.log('Faucet operations completed:', data)
+        
+        // Log faucet success with enhanced data
+        logInfo('Faucet request successful', {
+          l1Address: l1Address,
+          address: l1Address, // keep original property
+          needsGas,
+          needsTokens,
+          network: 'Ethereum',
+          token: 'USDC',
+          success: data?.success
+        })
 
         // Wait a short delay to allow the transaction to be processed
         setTimeout(() => {
@@ -434,6 +476,18 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       }
 
       console.log('Initiating bridge tokens to L2...')
+      // Log bridge initiation with enhanced data
+      logInfo('Bridge from L1 to L2 initiated', {
+        direction: 'L1_TO_L2',
+        fromNetwork: 'Ethereum',
+        toNetwork: 'Aztec',
+        fromToken: 'USDC',
+        toToken: 'USDC',
+        amount: amount.toString(),
+        l1Address: l1Address,
+        l2Address: aztecAddress,
+      })
+      
       const manager = getL1PortalManager()
       if (!manager) {
         throw new Error('Failed to create L1 portal manager')
@@ -565,29 +619,45 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       const txHash = claimReceipt.txHash.toString()
       console.log('txHash ', txHash)
 
+      // Create an Aztecscan URL for the transaction
+      const aztecscanUrl = `https://aztecscan.xyz/tx-effects/${txHash}`
+      console.log('View transaction on Aztecscan:', aztecscanUrl)
+
+      // Log successful bridge with enhanced data
+      logInfo('Bridge from L1 to L2 completed', {
+        direction: 'L1_TO_L2',
+        fromNetwork: 'Ethereum',
+        toNetwork: 'Aztec',
+        fromToken: 'USDC',
+        toToken: 'USDC',
+        amount: amount?.toString(),
+        l1Address: l1Address,
+        l2Address: aztecAddress?.toString(),
+        txHash: txHash,
+        aztecscanUrl,
+      })
+
       return txHash
     } catch (error) {
-      console.error('Bridge operation failed:', error)
-
-      // Clean up any pending toast on error
-      if (toastIdRef.current !== null) {
-        toast.dismiss(toastIdRef.current as number | string)
-        toastIdRef.current = null
-      }
-
-      // Handle specific bridge errors
-      if (error instanceof Error && error.message.includes('0xe450d38c')) {
-        throw new Error(
-          'Bridge deposit failed. Please wait for previous transactions to complete and try again.'
-        )
-      }
-
-      throw error
-    } finally {
-      // Always clear the interval if it exists
+      // Clean up any active intervals
       if (progressInterval) {
         clearInterval(progressInterval)
       }
+      
+      // Log bridge failure with enhanced data
+      logError('Bridge from L1 to L2 failed', {
+        direction: 'L1_TO_L2',
+        fromNetwork: 'Ethereum',
+        toNetwork: 'Aztec',
+        fromToken: 'USDC',
+        toToken: 'USDC',
+        amount: amount.toString(),
+        l1Address: l1Address,
+        l2Address: aztecAddress?.toString(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+      
+      throw error
     }
   }
 
@@ -598,15 +668,11 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       queryClient.invalidateQueries({ queryKey: [l1Address] })
       queryClient.invalidateQueries({ queryKey: [aztecAddress] })
 
-      // Create an Aztecscan URL for the transaction
-      const aztecscanUrl = `https://aztecscan.xyz/tx-effects/${txHash}`
-      console.log('View transaction on Aztecscan:', aztecscanUrl)
-
       // Show a notification with the transaction link info
       // Using the toast library directly for more control
       toast.info(`Bridge complete! Click to view on Aztecscan`, {
         onClick: () => {
-          window.open(aztecscanUrl, '_blank')
+          window.open(`https://aztecscan.xyz/tx-effects/${txHash}`, '_blank')
         },
         autoClose: 10000, // 10 seconds
         closeOnClick: false,

@@ -19,6 +19,8 @@ import { IntentAction } from '@nemi-fi/wallet-sdk'
 import { logger } from '@/utils/logger'
 import { wait } from '@/utils'
 import { toast } from 'react-toastify'
+import { datadogLogs } from '@datadog/browser-logs'
+import { logInfo, logError } from '@/utils/datadog'
 
 // Define types for balance queries
 export interface L2TokenBalanceData {
@@ -182,6 +184,18 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       if (!l2TokenContract) {
         throw new Error('L2 token contract not connected')
       }
+
+      // Log withdrawal initiation with enhanced data
+      logInfo('Withdrawal from L2 to L1 initiated', {
+        direction: 'L2_TO_L1',
+        fromNetwork: 'Aztec',
+        toNetwork: 'Ethereum',
+        fromToken: 'USDC',
+        toToken: 'USDC',
+        amount: amount.toString(),
+        l1Address: l1Address,
+        l2Address: aztecAddress,
+      })
 
       // Create initial toast notification
       toastIdRef.current = toast('Preparing withdrawal process...', {
@@ -476,9 +490,30 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         })
       }, 1000)
 
-      // return txHash
+      // Log successful withdrawal with enhanced data
+      logInfo('Withdrawal from L2 to L1 completed', {
+        direction: 'L2_TO_L1',
+        fromNetwork: 'Aztec',
+        toNetwork: 'Ethereum',
+        fromToken: 'USDC',
+        toToken: 'USDC',
+        amount: amount.toString(),
+        l1Address: l1Address,
+        l2Address: aztecAddress?.toString(),
+        txHash: txHash,
+        aztecscanUrl,
+      })
+
+      console.log('All done. Completing withdrawal with transaction hash:', txHash)
+      // toast.dismiss(toastIdRef.current as string | number)
+
+      return txHash
     } catch (error) {
-      console.error('Withdrawal operation failed:', error)
+      // Clean up any intervals
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
 
       // Clean up any pending toast on error
       if (toastIdRef.current !== null) {
@@ -486,29 +521,49 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         toastIdRef.current = null
       }
 
+      // Log withdrawal failure with enhanced data
+      logError('Withdrawal from L2 to L1 failed', {
+        direction: 'L2_TO_L1',
+        fromNetwork: 'Aztec',
+        toNetwork: 'Ethereum',
+        fromToken: 'USDC',
+        toToken: 'USDC',
+        amount: amount.toString(),
+        l1Address: l1Address,
+        l2Address: aztecAddress?.toString(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+
       throw error
-    } finally {
-      // Always clear the interval if it exists
-      if (progressInterval) {
-        clearInterval(progressInterval)
-      }
     }
   }
 
   return useToastMutation({
     mutationFn,
     onSuccess: (txHash) => {
-      console.log('Refetching balances after successful withdrawal')
-      queryClient.invalidateQueries({ queryKey: [l1Address] })
-      queryClient.invalidateQueries({ queryKey: [aztecAddress] })
+      // Refresh balances
+      queryClient.invalidateQueries({ queryKey: ['l1TokenBalance', l1Address] })
+      queryClient.invalidateQueries({ queryKey: ['l2TokenBalance', aztecAddress] })
+
+      // Log successful withdrawal completion with enhanced data
+      logInfo('Withdrawal from L2 to L1 callback', {
+        direction: 'L2_TO_L1',
+        fromNetwork: 'Aztec',
+        toNetwork: 'Ethereum',
+        fromToken: 'USDC',
+        toToken: 'USDC',
+        l1Address: l1Address,
+        l2Address: aztecAddress?.toString(),
+        txHash: typeof txHash === 'string' ? txHash : 'completed',
+      })
 
       if (onBridgeSuccess) {
         onBridgeSuccess(txHash)
       }
     },
     toastMessages: {
-      pending: 'Withdrawing tokens to Ethereum...',
-      success: 'Tokens successfully withdrawn to Ethereum!',
+      pending: 'Withdrawing tokens to L1...',
+      success: 'Tokens successfully withdrawn to L1!',
       error: 'Failed to withdraw tokens',
     },
   })

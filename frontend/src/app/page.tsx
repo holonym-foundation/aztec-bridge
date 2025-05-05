@@ -42,6 +42,7 @@ import BridgeActionButton from '@/components/BridgeActionButton'
 import { L1_NETWORKS, L2_NETWORKS, L1_TOKENS, L2_TOKENS } from '@/config'
 import MetaMaskPrompt from '@/components/model/MetaMaskPrompt'
 import BalanceCard from '@/components/BalanceCard'
+import { logInfo, logError } from '@/utils/datadog'
 
 const DEFAULT_BRIDGE_STATE: BridgeState = {
   from: { network: L1_NETWORKS[0], token: L1_TOKENS[0] },
@@ -66,6 +67,7 @@ export default function Home() {
   const [selectToken, setSelectToken] = useState<boolean>(false)
   const [isFromSection, setIsFromSection] = useState<boolean>(true)
   const [showBreakdown, setShowBreakdown] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   // Operational state
   const [showSBTModal, setShowSBTModal] = useState(false)
@@ -140,6 +142,7 @@ export default function Home() {
       refetchL2Balance()
       setInputAmount('')
       setBridgeCompleted(true)
+      
       setTimeout(() => {
         setBridgeCompleted(false)
       }, 3000)
@@ -231,7 +234,20 @@ export default function Home() {
 
   // Check for MetaMask on component mount
   const [showMetaMaskPrompt, setShowMetaMaskPrompt] = useState(false)
+  
+  // Page visit tracking and component mount effects
   useEffect(() => {
+    setMounted(true)
+    
+    // Log page visit when component mounts
+    if (typeof window !== 'undefined') {
+      logInfo('User visited bridge page', {
+        url: window.location.href,
+        referrer: document.referrer || 'direct'
+      })
+    }
+    
+    // Check for MetaMask
     const checkMetaMask = async () => {
       if (typeof window !== 'undefined' && !window.ethereum) {
         setShowMetaMaskPrompt(true)
@@ -239,15 +255,9 @@ export default function Home() {
     }
     checkMetaMask()
   }, [])
-
-  // Component mount and client-side hydration
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  
   if (!mounted) return null
 
-    // return <BalanceCard/>
   return (
     <>
       <RootStyle>

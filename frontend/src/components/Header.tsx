@@ -186,7 +186,7 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
 }) => {
   return (
     <button
-      className={`flex h-[44px] justify-center items-center gap-[8px] rounded-[8px] bg-latest-grey-300 hover:bg-latest-grey-400 text-sm font-medium transition-colors duration-200 ${
+      className={`flex h-[44px] justify-center items-center gap-[8px] rounded-[8px] bg-latest-grey-300 hover:bg-latest-grey-400 transition-colors duration-200 ${
         minimal ? 'p-2' : 'px-[20px] py-[10px]'
       }`}
       onClick={onClick}>

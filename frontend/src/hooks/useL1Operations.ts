@@ -17,13 +17,12 @@ import { formatEther, formatUnits } from 'viem'
 // Fix the bytecode format
 const PortalSBTAbi = PortalSBTJson.abi
 
-export const useL1NativeBalance = () => {
+export function useL1NativeBalance() {
   const { address: l1Address } = useAccount()
+  const publicClient = usePublicClient()
   // const { data: nativeBalance } = useBalance({
   //   address: l1Address,
   // })
-
-  const publicClient = usePublicClient()
 
   const queryKey = ['l1NativeBalance', l1Address]
   const queryFn = async () => {
@@ -33,8 +32,8 @@ export const useL1NativeBalance = () => {
       address: l1Address,
     })
 
-    const balanceFormetEther = formatEther(balance)
-    const formattedBalance = truncateDecimals(balanceFormetEther)
+    const balanceFormatEther = formatEther(balance)
+    const formattedBalance = truncateDecimals(balanceFormatEther)
     return formattedBalance
   }
 
@@ -42,8 +41,12 @@ export const useL1NativeBalance = () => {
     queryKey,
     queryFn,
     enabled: !!l1Address,
+    meta: {
+      persist: true, // Mark this query for persistence
+    },
   })
 }
+
 // -----------------------------------
 
 export function useL1TokenBalance() {
@@ -53,6 +56,7 @@ export function useL1TokenBalance() {
   const queryKey = ['l1TokenBalance', l1Address]
   const queryFn = async () => {
     if (!l1Address) return null
+
     const balance = await publicClient.readContract({
       address: ADDRESS[11155111].L1.TOKEN_CONTRACT as `0x${string}`,
       abi: TestERC20Abi,
@@ -65,15 +69,13 @@ export function useL1TokenBalance() {
     return balanceFormat
   }
 
-  return useToastQuery({
+  return useQuery({
     queryKey,
     queryFn,
     enabled: !!l1Address,
-    // toastMessages: {
-    //   pending: 'Fetching L1 token balance...',
-    //   success: 'L1 token balance loaded',
-    //   error: 'Failed to load L1 token balance'
-    // }
+    meta: {
+      persist: true, // Mark this query for persistence
+    },
   })
 }
 
@@ -238,7 +240,6 @@ export function useL1Faucet() {
         } catch (error) {
           console.error('Token minting via API failed:', error)
           throw error
-
         }
       } else {
         console.log('User still does not have enough gas for receiving tokens')
@@ -366,7 +367,7 @@ export function useL1MintTokens() {
 // -----------------------------------
 
 export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
-  const { address: l1Address , isConnected: isMetaMaskConnected} = useAccount()
+  const { address: l1Address, isConnected: isMetaMaskConnected } = useAccount()
   const { account: aztecAccount, address: aztecAddress } = useAztecWallet()
   const publicClient = usePublicClient()
   const { data: walletClient } = useWalletClient()
@@ -399,7 +400,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
     )
 
     return manager
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicClient, walletClient, l1ContractAddresses, isMetaMaskConnected])
 
   const mutationFn = async (amount: bigint) => {
@@ -412,7 +413,9 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       }
 
       if (!l2BridgeContract) {
-        throw new Error('L2 bridge contract not initialized. Please wait for contract initialization to complete.')
+        throw new Error(
+          'L2 bridge contract not initialized. Please wait for contract initialization to complete.'
+        )
       }
 
       if (!publicClient) {
@@ -425,7 +428,9 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
 
       // Check if contract store is properly initialized
       if (!l1ContractAddresses?.outboxAddress) {
-        throw new Error('L1 contract addresses not initialized. Please wait for contract initialization to complete.')
+        throw new Error(
+          'L1 contract addresses not initialized. Please wait for contract initialization to complete.'
+        )
       }
 
       console.log('Initiating bridge tokens to L2...')
@@ -653,6 +658,9 @@ export function useL1HasSoulboundToken() {
     queryFn,
     enabled: !!l1Address,
     staleTime: 60 * 1000, // 1 minute
+    meta: {
+      persist: true, // Mark this query for persistence
+    },
   })
 }
 

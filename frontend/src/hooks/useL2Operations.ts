@@ -20,6 +20,12 @@ import { logger } from '@/utils/logger'
 import { wait } from '@/utils'
 import { toast } from 'react-toastify'
 
+// Define types for balance queries
+export interface L2TokenBalanceData {
+  publicBalance: string;
+  privateBalance: string;
+}
+
 export const useL2NativeBalance = () => {
   const { account: aztecAccount, address, isConnected } = useAztecWallet()
 
@@ -45,16 +51,11 @@ export const useL2TokenBalance = () => {
   } = useAztecWallet()
   const { l2TokenContract, l2TokenMetadata } = useContractStore()
 
-  // const notify = useToast()
-
-  // Track if query has been executed
-  const fetchCount = useRef(0)
-
   // Create a stable query key that doesn't change with renders
   const queryKey = ['l2TokenBalance', aztecAddress]
 
-  // Query function that only logs "fetching" the first time
-  const queryFn = async () => {
+  // Query function without tracking state
+  const queryFn = async (): Promise<L2TokenBalanceData> => {
     if (!l2TokenContract) {
       throw new Error('L2 token contract not found')
     }
@@ -64,16 +65,8 @@ export const useL2TokenBalance = () => {
     if (!l2TokenMetadata) {
       throw new Error('L2 token metadata not found')
     }
-    // await wait(5000)
 
-    // Log only on first execution
-    fetchCount.current += 1
-    if (fetchCount.current === 1) {
-      // notify('info', 'Fetching balances for first time!')
-      console.log('Fetching balances for first time!')
-    } else {
-      console.log(`Fetching balances again... ${fetchCount.current}`)
-    }
+    console.log('Fetching L2 balances...')
 
     const [privateBalance, publicBalance] = await Promise.all([
       l2TokenContract.methods
@@ -86,34 +79,24 @@ export const useL2TokenBalance = () => {
 
     const publicBalanceFormat = formatUnits(publicBalance as bigint, l2TokenMetadata.decimals)
     const privateBalanceFormat = formatUnits(privateBalance as bigint, l2TokenMetadata.decimals)
-    // const publicBalanceFormat = publicBalance.toString()
-    // const privateBalanceFormat = privateBalance.toString()
 
+    console.log('publicBalanceFormat: ', publicBalanceFormat)
+    console.log('privateBalanceFormat: ', privateBalanceFormat)
+    
     return {
       publicBalance: publicBalanceFormat,
       privateBalance: privateBalanceFormat,
     }
   }
 
-  // Use React Query with aggressive caching to prevent unnecessary refetches
-  return useToastQuery({
+  // Use regular React Query instead of toast query
+  return useQuery<L2TokenBalanceData, Error>({
     queryKey,
     queryFn,
-    // enabled: !!isConnected && !!aztecAddress && !!l2TokenContract && !!l2TokenMetadata,
     enabled: !!aztecAddress && !!l2TokenContract && !!l2TokenMetadata,
-    staleTime: Infinity, // Data never goes stale automatically
-    // gcTime: Infinity, // Cache never expires (renamed from cacheTime in v4)
-    gcTime: 1000 * 60 * 60 * 24, // 24 hours
-    refetchOnWindowFocus: false, // Don't refetch when window regains focus
-    refetchOnMount: true, // Allow refetch when component mounts
-    refetchOnReconnect: false, // Don't refetch when reconnecting
-    // retry: 3, // Number of retry attempts
-    retryDelay: 60000, // 60 seconds between retry attempts
-    // toastMessages: {
-    //   pending: 'Fetching Aztec token balances...',
-    //   success: 'Aztec token balances fetched successfully',
-    //   error: 'Failed to fetch Aztec token balances',
-    // },
+    meta: {
+      persist: true, // Mark this query for persistence
+    },
   })
 }
 
@@ -545,11 +528,14 @@ export function useL2HasSoulboundToken() {
     return Promise.resolve(true)
   }
 
-  return useToastQuery({
+  return useQuery({
     queryKey,
     queryFn,
     enabled: !!aztecAddress,
     staleTime: 60 * 1000, // 1 minute
+    meta: {
+      persist: true, // Mark this query for persistence
+    },
   })
 }
 

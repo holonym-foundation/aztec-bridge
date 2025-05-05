@@ -1,11 +1,12 @@
 import { AztecWalletSdk, obsidion } from '@nemi-fi/wallet-sdk'
 
-// const aztecNode = "https://l2.testnet.nemi.fi";
-const aztecNode = 'https://registry.obsidion.xyz/node'
+// const NODE_URL = "https://l2.testnet.nemi.fi";
+const NODE_URL = "https://registry.obsidion.xyz/node"
+const WALLET_URL = "https://app.obsidion.xyz"
 
 // Create the Aztec Wallet SDK instance without pino-based logging
 export const sdk = new AztecWalletSdk({
-  aztecNode: aztecNode,
+  aztecNode: NODE_URL,
   // connectors: [obsidion({ walletUrl: WALLET_URL })],
   connectors: [obsidion({})],
   // Remove any logger config that might be using Pino

@@ -41,6 +41,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import BridgeActionButton from '@/components/BridgeActionButton'
 import { L1_NETWORKS, L2_NETWORKS, L1_TOKENS, L2_TOKENS } from '@/config'
 import MetaMaskPrompt from '@/components/model/MetaMaskPrompt'
+import BalanceCard from '@/components/BalanceCard'
 
 const DEFAULT_BRIDGE_STATE: BridgeState = {
   from: { network: L1_NETWORKS[0], token: L1_TOKENS[0] },
@@ -246,6 +247,7 @@ export default function Home() {
   }, [])
   if (!mounted) return null
 
+    // return <BalanceCard/>
   return (
     <>
       <RootStyle>

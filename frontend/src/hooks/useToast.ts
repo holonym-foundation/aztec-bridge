@@ -157,10 +157,15 @@ export function useToastQuery<
   options: Omit<UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>, 'queryFn'> & {
     queryFn: QueryFunction<TQueryFnData, TQueryKey>;
     toastMessages?: ToastMessages;
+    /**
+     * When true, toast notifications will only be shown on the initial fetch, 
+     * not background refreshes
+     */
+    silentRefresh?: boolean; 
   }
 ) {
   const notify = useToast();
-  const { toastMessages, queryFn, ...queryOptions } = options;
+  const { toastMessages, queryFn, silentRefresh = true, ...queryOptions } = options;
 
   return useQuery({
     ...queryOptions,
@@ -171,13 +176,23 @@ export function useToastQuery<
         // Ensure it's a promise
         const resultPromise = Promise.resolve(result);
         
-        // Show toast if messages are provided
-        if (toastMessages) {
-          notify.promise(resultPromise, {
-            pending: toastMessages.pending || 'Loading...',
-            success: toastMessages.success || 'Success!',
-            error: toastMessages.error || 'An error occurred'
-          });
+        // Show toast if messages are provided and we're either not silencing refresh toasts
+        // or if we're doing the initial fetch (isPending and no data)
+        if (toastMessages && toastMessages.pending) {
+          // Only show the toast if:
+          // 1. We have a pending message AND
+          // 2. Either:
+          //    a. We're not silencing refreshes OR
+          //    b. It's the initial load (no data exists yet)
+          const isInitialLoad = !context.signal; // Signal is undefined on initial load
+          
+          if (!silentRefresh || isInitialLoad) {
+            notify.promise(resultPromise, {
+              pending: toastMessages.pending || 'Loading...',
+              success: toastMessages.success || 'Success!',
+              error: toastMessages.error || 'An error occurred'
+            });
+          }
         }
         
         return result;

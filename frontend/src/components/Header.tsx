@@ -189,8 +189,8 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
 }) => {
   return (
     <button
-      className={`flex h-[44px] justify-center items-center gap-[8px] rounded-[8px] bg-latest-grey-300 hover:bg-latest-grey-400 transition-colors duration-200 ${
-        minimal ? 'p-2' : 'px-[20px] py-[10px]'
+      className={`flex justify-center items-center gap-[8px] rounded-[8px] bg-latest-grey-300 hover:bg-latest-grey-400 transition-colors duration-200 ${
+        minimal ? 'p-2' : 'px-[10px] py-[5px]'
       }`}
       onClick={onClick}>
       <svg
@@ -251,15 +251,41 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
   // Mobile menu state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
+  // Track if connect wallet button was pressed
+  const [walletButtonPressed, setWalletButtonPressed] = useState(false)
+
   // Client-side rendering check
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)
   }, [])
 
+  // Auto-connect to Aztec when MetaMask is connected
+  useEffect(() => {
+    if (isMetaMaskConnected && !isAztecConnected && walletButtonPressed) {
+      // Add a slight delay to avoid UI issues
+      const timer = setTimeout(() => {
+        connectAztec()
+        // Reset the button press tracker after connecting
+        setWalletButtonPressed(false)
+      }, 2000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [isMetaMaskConnected, isAztecConnected, connectAztec, walletButtonPressed])
+
   // Handle connect wallet click
-  const handleConnectWallet = () => {
-    connectMetaMask()
+  const handleConnectWallet = async () => {
+    // Set the button pressed flag
+    setWalletButtonPressed(true)
+    try {
+      await connectMetaMask()
+      // Aztec connection will be handled by the useEffect above
+    } catch (error) {
+      console.error('Failed to connect wallet:', error)
+      // Reset the button press tracker if connection fails
+      setWalletButtonPressed(false)
+    }
     setMobileMenuOpen(false)
   }
 

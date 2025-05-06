@@ -130,6 +130,35 @@ export function useL1ContractAddresses() {
     enabled: isConnected,
   })
 }
+
+export function useL2NodeInfo() {
+  const { account: aztecAccount, isConnected } = useAztecWallet()
+  const queryKey = ['nodeInfo']
+  const queryFn = async () => {
+    if (!aztecAccount?.aztecNode) return null
+    return await aztecAccount.aztecNode.getNodeInfo()
+  }
+  return useQuery({
+    queryKey,
+    queryFn,
+    enabled: isConnected,
+  })
+}
+
+export function useL2NodeIsReady() {
+  const { account: aztecAccount, isConnected } = useAztecWallet()
+  const queryKey = ['nodeIsReady']
+  const queryFn = async () => {
+    if (!aztecAccount?.aztecNode) return null
+    return await aztecAccount.aztecNode.isReady()
+  }
+  return useQuery({
+    queryKey,
+    queryFn,
+    enabled: isConnected,
+  })
+}
+
 // -----------------------------------
 
 export function useL2TokenInfo() {

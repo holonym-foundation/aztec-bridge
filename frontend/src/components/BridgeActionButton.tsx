@@ -64,6 +64,8 @@ function BridgeActionButton({
 
   // Operation completion state
   bridgeCompleted = false,
+  l2NodeError = false,
+  l2NodeIsReadyLoading = false,
 }: {
   // Connection states
   isMetaMaskConnected: boolean
@@ -106,6 +108,8 @@ function BridgeActionButton({
 
   // Operation completion state
   bridgeCompleted?: boolean
+  l2NodeError?: boolean
+  l2NodeIsReadyLoading?: boolean
 }) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isOperationPending, setIsOperationPending] = useState(false)
@@ -278,6 +282,14 @@ function BridgeActionButton({
 
   // Determine button label based on current state
   const getButtonLabel = () => {
+    // Show loading if checking node
+    if (l2NodeIsReadyLoading) {
+      return 'Checking Aztec Node...';
+    }
+    // Show error if node is down
+    if (l2NodeError) {
+      return 'Aztec Node Unavailable';
+    }
     // Show success message when bridge operation completes
     if (bridgeCompleted) {
       return 'Bridge Complete!'
@@ -314,6 +326,8 @@ function BridgeActionButton({
 
   // Determine if the button should be disabled
   const isButtonDisabled =
+    l2NodeIsReadyLoading ||
+    l2NodeError ||
     // Disable during loading states
     (isMetaMaskConnected &&
       isAztecConnected &&
@@ -331,6 +345,7 @@ function BridgeActionButton({
 
   // Show loading spinner during operation loading states
   const showLoadingSpinner =
+    l2NodeIsReadyLoading ||
     isConnecting ||
     requestFaucetPending ||
     withdrawTokensToL1Pending ||
@@ -339,11 +354,12 @@ function BridgeActionButton({
 
   // Get the loading text for the spinner
   const getLoadingText = () => {
-    if (isConnecting) return 'Connecting...'
-    if (requestFaucetPending) return 'Getting Eth & Testnet USDC...'
-    if (withdrawTokensToL1Pending) return 'Withdrawing Tokens...'
-    if (bridgeTokensToL2Pending) return 'Bridging Tokens...'
-    return 'Loading...'
+    if (l2NodeIsReadyLoading) return 'Checking Aztec Node...';
+    if (isConnecting) return 'Connecting...';
+    if (requestFaucetPending) return 'Getting Eth & Testnet USDC...';
+    if (withdrawTokensToL1Pending) return 'Withdrawing Tokens...';
+    if (bridgeTokensToL2Pending) return 'Bridging Tokens...';
+    return 'Loading...';
   }
 
   return (

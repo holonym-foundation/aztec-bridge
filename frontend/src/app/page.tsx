@@ -22,6 +22,8 @@ import {
   useL2MintSoulboundToken,
   useL2TokenBalance,
   useL2WithdrawTokensToL1,
+  useL1ContractAddresses,
+  useL2NodeIsReady,
 } from '@/hooks/useL2Operations'
 import { useToast } from '@/hooks/useToast'
 import clsxm from '@/utils/clsxm'
@@ -125,6 +127,12 @@ export default function Home() {
     console.log('L2 SBT minted:', data)
     setShowSBTModal(false)
   }
+
+  const { data: l2NodeIsReady, isLoading: l2NodeIsReadyLoading, error: l2NodeIsReadyError, isError: l2NodeIsReadyIsError } = useL2NodeIsReady()
+  console.log("l2NodeIsReady ", l2NodeIsReady);
+  console.log("l2NodeIsReadyLoading ", l2NodeIsReadyLoading);
+  console.log("l2NodeIsReadyError ", l2NodeIsReadyError);
+  console.log("l2NodeIsReadyIsError ", l2NodeIsReadyIsError);
 
   // L1 (Ethereum) balances and operations
   const { data: l1NativeBalance } = useL1NativeBalance()
@@ -431,6 +439,9 @@ export default function Home() {
                     setCurrentSBTChain={setCurrentSBTChain}
                     // Operation completion state
                     bridgeCompleted={bridgeCompleted}
+                    // Disable if L2 node error
+                    l2NodeError={l2NodeIsReadyIsError && !l2NodeIsReadyLoading}
+                    l2NodeIsReadyLoading={l2NodeIsReadyLoading}
                   />
                 </div>
               </div>

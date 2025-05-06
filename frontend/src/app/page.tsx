@@ -49,18 +49,18 @@ import PopupBlockedAlert from '@/components/model/PopupBlockedAlert'
 
 // Function to check if popups are blocked
 const isPopupBlocked = (): Promise<boolean> => {
-  return new Promise(resolve => {
-    const popup = window.open('about:blank', '_blank', 'width=1,height=1');
+  return new Promise((resolve) => {
+    const popup = window.open('about:blank', '_blank', 'width=1,height=1')
     setTimeout(() => {
       if (!popup || popup.closed || popup.closed === undefined) {
-        resolve(true); // Popups are blocked
+        resolve(true) // Popups are blocked
       } else {
-        popup.close();
-        resolve(false); // Popups are allowed
+        popup.close()
+        resolve(false) // Popups are allowed
       }
-    }, 50);
-  });
-};
+    }, 50)
+  })
+}
 
 const DEFAULT_BRIDGE_STATE: BridgeState = {
   from: { network: L1_NETWORKS[0], token: L1_TOKENS[0] },
@@ -128,11 +128,16 @@ export default function Home() {
     setShowSBTModal(false)
   }
 
-  const { data: l2NodeIsReady, isLoading: l2NodeIsReadyLoading, error: l2NodeIsReadyError, isError: l2NodeIsReadyIsError } = useL2NodeIsReady()
-  console.log("l2NodeIsReady ", l2NodeIsReady);
-  console.log("l2NodeIsReadyLoading ", l2NodeIsReadyLoading);
-  console.log("l2NodeIsReadyError ", l2NodeIsReadyError);
-  console.log("l2NodeIsReadyIsError ", l2NodeIsReadyIsError);
+  const {
+    data: l2NodeIsReady,
+    isLoading: l2NodeIsReadyLoading,
+    error: l2NodeIsReadyError,
+    isError: l2NodeIsReadyIsError,
+  } = useL2NodeIsReady()
+  console.log('l2NodeIsReady ', l2NodeIsReady)
+  console.log('l2NodeIsReadyLoading ', l2NodeIsReadyLoading)
+  console.log('l2NodeIsReadyError ', l2NodeIsReadyError)
+  console.log('l2NodeIsReadyIsError ', l2NodeIsReadyIsError)
 
   // L1 (Ethereum) balances and operations
   const { data: l1NativeBalance } = useL1NativeBalance()
@@ -168,7 +173,7 @@ export default function Home() {
       refetchL2Balance()
       setInputAmount('')
       setBridgeCompleted(true)
-      
+
       setTimeout(() => {
         setBridgeCompleted(false)
       }, 3000)
@@ -260,19 +265,19 @@ export default function Home() {
 
   // Check for MetaMask on component mount
   const [showMetaMaskPrompt, setShowMetaMaskPrompt] = useState(false)
-  
+
   // Page visit tracking and component mount effects
   useEffect(() => {
     setMounted(true)
-    
+
     // Log page visit when component mounts
     if (typeof window !== 'undefined') {
       logInfo('User visited bridge page', {
         url: window.location.href,
-        referrer: document.referrer || 'direct'
+        referrer: document.referrer || 'direct',
       })
     }
-    
+
     // Check for MetaMask
     const checkMetaMask = async () => {
       if (typeof window !== 'undefined' && !window.ethereum) {
@@ -281,25 +286,25 @@ export default function Home() {
     }
     checkMetaMask()
   }, [])
-  
+
   // Check if popups are blocked immediately after page load
   useEffect(() => {
     if (typeof window !== 'undefined') {
       // Immediately check if popups are blocked
-      isPopupBlocked().then(blocked => {
-        setArePopupsBlocked(blocked);
+      isPopupBlocked().then((blocked) => {
+        setArePopupsBlocked(blocked)
         if (blocked) {
-          console.log('Popups are blocked for this site');
-          logInfo('Popups are blocked', { blocked });
-          setShowPopupBlockedAlert(true);
+          console.log('Popups are blocked for this site')
+          logInfo('Popups are blocked', { blocked })
+          setShowPopupBlockedAlert(true)
         } else {
-          console.log('Popups are allowed for this site');
-          logInfo('Popups are allowed', { blocked });
+          console.log('Popups are allowed for this site')
+          logInfo('Popups are allowed', { blocked })
         }
-      });
+      })
     }
   }, [])
-  
+
   if (!mounted) return null
 
   return (

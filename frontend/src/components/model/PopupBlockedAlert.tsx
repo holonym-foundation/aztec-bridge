@@ -26,35 +26,26 @@ export default function PopupBlockedAlert({ onClose }: { onClose: () => void }) 
               Pop-ups are blocked in your browser. Obsidian wallet requires pop-ups to function properly.
             </p>
 
-            <div className='bg-latest-grey-200 p-3 rounded-lg mb-3'>
-              <p className='text-latest-grey-600 text-14 font-semibold mb-1'>
-                How to enable pop-ups in Chrome:
+            <div className='bg-latest-grey-200 p-3 rounded-lg mb-3 '>
+              <p className='text-[#0A0A0A] text-14 font-semibold mb-1'>
+              How to enable pop-ups in Chrome:
               </p>
-              <ol className='text-latest-grey-600 text-14 ml-5 list-decimal'>
-                <li className='mb-0.5'>Look for the popup blocked icon in your address bar</li>
-                <li className='mb-0.5'>Select &ldquo;Always allow pop-ups and redirects from [site]&rdquo;</li>
-                <li className='mb-0.5'>Click &ldquo;Done&rdquo;</li>
-                <li>Refresh this page</li>
+              <ol className='text-[#3B3B3B] text-14 ml-5 list-decimal'>
+                <li className='mb-0.5'>Click the pop-up blocked icon in your address bar</li>
+                <li className='mb-0.5'>Select &quot;Always allow pop-ups and redirects from https://bridge.human.tech/</li>
+                <li className='mb-0.5'>Click &quot;Done&quot;</li>
+                <li>Refresh the page</li>
               </ol>
               <div className='relative mt-2'>
-                <div className='border border-gray-300 rounded-lg p-0.5 mt-1 mb-0'>
+                <div className=''>
                   <img 
-                    src='/assets/images/steps.png' 
+                    src='/assets/svg/steps.svg' 
                     alt='Steps to enable popups in Chrome'
                     className='w-full rounded-md object-contain'
                   />
                 </div>
               </div>
             </div>
-
-            <TextButton onClick={handleSupportClick}>
-              <StyledImage
-                src='/assets/svg/help-white.svg'
-                alt='Help'
-                className='h-5 w-5'
-              />
-              <span>Learn more about pop-up settings</span>
-            </TextButton>
 
             <div className='mt-2 flex justify-center'>
               <TextButton
@@ -63,11 +54,21 @@ export default function PopupBlockedAlert({ onClose }: { onClose: () => void }) 
                 <StyledImage
                   src='/assets/svg/refresh.svg'
                   alt='Refresh'
-                  className='h-5 w-5 mr-2'
+                  className='h-6 w-6 mr-2'
                 />
                 <span>Refresh Page</span>
               </TextButton>
             </div>
+            <TextButton onClick={handleSupportClick} className='mt-2 bg-[#F5F5F5] text-black hover:bg-[#e5e5e5]'>
+              <StyledImage
+                src='/assets/svg/more info.svg'
+                alt='Help'
+                className='h-6 w-6'
+              />
+              <span>Learn more</span>
+            </TextButton>
+
+
 
             <div className='flex justify-center gap-2 mt-2'>
               <StyledImage

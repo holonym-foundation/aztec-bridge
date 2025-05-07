@@ -47,7 +47,7 @@ import BalanceCard from '@/components/BalanceCard'
 import { logInfo, logError } from '@/utils/datadog'
 import PopupBlockedAlert from '@/components/model/PopupBlockedAlert'
 import WalletSelectionModal from '@/components/model/WalletSelectionModal'
-import { WalletType } from '@/types/wallet'
+import { AztecWalletType } from '@/types/wallet'
 import AzguardPrompt from '@/components/model/AzguardPrompt'
 import { useWalletStore } from '@/stores/walletStore'
 
@@ -274,7 +274,7 @@ export default function Home() {
   } = useWalletStore()
 
   // Handler for wallet selection
-  const handleWalletSelect = async (type: WalletType) => {
+  const handleWalletSelect = async (type: AztecWalletType) => {
     try {
       if (type === 'azguard' && !window.azguard) {
         setShowAzguardPrompt(true)

@@ -1,1 +1,1 @@
-export type WalletType = 'obsidion' | 'azguard' 
+export type AztecWalletType = 'obsidion' | 'azguard' 

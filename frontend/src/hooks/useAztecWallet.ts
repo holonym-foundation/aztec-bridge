@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { sdk, connectWallet } from '../aztec'
 import { useAccount as useObsidianAccount } from '@nemi-fi/wallet-sdk/react'
 import { useContractStore } from '../stores/contractStore'
-import { WalletType } from '@/types/wallet'
+import { AztecWalletType } from '@/types/wallet'
 import { AzguardClient } from '@azguardwallet/client'
+import { useWalletStore } from '@/stores/walletStore'
 
 declare global {
   interface Window {
@@ -14,23 +15,13 @@ declare global {
 export function useAztecWallet() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-  const [walletType, setWalletType] = useState<WalletType | null>(null)
   const [azguardClient, setAzguardClient] = useState<AzguardClient | null>(null)
   const account = useObsidianAccount(sdk)
   const address = account?.address.toString()
   const isConnected = !!address
 
   const { setL2Contracts, resetContracts } = useContractStore()
-
-  // Load saved wallet type from localStorage on mount
-  useEffect(() => {
-    const savedWalletType = localStorage.getItem(
-      'aztecWalletType'
-    ) as WalletType | null
-    if (savedWalletType) {
-      setWalletType(savedWalletType)
-    }
-  }, [])
+  const { aztecWalletType, setAztecWalletType } = useWalletStore()
 
   // Setup contracts when account is available
   useEffect(() => {
@@ -41,11 +32,10 @@ export function useAztecWallet() {
     }
   }, [account, setL2Contracts, resetContracts])
 
-  const connect = async (type: WalletType) => {
+  const connect = async (type: AztecWalletType) => {
     setIsConnecting(true)
     setError(null)
-    setWalletType(type)
-    localStorage.setItem('aztecWalletType', type)
+    setAztecWalletType(type)
 
     try {
       if (type === 'obsidion') {
@@ -139,27 +129,19 @@ export function useAztecWallet() {
 
   const disconnect = async () => {
     try {
-
       await sdk.disconnect()
       setAzguardClient(null)
-      // if (walletType === 'obsidion') {
-      //   await sdk.disconnect()
-      // } else if (walletType === 'azguard' && azguardClient) {
-      //   await azguardClient.disconnect()
-      //   setAzguardClient(null)
-      // }
       resetContracts()
-      setWalletType(null)
-      localStorage.removeItem('aztecWalletType')
+      setAztecWalletType(null)
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
       setError(error)
-      console.error(`Failed to disconnect from ${walletType} wallet:`, error)
+      console.error(`Failed to disconnect from ${aztecWalletType} wallet:`, error)
     }
   }
 
   const executeTransaction = async (actions: any[]) => {
-    if (walletType === 'azguard' && azguardClient) {
+    if (aztecWalletType === 'azguard' && azguardClient) {
       const results = await azguardClient.execute(actions)
       if (results.length > 0 && results[0].status === 'success') {
         return results[0].txHash
@@ -184,7 +166,7 @@ export function useAztecWallet() {
     connect,
     disconnect,
     sdk,
-    walletType,
+    aztecWalletType,
     azguardClient,
     executeTransaction,
   }

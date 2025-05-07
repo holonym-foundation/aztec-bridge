@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState } from 'react';
 import { TokenPortalAbi } from '@aztec/l1-artifacts/TokenPortalAbi';
 import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi';

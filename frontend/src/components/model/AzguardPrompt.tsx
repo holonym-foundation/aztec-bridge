@@ -2,10 +2,10 @@ import StyledImage from '../StyledImage'
 import TextButton from '../TextButton'
 import { motion, AnimatePresence } from 'framer-motion'
 
-export default function MetaMaskPrompt({ onClose }: { onClose: () => void }) {
+export default function AzguardPrompt({ onClose }: { onClose: () => void }) {
   const handleInstallClick = () => {
     window.open(
-      'https://chrome.google.com/webstore/detail/metamask/nkbihfbeogaeaoehlefnkodbefgpgknn',
+      'https://chromewebstore.google.com/detail/azguard-wallet/pliilpflcmabdiapdeihifihkbdfnbmn',
       '_blank'
     )
   }
@@ -34,19 +34,24 @@ export default function MetaMaskPrompt({ onClose }: { onClose: () => void }) {
             <div className='flex justify-between items-center mx-2.5 py-1'>
               <p className='text-latest-black-300 font-semibold text-16'>
                 {' '}
-                Install MetaMask to Continue
+                Protect Your Privacy — <br /> Install Azguard to Continue
               </p>
               <motion.button 
                 onClick={onClose}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <StyledImage src='/assets/svg/cross.svg' alt='' className='h-[14px] w-[14px] m-[2px]' />
+                <StyledImage
+                  src='/assets/svg/cross.svg'
+                  alt=''
+                  className='h-[14px] w-[14px] m-[2px]'
+                />
               </motion.button>
             </div>
             <div className='mt-4 mx-2.5'>
               <p className='text-latest-grey-600 text-14 mb-6'>
-                To use our app seamlessly, please install MetaMask Wallet
+                To use our app seamlessly and protect your information, please
+                install Azguard
               </p>
 
               <motion.div 
@@ -55,11 +60,11 @@ export default function MetaMaskPrompt({ onClose }: { onClose: () => void }) {
                 transition={{ delay: 0.2 }}
                 className='bg-latest-grey-200 p-4 rounded-lg mb-6 flex items-center gap-4'
               >
-                <img src='/assets/svg/metamask.svg' alt='MetaMask' />
+                <img src='/assets/svg/Azguard.svg' alt='MetaMask' />
+
                 <p className='text-latest-grey-600 text-14'>
-                  MetaMask is the world&apos;s most secure and flexible crypto wallet,
-                  trusted by millions of users to buy, sell, and swap digital
-                  assets.
+                  Azguard is a secure, privacy-first wallet that keeps your data
+                  safe while you manage your assets
                 </p>
               </motion.div>
 

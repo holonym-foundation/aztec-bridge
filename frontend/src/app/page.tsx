@@ -48,6 +48,7 @@ import { logInfo, logError } from '@/utils/datadog'
 import PopupBlockedAlert from '@/components/model/PopupBlockedAlert'
 import WalletSelectionModal from '@/components/model/WalletSelectionModal'
 import { WalletType } from '@/types/wallet'
+import AzguardPrompt from '@/components/model/AzguardPrompt'
 
 // Function to check if popups are blocked
 const isPopupBlocked = (): Promise<boolean> => {
@@ -266,10 +267,16 @@ export default function Home() {
 
   // Add wallet selection modal state
   const [showWalletModal, setShowWalletModal] = useState(false)
+  const [showAzguardPrompt, setShowAzguardPrompt] = useState(false)
 
   // Handler for wallet selection
   const handleWalletSelect = async (type: WalletType) => {
     try {
+      if (type === 'azguard' && !window.azguard) {
+        setShowAzguardPrompt(true)
+        setShowWalletModal(false)
+        return
+      }
       await connectAztec(type)
       setShowWalletModal(false)
     } catch (error) {
@@ -326,8 +333,12 @@ export default function Home() {
   return (
     <>
       <RootStyle>
+
         {showMetaMaskPrompt && (
           <MetaMaskPrompt onClose={() => setShowMetaMaskPrompt(false)} />
+        )}
+        {showAzguardPrompt && (
+          <AzguardPrompt onClose={() => setShowAzguardPrompt(false)} />
         )}
         {showPopupBlockedAlert && (
           <PopupBlockedAlert onClose={() => setShowPopupBlockedAlert(false)} />

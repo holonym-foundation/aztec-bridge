@@ -49,6 +49,7 @@ import PopupBlockedAlert from '@/components/model/PopupBlockedAlert'
 import WalletSelectionModal from '@/components/model/WalletSelectionModal'
 import { WalletType } from '@/types/wallet'
 import AzguardPrompt from '@/components/model/AzguardPrompt'
+import { useWalletStore } from '@/stores/walletStore'
 
 // Function to check if popups are blocked
 const isPopupBlocked = (): Promise<boolean> => {
@@ -262,12 +263,15 @@ export default function Home() {
     }
   }
 
-  // Check for MetaMask on component mount
-  const [showMetaMaskPrompt, setShowMetaMaskPrompt] = useState(false)
-
-  // Add wallet selection modal state
-  const [showWalletModal, setShowWalletModal] = useState(false)
-  const [showAzguardPrompt, setShowAzguardPrompt] = useState(false)
+  // Get wallet store states and actions
+  const {
+    showWalletModal,
+    showAzguardPrompt,
+    showMetaMaskPrompt,
+    setShowWalletModal,
+    setShowAzguardPrompt,
+    setShowMetaMaskPrompt,
+  } = useWalletStore()
 
   // Handler for wallet selection
   const handleWalletSelect = async (type: WalletType) => {
@@ -333,7 +337,6 @@ export default function Home() {
   return (
     <>
       <RootStyle>
-
         {showMetaMaskPrompt && (
           <MetaMaskPrompt onClose={() => setShowMetaMaskPrompt(false)} />
         )}

@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { useMetaMask } from '@/hooks/useMetaMask'
 import { useAztecWallet } from '@/hooks/useAztecWallet'
-import { Tooltip } from 'react-tooltip'
+import { useMetaMask } from '@/hooks/useMetaMask'
+import { useWalletStore } from '@/stores/walletStore'
+import Image from 'next/image'
+import Link from 'next/link'
+import React, { useEffect, useRef, useState } from 'react'
 
 type WalletDisplayProps = {
   address?: string
@@ -254,6 +254,9 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
   // Track if connect wallet button was pressed
   const [walletButtonPressed, setWalletButtonPressed] = useState(false)
 
+  // Get wallet store actions
+  const { setShowWalletModal } = useWalletStore()
+
   // Client-side rendering check
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
@@ -265,14 +268,14 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
     if (isMetaMaskConnected && !isAztecConnected && walletButtonPressed) {
       // Add a slight delay to avoid UI issues
       const timer = setTimeout(() => {
-        connectAztec()
-        // Reset the button press tracker after connecting
+        setShowWalletModal(true)
+        // Reset the button press tracker after showing modal
         setWalletButtonPressed(false)
       }, 2000)
       
       return () => clearTimeout(timer)
     }
-  }, [isMetaMaskConnected, isAztecConnected, connectAztec, walletButtonPressed])
+  }, [isMetaMaskConnected, isAztecConnected, walletButtonPressed, setShowWalletModal])
 
   // Handle connect wallet click
   const handleConnectWallet = async () => {

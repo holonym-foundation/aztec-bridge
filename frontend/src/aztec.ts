@@ -12,13 +12,13 @@ export const sdk = new AztecWalletSdk({
   // Remove any logger config that might be using Pino
 })
 
-// Function to connect to the Obsidian wallet
-export const connectWallet = async () => {
+// Function to connect to the specified wallet type
+export const connectWallet = async (type: 'obsidion' | 'azguard') => {
   try {
-    await sdk.connect('obsidion')
+    await sdk.connect(type)
     return await sdk.getAccount()
   } catch (error) {
-    console.error('Failed to connect to Obsidian wallet:', error)
+    console.error(`Failed to connect to ${type} wallet:`, error)
     throw error
   }
 }

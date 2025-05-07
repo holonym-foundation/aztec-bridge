@@ -46,6 +46,8 @@ import MetaMaskPrompt from '@/components/model/MetaMaskPrompt'
 import BalanceCard from '@/components/BalanceCard'
 import { logInfo, logError } from '@/utils/datadog'
 import PopupBlockedAlert from '@/components/model/PopupBlockedAlert'
+import WalletSelectionModal from '@/components/model/WalletSelectionModal'
+import { WalletType } from '@/types/wallet'
 
 // Function to check if popups are blocked
 const isPopupBlocked = (): Promise<boolean> => {
@@ -134,10 +136,6 @@ export default function Home() {
     error: l2NodeIsReadyError,
     isError: l2NodeIsReadyIsError,
   } = useL2NodeIsReady()
-  console.log('l2NodeIsReady ', l2NodeIsReady)
-  console.log('l2NodeIsReadyLoading ', l2NodeIsReadyLoading)
-  console.log('l2NodeIsReadyError ', l2NodeIsReadyError)
-  console.log('l2NodeIsReadyIsError ', l2NodeIsReadyIsError)
 
   // L1 (Ethereum) balances and operations
   const { data: l1NativeBalance } = useL1NativeBalance()
@@ -266,6 +264,24 @@ export default function Home() {
   // Check for MetaMask on component mount
   const [showMetaMaskPrompt, setShowMetaMaskPrompt] = useState(false)
 
+  // Add wallet selection modal state
+  const [showWalletModal, setShowWalletModal] = useState(false)
+
+  // Handler for wallet selection
+  const handleWalletSelect = async (type: WalletType) => {
+    try {
+      await connectAztec(type)
+      setShowWalletModal(false)
+    } catch (error) {
+      notify(
+        'error',
+        `Failed to connect wallet: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      )
+    }
+  }
+
   // Page visit tracking and component mount effects
   useEffect(() => {
     setMounted(true)
@@ -309,55 +325,6 @@ export default function Home() {
 
   return (
     <>
-      <div className='fixed top-[70px] right-[100px] z-50 bg-[#E5EFFF] text-[#17235E] flex items-center justify-start px-4 py-2 rounded-lg text-sm font-semibold min-w-[300px] max-w-[400px] w-full gap-3'>
-        <img src='/assets/svg/alert.svg' alt='Alert' className='w-6 h-6' />
-        <span>
-          The Aztec Testnet is congested right now.
-          <br />
-          Your transactions may take longer or may be dropped.
-        </span>
-      </div>
-      <AnimatePresence>
-        {l2NodeIsReadyIsError && !l2NodeIsReadyLoading && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 1 }}
-            className='fixed top-[160px] right-[100px] z-50 bg-[#FFEBEB] text-[#500807] flex items-center justify-start px-4 py-2 rounded-lg text-sm font-semibold min-w-[300px] max-w-[400px] w-full gap-3'
-          >
-            <div className='w-6 h-6'>
-              <svg
-                width='28'
-                height='28'
-                viewBox='0 0 28 28'
-                fill='none'
-                xmlns='http://www.w3.org/2000/svg'>
-                <circle
-                  cx='14'
-                  cy='14'
-                  r='12'
-                  stroke='#500807'
-                  strokeWidth='2'
-                  fill='none'
-                />
-                <path
-                  d='M9 9L19 19M19 9L9 19'
-                  stroke='#500807'
-                  strokeWidth='2'
-                  strokeLinecap='round'
-                />
-              </svg>
-            </div>
-            <span>
-              Aztec Node is not available. <br />
-              Bridge operations are temporarily disabled.
-              <br />
-              Please try again later.
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
       <RootStyle>
         {showMetaMaskPrompt && (
           <MetaMaskPrompt onClose={() => setShowMetaMaskPrompt(false)} />
@@ -397,13 +364,18 @@ export default function Home() {
             }
           />
         )}
+        <WalletSelectionModal
+          isOpen={showWalletModal}
+          onClose={() => setShowWalletModal(false)}
+          onSelect={handleWalletSelect}
+        />
 
         <div className='grid grid-rows-[max-content_1fr_max-content] h-full'>
           <div className='mt-4'>
             <BridgeHeader
-              onClick={() => {
-                disconnectMetaMask()
-                disconnectAztec()
+              onClick={async () => {
+                await disconnectMetaMask()
+                await disconnectAztec()
                 window.location.reload()
               }}
             />
@@ -463,7 +435,7 @@ export default function Home() {
                     isMetaMaskConnected={isMetaMaskConnected}
                     connectMetaMask={connectMetaMask}
                     isAztecConnected={isAztecConnected}
-                    connectAztec={connectAztec}
+                    connectAztec={() => setShowWalletModal(true)}
                     inputRef={inputRef}
                     // Balance and amount states
                     inputAmount={inputAmount}

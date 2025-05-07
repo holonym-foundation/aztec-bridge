@@ -2,15 +2,35 @@ import { useState, useEffect } from 'react'
 import { sdk, connectWallet } from '../aztec'
 import { useAccount as useObsidianAccount } from '@nemi-fi/wallet-sdk/react'
 import { useContractStore } from '../stores/contractStore'
+import { WalletType } from '@/types/wallet'
+import { AzguardClient } from '@azguardwallet/client'
+
+declare global {
+  interface Window {
+    azguard?: any
+  }
+}
 
 export function useAztecWallet() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [walletType, setWalletType] = useState<WalletType | null>(null)
+  const [azguardClient, setAzguardClient] = useState<AzguardClient | null>(null)
   const account = useObsidianAccount(sdk)
   const address = account?.address.toString()
   const isConnected = !!address
-  
+
   const { setL2Contracts, resetContracts } = useContractStore()
+
+  // Load saved wallet type from localStorage on mount
+  useEffect(() => {
+    const savedWalletType = localStorage.getItem(
+      'aztecWalletType'
+    ) as WalletType | null
+    if (savedWalletType) {
+      setWalletType(savedWalletType)
+    }
+  }, [])
 
   // Setup contracts when account is available
   useEffect(() => {
@@ -21,16 +41,97 @@ export function useAztecWallet() {
     }
   }, [account, setL2Contracts, resetContracts])
 
-  const connect = async () => {
+  const connect = async (type: WalletType) => {
     setIsConnecting(true)
     setError(null)
+    setWalletType(type)
+    localStorage.setItem('aztecWalletType', type)
 
     try {
-      const connectedAccount = await connectWallet()
+      if (type === 'obsidion') {
+        const connectedAccount = await connectWallet('obsidion')
+        return connectedAccount
+      } else if (type === 'azguard') {
+        const connectedAccount = await connectWallet('azguard')
+        return connectedAccount
+
+        // Check if Azguard extension is installed
+        if (!AzguardClient.isAzguardInstalled()) {
+          throw new Error('Azguard wallet extension not found')
+        }
+
+        // Create Azguard client
+        const azguardWallet = await AzguardClient.create()
+
+        if (!azguardWallet.connected) {
+          // Connect to Azguard wallet
+          await azguardWallet.connect(
+            {
+              name: 'Human Bridge',
+            },
+            [
+              {
+                chains: ['aztec:11155111'], // aztec testnet
+                methods: [
+                  'send_transaction',
+                  'add_private_authwit',
+                  'simulate_views',
+                  'call',
+                ],
+              },
+            ]
+          )
+        }
+
+        const account = azguardWallet.accounts[0]
+        const address = account.substring(account.lastIndexOf(':') + 1)
+
+        setAzguardClient(azguardWallet)
+        console.log('Getting balances using azguard')
+        // execute requests
+        const [result] = await azguardWallet.execute([
+          {
+            kind: 'simulate_views',
+            account: account,
+            calls: [
+              {
+                kind: 'call',
+                contract:
+                  '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
+                method: 'balance_of_public',
+                args: [address],
+              },
+              {
+                kind: 'call',
+                contract:
+                  '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
+                method: 'balance_of_private',
+                args: [address],
+              },
+            ],
+          },
+        ])
+
+        // ensure successful status
+        if (result.status !== 'ok') {
+          console.log('result ', result)
+          throw new Error('Simulation failed')
+        }
+
+        // simulation results are in the same order as the calls above
+        const [publicBalance, privateBalance] = (result.result as any).decoded
+
+        console.log('Public balance', publicBalance)
+        console.log('Private balance', privateBalance)
+
+        console.log('Balances fetched using azguard')
+        return azguardWallet
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
       setError(error)
-      console.error('Failed to connect to Obsidian wallet:', error)
+      console.error(`Failed to connect to ${type} wallet:`, error)
+      throw error
     } finally {
       setIsConnecting(false)
     }
@@ -38,12 +139,39 @@ export function useAztecWallet() {
 
   const disconnect = async () => {
     try {
-      sdk.disconnect()
+
+      await sdk.disconnect()
+      setAzguardClient(null)
+      // if (walletType === 'obsidion') {
+      //   await sdk.disconnect()
+      // } else if (walletType === 'azguard' && azguardClient) {
+      //   await azguardClient.disconnect()
+      //   setAzguardClient(null)
+      // }
       resetContracts()
+      setWalletType(null)
+      localStorage.removeItem('aztecWalletType')
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
       setError(error)
-      console.error('Failed to disconnect from Obsidian wallet:', error)
+      console.error(`Failed to disconnect from ${walletType} wallet:`, error)
+    }
+  }
+
+  const executeTransaction = async (actions: any[]) => {
+    if (walletType === 'azguard' && azguardClient) {
+      const results = await azguardClient.execute(actions)
+      if (results.length > 0 && results[0].status === 'success') {
+        return results[0].txHash
+      } else {
+        throw new Error(
+          `Transaction failed: ${results[0]?.error || 'Unknown error'}`
+        )
+      }
+    } else {
+      throw new Error(
+        'Transaction execution not supported for this wallet type'
+      )
     }
   }
 
@@ -56,5 +184,8 @@ export function useAztecWallet() {
     connect,
     disconnect,
     sdk,
+    walletType,
+    azguardClient,
+    executeTransaction,
   }
 }

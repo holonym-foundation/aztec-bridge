@@ -5,13 +5,29 @@ import { cookieToInitialState } from 'wagmi'
 import './globals.css'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-
 import { init as initDatadog } from '@/utils/datadog'
+import BannerAztecTestnet from '@/components/BannerAztecTestnet'
+import BannerAztecNodeError from '@/components/BannerAztecNodeError'
 initDatadog()
 
 export const metadata: Metadata = {
   title: 'Human Bridge',
   description: 'Human Bridge',
+}
+
+function LayoutContent({ children }: { children: React.ReactNode }) {
+  return (
+    <main className='min-h-screen flex flex-col'>
+      <BannerAztecTestnet />
+      <BannerAztecNodeError />
+      <Header />
+      <div className='flex-grow'>
+        {/* <div className="py-2"> */}
+        {children}
+      </div>
+      <Footer className='' />
+    </main>
+  )
 }
 
 export default function RootLayout({
@@ -28,17 +44,7 @@ export default function RootLayout({
     <html lang='en'>
       <body className=''>
         <Providers initialState={initialState}>
-          <main className="min-h-screen flex flex-col">
-            <Header 
-              // credentials="Credentials"
-              // privatePayments="Private Payments"
-            />
-            <div className="flex-grow">
-            {/* <div className="py-2"> */}
-              {children}
-            </div>
-            <Footer className="" />
-          </main>
+          <LayoutContent>{children}</LayoutContent>
         </Providers>
       </body>
     </html>

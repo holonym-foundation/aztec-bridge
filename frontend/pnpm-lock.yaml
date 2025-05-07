@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@azguardwallet/client':
+        specifier: ^0.4.1
+        version: 0.4.1
       '@aztec/accounts':
         specifier: 0.85.0-alpha-testnet.2
         version: 0.85.0-alpha-testnet.2(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.24.3)
@@ -157,6 +160,9 @@ packages:
   '@ampproject/remapping@2.3.0':
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
     engines: {node: '>=6.0.0'}
+
+  '@azguardwallet/client@0.4.1':
+    resolution: {integrity: sha512-nW6TzfOZx5QmGQsOLiJo/I+KKTci7fhKPeGyYUfuUSam3YtlWGJy6rurgNHSxg1ztHlqoHeDI3R98T2fyWcGuA==}
 
   '@aztec/accounts@0.85.0-alpha-testnet.2':
     resolution: {integrity: sha512-Gt7WE/5aQYsdVkf1xBQwFNXbBCHp2LmKGilaA7xUDbZygOz4TouufeCaODhKncFA/OW5X479X3huoCeJ3U3Q4Q==}
@@ -4165,6 +4171,8 @@ snapshots:
     dependencies:
       '@jridgewell/gen-mapping': 0.3.8
       '@jridgewell/trace-mapping': 0.3.25
+
+  '@azguardwallet/client@0.4.1': {}
 
   '@aztec/accounts@0.85.0-alpha-testnet.2(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.24.3)':
     dependencies:

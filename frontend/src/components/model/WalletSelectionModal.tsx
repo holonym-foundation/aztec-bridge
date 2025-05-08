@@ -50,7 +50,7 @@ export default function WalletSelectionModal({
               </div>
               <div className='mt-4 mx-2.5'>
                 <div className='grid grid-cols-2 gap-4'>
-                  <motion.button
+                  {/* <motion.button
                     onClick={() => onSelect('azguard')}
                     className='flex flex-col items-center py-4 rounded-xl border-2 transition bg-white hover:bg-[#FFFAEB] border-latest-grey-200 shadow-sm'
                     style={{ minHeight: 120 }}
@@ -64,7 +64,7 @@ export default function WalletSelectionModal({
                     <span className='font-medium text-latest-black-300'>
                       Azguard
                     </span>
-                  </motion.button>
+                  </motion.button> */}
                   <motion.button
                     onClick={() => onSelect('obsidion')}
                     className='flex flex-col items-center py-4 rounded-xl border-2 transition bg-white hover:bg-[#FFFAEB] border-latest-grey-200 shadow-sm'

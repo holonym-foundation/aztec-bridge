@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { sdk, connectWallet } from '../aztec'
-import { useAccount as useObsidianAccount } from '@nemi-fi/wallet-sdk/react'
+import { useAccount as useAztecAccount } from '@nemi-fi/wallet-sdk/react'
 import { useContractStore } from '../stores/contractStore'
 import { AztecWalletType } from '@/types/wallet'
 import { AzguardClient } from '@azguardwallet/client'
@@ -20,7 +20,7 @@ export function useAztecWallet() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [azguardClient, setAzguardClient] = useState<AzguardClient | null>(null)
-  const account = useObsidianAccount(sdk)
+  const account = useAztecAccount(sdk)
   const address = account?.address.toString()
   const isConnected = !!address
 
@@ -57,13 +57,13 @@ export function useAztecWallet() {
         // Create Azguard client
         const azguardWallet = await AzguardClient.create()
 
-        // if (!azguardWallet.connected) {
-        if (true) {
+        if (!azguardWallet.connected) {
+          // if (true) {
           // Connect to Azguard wallet
           console.log('Connecting to Azguard wallet')
           await azguardWallet.connect(
             {
-              name: 'Human Bridge',
+              name: 'Bridge to Aztec ',
             },
             [
               {
@@ -86,50 +86,58 @@ export function useAztecWallet() {
         setAzguardClient(azguardWallet)
         console.log('Getting balances using azguard')
 
-        const [result] = await azguardWallet.execute([
-          {
-            kind: 'register_contract',
-            chain: 'aztec:11155111',
-            address:
-              '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
-            artifact: TokenContractArtifact,
-          },
-          {
-            kind: 'simulate_views',
-            account: account,
-            calls: [
-              {
-                kind: 'call',
-                contract:
-                  '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
-                method: 'balance_of_public',
-                args: [address],
-              },
-              {
-                kind: 'call',
-                contract:
-                  '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
-                method: 'balance_of_private',
-                args: [address],
-              },
-            ],
-          },
-        ])
+        const [resultRegisterContract, redultSimulateViews] =
+          await azguardWallet.execute([
+            {
+              kind: 'register_contract',
+              chain: 'aztec:11155111',
+              address:
+                '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
+              artifact: TokenContractArtifact,
+            },
+            {
+              kind: 'simulate_views',
+              account: account,
+              calls: [
+                {
+                  kind: 'call',
+                  contract:
+                    '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
+                  method: 'balance_of_public',
+                  args: [address],
+                },
+                {
+                  kind: 'call',
+                  contract:
+                    '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
+                  method: 'balance_of_private',
+                  args: [address],
+                },
+              ],
+            },
+          ])
 
-        // ensure successful status
-        if (result.status !== 'ok') {
-          console.log('result ', result)
-          throw new Error('Simulation failed')
-        }
+        console.log('resultRegisterContract ', resultRegisterContract)
+        console.log('redultSimulateViews ', redultSimulateViews)
 
-        console.log('result ', result)
-        // simulation results are in the same order as the calls above
-        const [publicBalance, privateBalance] = (result.result as any)?.decoded
+        // // ensure successful status
+        // if (result.status !== 'ok') {
+        //   console.log('result ', result)
+        //   throw new Error('Simulation failed')
+        // }
 
-        console.log('Public balance', publicBalance)
-        console.log('Private balance', privateBalance)
+        // console.log('result ', result)
+        // if (result?.result) {
+        //   // simulation results are in the same order as the calls above
+        //   const [publicBalance, privateBalance] = (result.result as any)
+        //     ?.decoded
 
-        console.log('Balances fetched using azguard')
+        //   console.log('Public balance', publicBalance)
+        //   console.log('Private balance', privateBalance)
+
+        //   console.log('Balances fetched using azguard')
+        // }
+
         return azguardWallet
       }
     } catch (err) {

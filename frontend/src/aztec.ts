@@ -7,7 +7,6 @@ const NODE_URL = "https://aztec-alpha-testnet-fullnode.zkv.xyz"
 const WALLET_URL = "https://app.obsidion.xyz"
 
 export const aztecNode = createAztecNodeClient(NODE_URL);
- console.log("aztecNode ", aztecNode);
 
 // const pxe = createPXEClient(NODE_URL);
 

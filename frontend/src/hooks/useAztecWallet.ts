@@ -5,6 +5,10 @@ import { useContractStore } from '../stores/contractStore'
 import { AztecWalletType } from '@/types/wallet'
 import { AzguardClient } from '@azguardwallet/client'
 import { useWalletStore } from '@/stores/walletStore'
+import {
+  TokenContract,
+  TokenContractArtifact,
+} from '../constants/aztec/artifacts/Token'
 
 declare global {
   interface Window {
@@ -53,8 +57,10 @@ export function useAztecWallet() {
         // Create Azguard client
         const azguardWallet = await AzguardClient.create()
 
-        if (!azguardWallet.connected) {
+        // if (!azguardWallet.connected) {
+        if (true) {
           // Connect to Azguard wallet
+          console.log('Connecting to Azguard wallet')
           await azguardWallet.connect(
             {
               name: 'Human Bridge',
@@ -67,6 +73,7 @@ export function useAztecWallet() {
                   'add_private_authwit',
                   'simulate_views',
                   'call',
+                  'register_contract',
                 ],
               },
             ]
@@ -78,8 +85,15 @@ export function useAztecWallet() {
 
         setAzguardClient(azguardWallet)
         console.log('Getting balances using azguard')
-        // execute requests
+
         const [result] = await azguardWallet.execute([
+          {
+            kind: 'register_contract',
+            chain: 'aztec:11155111',
+            address:
+              '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
+            artifact: TokenContractArtifact,
+          },
           {
             kind: 'simulate_views',
             account: account,
@@ -108,8 +122,9 @@ export function useAztecWallet() {
           throw new Error('Simulation failed')
         }
 
+        console.log('result ', result)
         // simulation results are in the same order as the calls above
-        const [publicBalance, privateBalance] = (result.result as any).decoded
+        const [publicBalance, privateBalance] = (result.result as any)?.decoded
 
         console.log('Public balance', publicBalance)
         console.log('Private balance', privateBalance)
@@ -136,7 +151,10 @@ export function useAztecWallet() {
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
       setError(error)
-      console.error(`Failed to disconnect from ${aztecWalletType} wallet:`, error)
+      console.error(
+        `Failed to disconnect from ${aztecWalletType} wallet:`,
+        error
+      )
     }
   }
 

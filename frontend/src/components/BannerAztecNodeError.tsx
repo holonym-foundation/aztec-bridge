@@ -44,7 +44,7 @@ const BannerAztecNodeError = () => {
           </svg>
         </div>
         <span>
-          Aztec Node is not available.
+          Aztec Network is not available.
           Bridge operations are temporarily disabled.
           Please try again later.
         </span>

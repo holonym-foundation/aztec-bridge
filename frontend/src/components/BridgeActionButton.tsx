@@ -284,11 +284,11 @@ function BridgeActionButton({
   const getButtonLabel = () => {
     // Show loading if checking node
     if (l2NodeIsReadyLoading) {
-      return 'Checking Aztec Node...';
+      return 'Checking Aztec Network Status...';
     }
     // Show error if node is down
     if (l2NodeError) {
-      return 'Aztec Node Unavailable';
+      return 'Aztec Network Unavailable';
     }
     // Show success message when bridge operation completes
     if (bridgeCompleted) {
@@ -354,7 +354,7 @@ function BridgeActionButton({
 
   // Get the loading text for the spinner
   const getLoadingText = () => {
-    if (l2NodeIsReadyLoading) return 'Checking Aztec Node...';
+    if (l2NodeIsReadyLoading) return 'Checking Aztec Network Status...';
     if (isConnecting) return 'Connecting...';
     if (requestFaucetPending) return 'Getting Eth & Testnet USDC...';
     if (withdrawTokensToL1Pending) return 'Withdrawing Tokens...';

@@ -11,8 +11,8 @@ import BannerAztecNodeError from '@/components/BannerAztecNodeError'
 initDatadog()
 
 export const metadata: Metadata = {
-  title: 'Human Bridge',
-  description: 'Human Bridge',
+  title: 'Bridge to Aztec ',
+  description: 'Pay and Transact Privately by Bridging to Aztec with human.tech',
 }
 
 function LayoutContent({ children }: { children: React.ReactNode }) {

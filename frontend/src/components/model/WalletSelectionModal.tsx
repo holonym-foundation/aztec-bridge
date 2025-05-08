@@ -52,7 +52,7 @@ export default function WalletSelectionModal({
                 <div className='grid grid-cols-2 gap-4'>
                   {/* <motion.button
                     onClick={() => onSelect('azguard')}
-                    className='flex flex-col items-center py-4 rounded-xl border-2 transition bg-white hover:bg-[#FFFAEB] border-latest-grey-200 shadow-sm'
+                    className='flex flex-col items-center py-4 rounded-[8px] transition bg-[#F5F5F5] hover:bg-[#E5E5E5] '
                     style={{ minHeight: 120 }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}>
@@ -67,7 +67,7 @@ export default function WalletSelectionModal({
                   </motion.button> */}
                   <motion.button
                     onClick={() => onSelect('obsidion')}
-                    className='flex flex-col items-center py-4 rounded-xl border-2 transition bg-white hover:bg-[#FFFAEB] border-latest-grey-200 shadow-sm'
+                    className='flex flex-col items-center py-4 rounded-[8px] transition bg-[#F5F5F5] hover:bg-[#E5E5E5] '
                     style={{ minHeight: 120 }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}>

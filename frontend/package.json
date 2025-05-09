@@ -17,7 +17,7 @@
     "@aztec/noir-contracts.js": "0.85.0-alpha-testnet.2",
     "@datadog/browser-logs": "^4.45.0",
     "@datadog/browser-rum": "^4.45.0",
-    "@nemi-fi/wallet-sdk": "0.85.0-next.5",
+    "@nemi-fi/wallet-sdk": "0.85.0-next.6",
     "@tanstack/query-sync-storage-persister": "^5.75.0",
     "@tanstack/react-query": "^5.75.0",
     "@tanstack/react-query-devtools": "^5.75.0",

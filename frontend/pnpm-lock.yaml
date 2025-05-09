@@ -33,8 +33,8 @@ importers:
         specifier: ^4.45.0
         version: 4.50.1(@datadog/browser-logs@4.50.1)
       '@nemi-fi/wallet-sdk':
-        specifier: 0.85.0-next.5
-        version: 0.85.0-next.5(@types/react@19.1.2)(bufferutil@4.0.9)(react@19.1.0)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.24.3)
+        specifier: 0.85.0-next.6
+        version: 0.85.0-next.6(@types/react@19.1.2)(bufferutil@4.0.9)(react@19.1.0)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.24.3)
       '@tanstack/query-sync-storage-persister':
         specifier: ^5.75.0
         version: 5.75.0
@@ -659,8 +659,8 @@ packages:
   '@napi-rs/wasm-runtime@0.2.9':
     resolution: {integrity: sha512-OKRBiajrrxB9ATokgEQoG87Z25c67pCpYcCwmXYX8PBftC9pBfN18gnm/fh1wurSLEKIAt+QRFLFCQISrb66Jg==}
 
-  '@nemi-fi/wallet-sdk@0.85.0-next.5':
-    resolution: {integrity: sha512-lF0DmmBx+u5qk2GXJYn0oJCmqHJLnckd3oCIysFFpQv64UZ5yQI6EMxYnCcwzK92Qgt20UeJLHXkkdT7o8B+Hg==}
+  '@nemi-fi/wallet-sdk@0.85.0-next.6':
+    resolution: {integrity: sha512-wgbqUXcgvomw7rueChYIRpoMVYjA3usCE7te9JaGTcWCeSByIOMwkgMmKc0i6yfqmP4iNPEk6SjXoXaEDE2FbQ==}
     peerDependencies:
       react: '>=18.0.0'
     peerDependenciesMeta:
@@ -4921,7 +4921,7 @@ snapshots:
       '@tybys/wasm-util': 0.9.0
     optional: true
 
-  '@nemi-fi/wallet-sdk@0.85.0-next.5(@types/react@19.1.2)(bufferutil@4.0.9)(react@19.1.0)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.24.3)':
+  '@nemi-fi/wallet-sdk@0.85.0-next.6(@types/react@19.1.2)(bufferutil@4.0.9)(react@19.1.0)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.24.3)':
     dependencies:
       '@aztec/aztec.js': 0.85.0-alpha-testnet.2(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.24.3)
       '@aztec/constants': 0.85.0-alpha-testnet.2

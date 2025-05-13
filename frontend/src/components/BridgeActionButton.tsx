@@ -5,6 +5,9 @@ import { Oval } from 'react-loader-spinner'
 import { BridgeDirection } from '@/types/bridge'
 import { useToast } from '@/hooks/useToast'
 import { parseUnits } from 'viem'
+import CongestionWarningModal from './model/CongestionWarningModal'
+import { useL2PendingTxCount } from '@/hooks/useL2Operations'
+
 function LoadingContent({ label }: { label: string }) {
   return (
     <div className='flex justify-center gap-2'>
@@ -22,7 +25,9 @@ function LoadingContent({ label }: { label: string }) {
     </div>
   )
 }
+
 function BridgeActionButton({
+  isDisabled = false,
   // Connection states
   isMetaMaskConnected,
   connectMetaMask,
@@ -67,6 +72,7 @@ function BridgeActionButton({
   l2NodeError = false,
   l2NodeIsReadyLoading = false,
 }: {
+  isDisabled?: boolean
   // Connection states
   isMetaMaskConnected: boolean
   connectMetaMask: () => void
@@ -85,8 +91,8 @@ function BridgeActionButton({
   direction: BridgeDirection
 
   // Core operations
-  bridgeTokensToL2: (amount: bigint) => void
-  withdrawTokensToL1: (amount: bigint) => void
+  bridgeTokensToL2: (amount: string) => void
+  withdrawTokensToL1: (amount: string) => void
   requestFaucet: () => void
 
   // Loading states
@@ -114,6 +120,9 @@ function BridgeActionButton({
   const [isConnecting, setIsConnecting] = useState(false)
   const [isOperationPending, setIsOperationPending] = useState(false)
   const notify = useToast()
+  const [showCongestionWarning, setShowCongestionWarning] = useState(false)
+  const { data: pendingTxCount } = useL2PendingTxCount()
+  const isCongested = pendingTxCount && pendingTxCount > 40
 
   // Helper functions for bridge operations
   const getOperationType = (direction: BridgeDirection) =>
@@ -143,7 +152,8 @@ function BridgeActionButton({
     try {
       // const amount = BigInt(inputAmount)
       // this should come from token
-      const amount = parseUnits(inputAmount, 6)
+      // const amount = parseUnits(inputAmount, 6)
+      const amount = inputAmount // we parse it in progress page before calling function
       const operationType = getOperationType(direction)
 
       if (direction === BridgeDirection.L2_TO_L1) {
@@ -276,7 +286,18 @@ function BridgeActionButton({
       return
     }
 
+    // Check for congestion before proceeding
+    if (isCongested) {
+      setShowCongestionWarning(true)
+      return
+    }
+
     // Step 6: Process the bridge/withdraw operation
+    processBridgeOperation()
+  }
+
+  const handleConfirmBridge = () => {
+    setShowCongestionWarning(false)
     processBridgeOperation()
   }
 
@@ -337,12 +358,28 @@ function BridgeActionButton({
     withdrawTokensToL1Pending ||
     bridgeTokensToL2Pending ||
     isOperationPending ||
-    bridgeCompleted ||
-    // Disable bridge/withdraw when amount is invalid and user has all SBTs
-    (parseFloat(inputAmount) <= 0 &&
-      ((direction === BridgeDirection.L2_TO_L1 && hasL2SBT === true) ||
-        (direction === BridgeDirection.L1_TO_L2 && hasL1SBT === true)))
+    bridgeCompleted
+    //  ||
+    // // Disable bridge/withdraw when amount is invalid and user has all SBTs
+    // (parseFloat(inputAmount) <= 0 
+    // &&
+    //   ((direction === BridgeDirection.L2_TO_L1 && hasL2SBT === true) ||
+    //     (direction === BridgeDirection.L1_TO_L2 && hasL1SBT === true)))
 
+
+  // console.log({
+  //   l2NodeIsReadyLoading,
+  //   l2NodeError,
+  //   third:(isMetaMaskConnected &&
+  //     isAztecConnected &&
+  //     (!isStateInitialized || l1BalanceLoading)),
+  //     isConnecting,
+  //   requestFaucetPending,
+  //   withdrawTokensToL1Pending,
+  //   bridgeTokensToL2Pending,
+  //   isOperationPending,
+  //   isButtonDisabled,
+  // })
   // Show loading spinner during operation loading states
   const showLoadingSpinner =
     l2NodeIsReadyLoading ||
@@ -363,28 +400,37 @@ function BridgeActionButton({
   }
 
   return (
-    <div>
-      <TextButton
-        onClick={handleButtonClick}
-        disabled={isButtonDisabled}
-        className=''>
-        {showLoadingSpinner ? (
-          <LoadingContent label={getLoadingText()} />
-        ) : bridgeCompleted ? (
-          <div className='flex items-center gap-2'>
-            <StyledImage
-              src='/assets/svg/check-circle.svg'
-              alt=''
-              className='h-5 w-5'
-            />
-            <span>Bridge Complete!</span>
-          </div>
-        ) : (
-          getButtonLabel()
-        )}
-      </TextButton>
-    </div>
+    <>
+      <div className='w-full'>
+        <TextButton
+          onClick={handleButtonClick}
+          disabled={isButtonDisabled || isDisabled}
+          className=''>
+          {showLoadingSpinner ? (
+            <LoadingContent label={getLoadingText()} />
+          ) : bridgeCompleted ? (
+            <div className='flex items-center gap-2'>
+              <StyledImage
+                src='/assets/svg/check-circle.svg'
+                alt=''
+                className='h-5 w-5'
+              />
+              <span>Bridge Complete!</span>
+            </div>
+          ) : (
+            getButtonLabel()
+          )}
+        </TextButton>
+      </div>
+      
+      <CongestionWarningModal
+        isOpen={showCongestionWarning}
+        onClose={() => setShowCongestionWarning(false)}
+        onConfirm={handleConfirmBridge}
+      />
+    </>
   )
 }
+
 export default BridgeActionButton
 

@@ -1,26 +1,32 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAccount, useBalance, usePublicClient, useWalletClient } from 'wagmi'
 import { ADDRESS } from '@/config'
-import { TestERC20Abi } from '@aztec/l1-artifacts'
-import { useAztecWallet } from './useAztecWallet'
-import { TokenContract } from '../constants/aztec/artifacts/Token'
-import { AztecAddress, EthAddress, L1TokenPortalManager } from '@aztec/aztec.js'
-import { truncateDecimals, wait } from '@/utils'
+import { useBridgeStore } from '@/stores/bridgeStore'
 import { useContractStore } from '@/stores/contractStore'
+import { useWalletStore } from '@/stores/walletStore'
+import { truncateDecimals, wait } from '@/utils'
+import { logError, logInfo } from '@/utils/datadog'
 import { logger } from '@/utils/logger'
-import { useToast, useToastQuery, useToastMutation } from './useToast'
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import {
+  AztecAddress,
+  EthAddress,
+  L1TokenPortalManager,
+  Fr,
+  computeSecretHash,
+  generateClaimSecret,
+} from '@aztec/aztec.js'
+import { TestERC20Abi, TokenPortalAbi } from '@aztec/l1-artifacts'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import { formatEther, formatUnits, getContract } from 'viem'
+import { usePublicClient, useWalletClient } from 'wagmi'
 import PortalSBTJson from '../constants/PortalSBT.json'
-import { toast } from 'react-toastify'
-import { formatEther, formatUnits } from 'viem'
-import { datadogLogs } from '@datadog/browser-logs'
-import { logInfo, logError } from '@/utils/datadog'
+import { useToast, useToastMutation, useToastQuery } from './useToast'
+import { extractEvent } from '@aztec/ethereum'
 
 // Fix the bytecode format
 const PortalSBTAbi = PortalSBTJson.abi
 
 export function useL1NativeBalance() {
-  const { address: l1Address } = useAccount()
+  const { metaMaskAddress: l1Address } = useWalletStore()
   const publicClient = usePublicClient()
   // const { data: nativeBalance } = useBalance({
   //   address: l1Address,
@@ -52,7 +58,7 @@ export function useL1NativeBalance() {
 // -----------------------------------
 
 export function useL1TokenBalance() {
-  const { address: l1Address } = useAccount()
+  const { metaMaskAddress: l1Address } = useWalletStore()
   const publicClient = usePublicClient()
 
   const queryKey = ['l1TokenBalance', l1Address]
@@ -84,7 +90,7 @@ export function useL1TokenBalance() {
 // -----------------------------------
 
 export function useL1Faucet() {
-  const { address: l1Address } = useAccount()
+  const { metaMaskAddress: l1Address } = useWalletStore()
   const queryClient = useQueryClient()
   const {
     data: nativeBalance,
@@ -124,7 +130,7 @@ export function useL1Faucet() {
   const requestFaucet = async () => {
     try {
       console.log('Requesting faucet funds...')
-      
+
       // Log faucet request with enhanced data
       logInfo('Faucet request initiated', {
         l1Address: l1Address,
@@ -132,7 +138,7 @@ export function useL1Faucet() {
         needsGas,
         needsTokens,
         network: 'Ethereum',
-        token: 'USDC'
+        token: 'USDC',
       })
 
       if (!l1Address) throw new Error('Wallet not connected')
@@ -235,7 +241,9 @@ export function useL1Faucet() {
 
             if (!response.ok) {
               const errorData = await response.json()
-              throw new Error(errorData.error || 'Failed to mint tokens via API')
+              throw new Error(
+                errorData.error || 'Failed to mint tokens via API'
+              )
             }
 
             const mintResult = await response.json()
@@ -257,7 +265,9 @@ export function useL1Faucet() {
             throw error
           }
         } else {
-          console.log('User still does not have enough gas for receiving tokens')
+          console.log(
+            'User still does not have enough gas for receiving tokens'
+          )
           throw new Error('Not enough ETH for gas to receive tokens')
         }
       }
@@ -265,7 +275,7 @@ export function useL1Faucet() {
       return { success: true }
     } catch (error) {
       console.error('Faucet request failed:', error)
-      
+
       // Log faucet failure with enhanced data
       logError('Faucet request failed', {
         l1Address: l1Address,
@@ -274,9 +284,9 @@ export function useL1Faucet() {
         needsTokens,
         network: 'Ethereum',
         token: 'USDC',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       })
-      
+
       throw error
     }
   }
@@ -286,7 +296,7 @@ export function useL1Faucet() {
       mutationFn: requestFaucet,
       onSuccess: (data) => {
         console.log('Faucet operations completed:', data)
-        
+
         // Log faucet success with enhanced data
         logInfo('Faucet request successful', {
           l1Address: l1Address,
@@ -295,7 +305,7 @@ export function useL1Faucet() {
           needsTokens,
           network: 'Ethereum',
           token: 'USDC',
-          success: data?.success
+          success: data?.success,
         })
 
         // Wait a short delay to allow the transaction to be processed
@@ -328,7 +338,7 @@ export function useL1Faucet() {
 
 // -----------------------------------
 export function useL1MintTokens() {
-  const { address: l1Address } = useAccount()
+  const { metaMaskAddress: l1Address } = useWalletStore()
   const publicClient = usePublicClient()
   const { data: walletClient } = useWalletClient()
   const queryClient = useQueryClient()
@@ -409,48 +419,26 @@ export function useL1MintTokens() {
 // -----------------------------------
 
 export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
-  const { address: l1Address, isConnected: isMetaMaskConnected } = useAccount()
-  const { account: aztecAccount, address: aztecAddress } = useAztecWallet()
+  const {
+    metaMaskAddress: l1Address,
+    isMetaMaskConnected,
+    aztecAddress,
+  } = useWalletStore()
   const publicClient = usePublicClient()
   const { data: walletClient } = useWalletClient()
   const queryClient = useQueryClient()
-  const toastIdRef = useRef<string | number | null>(null)
-
+  const { setProgressStep, setTransactionUrls } = useBridgeStore()
   const notify = useToast()
 
   const { l1ContractAddresses, l2BridgeContract } = useContractStore()
 
-  const getL1PortalManager = useCallback(() => {
-    if (
-      !publicClient ||
-      !walletClient ||
-      !l1ContractAddresses?.outboxAddress.toString()
-    ) {
-      console.log('Missing required dependencies for L1 portal manager')
-      return null
-    }
-
-    const manager = new L1TokenPortalManager(
-      EthAddress.fromString(ADDRESS[11155111].L1.PORTAL_CONTRACT),
-      EthAddress.fromString(ADDRESS[11155111].L1.TOKEN_CONTRACT),
-      EthAddress.fromString(ADDRESS[11155111].L1.FEE_ASSET_HANDLER_CONTRACT),
-      EthAddress.fromString(l1ContractAddresses?.outboxAddress.toString()),
-      // @ts-ignore
-      publicClient,
-      walletClient,
-      logger
-    )
-
-    return manager
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [publicClient, walletClient, l1ContractAddresses, isMetaMaskConnected])
-
-  const mutationFn = async (amount: bigint): Promise<string> => {
-    // For tracking toast progress
-    let progressInterval: NodeJS.Timeout | null = null
-
+  const mutationFn = async (amount: bigint): Promise<string | undefined> => {
     try {
-      if (!l1Address || !aztecAddress || !aztecAccount?.aztecNode) {
+      if (!l1Address || !aztecAddress) {
+        console.log({
+          l1Address,
+          aztecAddress,
+        })
         throw new Error('Required accounts not connected')
       }
 
@@ -468,15 +456,14 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         throw new Error('Wallet client not connected')
       }
 
-      // Check if contract store is properly initialized
       if (!l1ContractAddresses?.outboxAddress) {
         throw new Error(
           'L1 contract addresses not initialized. Please wait for contract initialization to complete.'
         )
       }
 
+      setProgressStep(1, 'active')
       console.log('Initiating bridge tokens to L2...')
-      // Log bridge initiation with enhanced data
       logInfo('Bridge from L1 to L2 initiated', {
         direction: 'L1_TO_L2',
         fromNetwork: 'Ethereum',
@@ -487,176 +474,206 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         l1Address: l1Address,
         l2Address: aztecAddress,
       })
-      
-      const manager = getL1PortalManager()
-      if (!manager) {
-        throw new Error('Failed to create L1 portal manager')
+
+      const l1TokenAddress = ADDRESS[11155111].L1
+        .TOKEN_CONTRACT as `0x${string}`
+      const l1PortalAddress = ADDRESS[11155111].L1
+        .PORTAL_CONTRACT as `0x${string}`
+
+      // const l2TokenAddress = ADDRESS[11155111].L2.TOKEN_CONTRACT
+      // const l2PortalAddress = ADDRESS[11155111].L2.PORTAL_CONTRACT
+
+      // Get token contract instance
+      const tokenContract = getContract({
+        address: l1TokenAddress,
+        abi: TestERC20Abi,
+        client: walletClient,
+      })
+
+      // Get portal contract instance
+      const portalContract = getContract({
+        address: l1PortalAddress,
+        abi: TokenPortalAbi,
+        client: walletClient,
+      })
+
+      // Check allowance
+      const userAddress = walletClient.account.address
+      const allowance = await tokenContract.read.allowance([
+        userAddress,
+        l1PortalAddress,
+      ])
+
+      // Approve tokens if necessary
+      if (allowance < amount) {
+        const approveTxHash = await tokenContract.write.approve([
+          l1PortalAddress,
+          amount,
+        ])
+        const approveReceipt = await publicClient.waitForTransactionReceipt({
+          hash: approveTxHash,
+        })
+        console.log('🚀MMM - ~ approveReceipt:', approveReceipt.transactionHash)
       }
 
-      // First toast notification for initiating the bridge
-      notify('info', 'Initiating bridge L1 transaction...')
+      const [claimSecret, claimSecretHash] = await generateClaimSecret()
 
-      const claim = await manager.bridgeTokensPublic(
-        AztecAddress.fromString(aztecAddress as string),
+      // // Generate claim secret using Ethereum wallet signature
+      // const message = `Bridge to Aztec: ${amount.toString()} tokens to ${aztecAddress}`
+      // const signature = await walletClient.signMessage({ message })
+      // console.log('signature ', signature)
+
+      // // Use the signature as the claim secret and compute its hash
+      // const claimSecret = Fr.fromString(signature)
+      // console.log('claimSecret ', claimSecret)
+      // const claimSecretHash = await computeSecretHash(claimSecret)
+      // console.log('claimSecretHash ', claimSecretHash)
+
+      // Bridge tokens
+      const { request } = await portalContract.simulate.depositToAztecPublic([
+        aztecAddress as `0x${string}`,
         amount,
-        false // mint
+        claimSecretHash.toString(),
+      ])
+
+      const txHash = await walletClient.writeContract(request)
+      const txReceipt = await publicClient.waitForTransactionReceipt({
+        hash: txHash,
+      })
+
+      const l1TxHash = txReceipt.transactionHash.toString()
+      const l1TxUrl = `https://sepolia.etherscan.io/tx/${l1TxHash}`
+
+      setTransactionUrls(l1TxUrl, null)
+
+      // Extract the event to get the message hash and leaf index
+      const log = extractEvent(
+        txReceipt.logs,
+        portalContract.address,
+        portalContract.abi,
+        'DepositToAztecPublic',
+        (log) =>
+          log.args.secretHash === claimSecretHash.toString() &&
+          log.args.amount === amount &&
+          log.args.to === aztecAddress
       )
 
-      // console.log('Bridge claim created:', {
-      //   claimSecret: claim.claimSecret.toString(),
-      //   messageLeafIndex: claim.messageLeafIndex.toString()
-      // })
+      const messageHash = log.args.key
+      const messageLeafIndex = log.args.index
+      const claimAmount = amount
 
-      console.log('Waiting 2 minutes before proceeding...')
+      // Store claim data in localStorage
+      const claimData = {
+        id: Date.now().toString(), // Unique identifier for this attempt
+        claimAmount: claimAmount.toString(),
+        claimSecret: claimSecret.toString(),
+        claimSecretHash: claimSecretHash.toString(),
+        messageHash: messageHash,
+        messageLeafIndex: messageLeafIndex.toString(),
+        timestamp: Date.now(),
+        l1Address,
+        l2Address: aztecAddress,
+        success: false, // Initial state
+        l1TxHash: l1TxHash,
+        l1TxUrl: l1TxUrl,
+      }
 
-      // Create a toast with progress bar for the 2-minute wait
-      toastIdRef.current = toast('Waiting for transaction to be confirmed...', {
-        progress: 0,
-        closeButton: false,
-        autoClose: false,
-      })
+      // Get existing claims or initialize empty array
+      const existingClaims = localStorage.getItem('l1ToL2Claims')
+      const claims = existingClaims ? JSON.parse(existingClaims) : []
 
-      // Show progress during the wait
-      const totalWaitTime = 120000 // 2 minutes in ms
-      const stepTime = 1000 // Update every second
-      let elapsedTime = 0
+      // Add new claim to array
+      claims.push(claimData)
+      localStorage.setItem('l1ToL2Claims', JSON.stringify(claims))
 
-      while (elapsedTime < totalWaitTime) {
-        await wait(stepTime)
-        elapsedTime += stepTime
-        const progress = elapsedTime / totalWaitTime
+      // Step 2: Waiting for Ethereum confirmation
+      setProgressStep(1, 'completed')
+      setProgressStep(2, 'active')
+      console.log('Waiting for Ethereum confirmation...')
+      await wait(120000) // 2 minutes
 
-        // Update progress
-        if (toastIdRef.current !== null) {
-          toast.update(toastIdRef.current, {
-            progress: progress,
-            render: `Waiting for transaction to be confirmed... ${Math.round(
-              progress * 100
-            )}%`,
-          })
+      // Step 3: Claiming tokens on Aztec Network
+      setProgressStep(2, 'completed')
+      setProgressStep(3, 'active')
+
+      try {
+        const sendResult = l2BridgeContract.methods
+          .claim_public(
+            AztecAddress.fromString(aztecAddress),
+            amount,
+            claimSecret,
+            messageLeafIndex
+          )
+          .send()
+
+        const claimReceipt = await sendResult.wait({ timeout: 200000 })
+        console.log('l2 claimReceipt ', claimReceipt)
+
+        const l2TxHash = claimReceipt.txHash.toString()
+        const l2TxUrl = `https://aztecscan.xyz/tx-effects/${l2TxHash}`
+
+        setTransactionUrls(l1TxUrl, l2TxUrl)
+
+        // Update claim data with success and L2 transaction info
+        const updatedClaimData = {
+          ...claimData,
+          success: true,
+          l2TxHash: l2TxHash,
+          l2TxUrl: l2TxUrl,
+          completedAt: Date.now(),
         }
-      }
 
-      // Complete the waiting toast
-      if (toastIdRef.current !== null) {
-        toast.done(toastIdRef.current as number | string)
-        toast.dismiss(toastIdRef.current as number | string)
-        toastIdRef.current = null
-      }
-
-      console.log('Starting claim_public transaction...')
-
-      // Create a new toast for the claim_public process
-      toastIdRef.current = toast('Processing L2 claim transaction...', {
-        progress: 0,
-        closeButton: false,
-        autoClose: false,
-      })
-
-      // notify('info', 'Claiming tokens on Aztec...')
-
-      // Type assertion to ensure l2BridgeContract is not null
-      if (!l2BridgeContract) {
-        throw new Error('L2 bridge contract is null')
-      }
-
-      // Start the claim transaction
-      const sendResult = l2BridgeContract.methods
-        .claim_public(
-          AztecAddress.fromString(aztecAddress as string),
-          amount,
-          claim.claimSecret,
-          claim.messageLeafIndex
+        // Update the specific claim in the array
+        const updatedClaims = claims.map((c: any) =>
+          c.id === claimData.id ? updatedClaimData : c
         )
-        .send()
+        localStorage.setItem('l1ToL2Claims', JSON.stringify(updatedClaims))
 
-      // Update toast to 25% to indicate transaction is sent
-      if (toastIdRef.current !== null) {
-        toast.update(toastIdRef.current, {
-          progress: 0.25,
-          render: 'Aztec transaction sent, waiting for confirmation...',
-        })
-      }
+        // Step 4: Bridge Complete
+        setProgressStep(3, 'completed')
+        setProgressStep(4, 'active')
 
-      // Create a progress simulation for the waiting period
-      let simulatedProgress = 0.25
-      progressInterval = setInterval(() => {
-        // Increment progress smoothly from 25% to 90%
-        if (simulatedProgress < 0.9) {
-          simulatedProgress += 0.01
-
-          if (toastIdRef.current !== null) {
-            toast.update(toastIdRef.current, {
-              progress: simulatedProgress,
-              render: `Aztec transaction in progress... ${Math.round(
-                simulatedProgress * 100
-              )}%`,
-            })
-          }
-        }
-      }, 2000) // Update every half second
-
-      // Wait for transaction confirmation
-      const claimReceipt = await sendResult.wait({ timeout: 200000 })
-
-      // Update toast to 100% to indicate transaction is completed
-      if (toastIdRef.current !== null) {
-        toast.update(toastIdRef.current, {
-          progress: 1,
-          render: 'Bridge completed successfully!',
+        logInfo('Bridge from L1 to L2 completed', {
+          direction: 'L1_TO_L2',
+          fromNetwork: 'Ethereum',
+          toNetwork: 'Aztec',
+          fromToken: 'USDC',
+          toToken: 'USDC',
+          amount: amount?.toString(),
+          l1Address: l1Address,
+          l2Address: aztecAddress?.toString(),
+          txHash: l2TxHash,
+          aztecscanUrl: l2TxUrl,
         })
 
-        // Auto-dismiss after 3 seconds
-        setTimeout(() => {
-          if (toastIdRef.current !== null) {
-            toast.done(toastIdRef.current as number | string)
-            toast.dismiss(toastIdRef.current as number | string)
-            toastIdRef.current = null
-          }
-        }, 3000)
+        await wait(3000)
+        setProgressStep(4, 'completed')
+
+        return l2TxHash
+      } catch (error) {
+        // If claim_public fails, keep the data in localStorage
+        console.error('Claim public failed:', error)
+        throw error
       }
-
-      const txHash = claimReceipt.txHash.toString()
-      console.log('txHash ', txHash)
-
-      // Create an Aztecscan URL for the transaction
-      const aztecscanUrl = `https://aztecscan.xyz/tx-effects/${txHash}`
-      console.log('View transaction on Aztecscan:', aztecscanUrl)
-
-      // Log successful bridge with enhanced data
-      logInfo('Bridge from L1 to L2 completed', {
-        direction: 'L1_TO_L2',
-        fromNetwork: 'Ethereum',
-        toNetwork: 'Aztec',
-        fromToken: 'USDC',
-        toToken: 'USDC',
-        amount: amount?.toString(),
-        l1Address: l1Address,
-        l2Address: aztecAddress?.toString(),
-        txHash: txHash,
-        aztecscanUrl,
-      })
-
-      return txHash
     } catch (error) {
-      // Clean up any active intervals
-      if (progressInterval) {
-        clearInterval(progressInterval)
-      }
-      
-      // Check for specific error signatures
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      // Check for the functionSelector error (network congestion)
-      if (errorMessage.includes('"path":["revertReason","functionErrorStack",0,"functionSelector"]') || 
-          errorMessage.includes('invalid_type') && errorMessage.includes('functionSelector')) {
-        
-        // Show congestion error toast
-        notify('error', 'The Aztec Testnet is congested right now. Unfortunately your transaction was dropped.', {
-          autoClose: false,
-        });
-        
-        // Log bridge failure with network congestion data
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
+
+      if (
+        errorMessage.includes(
+          '"path":["revertReason","functionErrorStack",0,"functionSelector"]'
+        ) ||
+        (errorMessage.includes('invalid_type') &&
+          errorMessage.includes('functionSelector'))
+      ) {
+        notify(
+          'error',
+          'The Aztec Testnet is congested right now. Unfortunately your transaction was dropped.',
+          {
+            autoClose: false,
+          }
+        )
+
         logError('Bridge from L1 to L2 failed due to network congestion', {
           direction: 'L1_TO_L2',
           fromNetwork: 'Ethereum',
@@ -667,20 +684,21 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           l1Address: l1Address,
           l2Address: aztecAddress?.toString(),
           error: 'Network congestion caused transaction to be dropped',
-          errorType: 'congestion'
-        });
-        
-        throw new Error('The Aztec Testnet is congested right now. Unfortunately your transaction was dropped.');
-      }
-      // Check for the 0xfb8f41b2 error signature
-      else if (errorMessage.includes('0xfb8f41b2')) {
-        
-        // Show a specific error toast for this case
-        notify('error', 'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page and try with a 25% smaller amount.', {
-          autoClose: false,
-        });
-        
-        // Log bridge failure with specialized error data
+          errorType: 'congestion',
+        })
+
+        throw new Error(
+          'The Aztec Testnet is congested right now. Unfortunately your transaction was dropped.'
+        )
+      } else if (errorMessage.includes('0xfb8f41b2')) {
+        notify(
+          'error',
+          'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page ',
+          {
+            autoClose: 5000,
+          }
+        )
+
         logError('Bridge from L1 to L2 failed with contract error', {
           direction: 'L1_TO_L2',
           fromNetwork: 'Ethereum',
@@ -690,56 +708,46 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           amount: amount.toString(),
           l1Address: l1Address,
           l2Address: aztecAddress?.toString(),
-          error: 'Contract reverted with signature 0xfb8f41b2. Recommend reload and smaller amount.',
-          errorSignature: '0xfb8f41b2'
-        });
-        
-        throw new Error('Bridge transaction failed (error: 0xfb8f41b2). Please reload the page and try with a 25% smaller amount.');
+          error:
+            'Contract reverted with signature 0xfb8f41b2. Recommend reload.',
+          errorSignature: '0xfb8f41b2',
+        })
+        // throw new Error(
+        //   'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page and try with a 25% smaller amount.'
+        // )
+      } else {
+        // For any other errors, show a generic error message
+        notify('error', errorMessage, {
+          autoClose: 5000,
+        })
+
+        logError('Bridge from L1 to L2 failed', {
+          direction: 'L1_TO_L2',
+          fromNetwork: 'Ethereum',
+          toNetwork: 'Aztec',
+          fromToken: 'USDC',
+          toToken: 'USDC',
+          amount: amount.toString(),
+          l1Address: l1Address,
+          l2Address: aztecAddress?.toString(),
+          error: error instanceof Error ? error.message : 'Unknown error',
+        })
+
+        throw error
       }
-      
-      // Regular error logging for other errors
-      logError('Bridge from L1 to L2 failed', {
-        direction: 'L1_TO_L2',
-        fromNetwork: 'Ethereum',
-        toNetwork: 'Aztec',
-        fromToken: 'USDC',
-        toToken: 'USDC',
-        amount: amount.toString(),
-        l1Address: l1Address,
-        l2Address: aztecAddress?.toString(),
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      
-      throw error;
     }
   }
 
-  return useToastMutation({
+  return useMutation({
     mutationFn,
     onSuccess: (txHash) => {
       console.log('Refetching balances after successful mint')
       queryClient.invalidateQueries({ queryKey: [l1Address] })
       queryClient.invalidateQueries({ queryKey: [aztecAddress] })
 
-      // Show a notification with the transaction link info
-      // Using the toast library directly for more control
-      toast.info(`Bridge complete! Click to view on Aztecscan`, {
-        onClick: () => {
-          window.open(`https://aztecscan.xyz/tx-effects/${txHash}`, '_blank')
-        },
-        autoClose: 10000, // 10 seconds
-        closeOnClick: false,
-        style: { cursor: 'pointer' },
-      })
-
       if (onBridgeSuccess) {
         onBridgeSuccess(txHash)
       }
-    },
-    toastMessages: {
-      pending: 'Bridging tokens to Aztec...',
-      success: 'Tokens successfully bridged to L2!',
-      error: 'Failed to bridge tokens',
     },
   })
 }
@@ -750,7 +758,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
  * Hook to check if an address has a soulbound token on L1
  */
 export function useL1HasSoulboundToken() {
-  const { address: l1Address } = useAccount()
+  const { metaMaskAddress: l1Address } = useWalletStore()
   const publicClient = usePublicClient()
 
   const queryKey = ['l1HasSoulboundToken', l1Address]
@@ -789,7 +797,7 @@ export function useL1HasSoulboundToken() {
  * Hook to mint a soulbound token on L1
  */
 export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
-  const { address: l1Address } = useAccount()
+  const { metaMaskAddress: l1Address } = useWalletStore()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
   const queryClient = useQueryClient()

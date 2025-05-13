@@ -25,7 +25,9 @@ export function Providers({
         refetchOnWindowFocus: true, // Refetch when window regains focus
         refetchOnReconnect: true, // Refetch when network reconnects
         retry: 2, // Retry failed requests twice
-        retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+        // retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+        retryDelay: 30000, // 30 seconds
+
         // placeholderData:true,
         // Add meta flag for queries we want to persist
         meta: {

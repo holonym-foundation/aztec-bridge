@@ -1,26 +1,23 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
 import { ADDRESS } from '@/config'
-import { TestERC20Abi } from '@aztec/l1-artifacts'
-import { useAztecWallet } from './useAztecWallet'
-import { TokenContract } from '../constants/aztec/artifacts/Token'
+import { useBridgeStore } from '@/stores/bridgeStore'
+import { useContractStore } from '@/stores/contractStore'
+import { useWalletStore } from '@/stores/walletStore'
+import { logError, logInfo } from '@/utils/datadog'
+import { logger } from '@/utils/logger'
 import {
   AztecAddress,
   EthAddress,
   Fr,
   L1TokenPortalManager,
-  readFieldCompressedString,
 } from '@aztec/aztec.js'
-import { useContractStore } from '@/stores/contractStore'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { formatUnits, parseUnits } from 'viem'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useToast, useToastQuery, useToastMutation } from './useToast'
-import { IntentAction } from '@nemi-fi/wallet-sdk'
-import { logger } from '@/utils/logger'
+import { usePublicClient, useWalletClient } from 'wagmi'
+import { useToast, useToastMutation } from './useToast'
 import { wait } from '@/utils'
-import { toast } from 'react-toastify'
-import { datadogLogs } from '@datadog/browser-logs'
-import { logInfo, logError } from '@/utils/datadog'
+import { useL2ErrorHandler } from '@/utils/l2ErrorHandler'
+import { useMutation } from '@tanstack/react-query'
 
 // Define types for balance queries
 export interface L2TokenBalanceData {
@@ -29,9 +26,9 @@ export interface L2TokenBalanceData {
 }
 
 export const useL2NativeBalance = () => {
-  const { account: aztecAccount, address, isConnected } = useAztecWallet()
+  const { aztecAddress, isAztecConnected } = useWalletStore()
 
-  const queryKey = ['l2NativeBalance', address]
+  const queryKey = ['l2NativeBalance', aztecAddress]
   const queryFn = async () => {
     return 0
   }
@@ -39,19 +36,16 @@ export const useL2NativeBalance = () => {
   return useQuery({
     queryKey,
     queryFn,
-    enabled: !!isConnected,
+    enabled: !!isAztecConnected,
   })
 }
 
 // -----------------------------------
 
 export const useL2TokenBalance = () => {
-  const {
-    account: aztecAccount,
-    address: aztecAddress,
-    isConnected,
-  } = useAztecWallet()
+  const { aztecAddress, isAztecConnected } = useWalletStore()
   const { l2TokenContract, l2TokenMetadata } = useContractStore()
+  const handleL2Error = useL2ErrorHandler()
 
   // Create a stable query key that doesn't change with renders
   const queryKey = ['l2TokenBalance', aztecAddress]
@@ -97,11 +91,8 @@ export const useL2TokenBalance = () => {
         privateBalance: privateBalanceFormat,
       }
     } catch (error) {
-      console.log('Error fetching L2 token balance:', error)
-      return {
-        publicBalance: '0',
-        privateBalance: '0',
-      }
+      handleL2Error<L2TokenBalanceData>(error, 'BALANCE')
+      throw error
     }
   }
 
@@ -117,7 +108,7 @@ export const useL2TokenBalance = () => {
 }
 
 export function useL1ContractAddresses() {
-  const { account: aztecAccount, isConnected } = useAztecWallet()
+  const { aztecAccount, isAztecConnected } = useWalletStore()
 
   const queryKey = ['l1ContractAddresses']
   const queryFn = async () => {
@@ -127,12 +118,12 @@ export function useL1ContractAddresses() {
   return useQuery({
     queryKey,
     queryFn,
-    enabled: isConnected,
+    enabled: isAztecConnected,
   })
 }
 
 export function useL2NodeInfo() {
-  const { account: aztecAccount, isConnected } = useAztecWallet()
+  const { aztecAccount, isAztecConnected } = useWalletStore()
   const queryKey = ['nodeInfo']
   const queryFn = async () => {
     if (!aztecAccount?.aztecNode) return null
@@ -141,12 +132,12 @@ export function useL2NodeInfo() {
   return useQuery({
     queryKey,
     queryFn,
-    enabled: isConnected,
+    enabled: isAztecConnected,
   })
 }
 
 export function useL2NodeIsReady() {
-  const { account: aztecAccount, isConnected } = useAztecWallet()
+  const { aztecAccount, isAztecConnected } = useWalletStore()
   const queryKey = ['nodeIsReady']
   const queryFn = async () => {
     if (!aztecAccount?.aztecNode) return null
@@ -155,14 +146,14 @@ export function useL2NodeIsReady() {
   return useQuery({
     queryKey,
     queryFn,
-    enabled: isConnected,
+    enabled: isAztecConnected,
   })
 }
 
 // -----------------------------------
 
 export function useL2TokenInfo() {
-  const { account: aztecAccount, isConnected } = useAztecWallet()
+  const { aztecAccount, isAztecConnected } = useWalletStore()
 
   const queryKey = ['l2TokenInfo']
   const queryFn = async () => {}
@@ -170,20 +161,20 @@ export function useL2TokenInfo() {
   return useQuery({
     queryKey,
     queryFn,
-    enabled: isConnected,
+    enabled: isAztecConnected,
   })
 }
 
 // -----------------------------------
 
 export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
-  const { address: l1Address } = useAccount()
-  const { account: aztecAccount, address: aztecAddress } = useAztecWallet()
+  const { metaMaskAddress: l1Address } = useWalletStore()
+  const { aztecAddress, aztecAccount } = useWalletStore()
   const publicClient = usePublicClient()
   const { data: walletClient } = useWalletClient()
   const queryClient = useQueryClient()
-  const toastIdRef = useRef<string | number | null>(null)
   const notify = useToast()
+  const { setProgressStep, setTransactionUrls } = useBridgeStore()
 
   const { l1ContractAddresses, l2TokenContract, l2BridgeContract } =
     useContractStore()
@@ -213,9 +204,6 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
   }, [publicClient, walletClient, l1ContractAddresses])
 
   const mutationFn = async (amount: bigint) => {
-    // For tracking toast progress
-    let progressInterval: NodeJS.Timeout | null = null
-
     try {
       if (!l1Address || !aztecAddress || !aztecAccount?.aztecNode) {
         throw new Error('Required accounts not connected')
@@ -240,48 +228,17 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         l2Address: aztecAddress,
       })
 
-      // Create initial toast notification
-      toastIdRef.current = toast('Preparing withdrawal process...', {
-        progress: 0.1,
-        closeButton: false,
-        autoClose: false,
-      })
-
       const manager = getL1PortalManager()
       if (!manager) {
         throw new Error('Failed to create L1 portal manager')
       }
 
-      console.log('Generating nonce for withdrawal...')
+      // Step 1: Setting up authorization for withdrawal
+      setProgressStep(1, 'active')
+      console.log('Setting up authorization for withdrawal...')
       const isPrivate = true
       const withAuthWitness = true
       const nonce = Fr.random()
-
-      // Update toast progress
-      if (toastIdRef.current !== null) {
-        toast.update(toastIdRef.current, {
-          progress: 0.2,
-          render: 'Setting up authorization for withdrawal...',
-        })
-      }
-
-      console.log('Setting up authorization...')
-      // let authwitRequests: IntentAction[] | undefined = undefined
-      // if (withAuthWitness) {
-      //   authwitRequests = [
-      //     {
-      //       caller: l2BridgeContract.address,
-      //       action: await l2TokenContract.methods
-      //         .burn_public(
-      //           AztecAddress.fromString(aztecAccount.address.toString()),
-      //           amount,
-      //           nonce
-      //         )
-      //         .request(),
-      //     },
-      //   ]
-      // }
-      // console.log('authwitRequests: ', authwitRequests)
 
       // Give approval to bridge to burn owner's funds:
       const authwit = await aztecAccount.setPublicAuthWit(
@@ -298,34 +255,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         true
       )
 
-      // Create a progress simulation for the waiting period
-      let simulatedProgressAuth = 0.25
-      progressInterval = setInterval(() => {
-        // Increment progress smoothly from 25% to 90%
-        if (simulatedProgressAuth < 0.9) {
-          simulatedProgressAuth += 0.01
-
-          if (toastIdRef.current !== null) {
-            toast.update(toastIdRef.current, {
-              progress: simulatedProgressAuth,
-              render: `Setting up authorization for withdrawal... ${Math.round(
-                simulatedProgressAuth * 100
-              )}%`,
-            })
-          }
-        }
-      }, 2000) // Update every half second
-
       await authwit.send().wait({ timeout: 120000 })
+      setProgressStep(1, 'completed')
 
-      // Update toast progress
-      if (toastIdRef.current !== null) {
-        toast.update(toastIdRef.current, {
-          progress: 0.4,
-          render: 'Preparing withdrawal message...',
-        })
-      }
-
+      // Step 2: Preparing withdrawal message
+      setProgressStep(2, 'active')
       console.log('Getting L2 to L1 message...')
       const l2ToL1Message = await manager.getL2ToL1MessageLeaf(
         amount,
@@ -334,37 +268,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         EthAddress.ZERO
       )
       console.log('Retrieved L2 to L1 message: ', l2ToL1Message.toString())
+      setProgressStep(2, 'completed')
 
-      // notify('info', `L2 to L1 message retrieved: ${l2ToL1Message.toString()}`)
-
-      // Update toast progress
-      if (toastIdRef.current !== null) {
-        toast.update(toastIdRef.current, {
-          progress: 0.5,
-          render: 'Initiating exit transaction on Aztec...',
-        })
-      }
-
-      // Create a progress simulation for the transaction wait
-      let simulatedProgress = 0.5
-      progressInterval = setInterval(() => {
-        // Increment progress smoothly from 50% to 70%
-        if (simulatedProgress < 0.7) {
-          simulatedProgress += 0.005
-
-          if (toastIdRef.current !== null) {
-            toast.update(toastIdRef.current, {
-              progress: simulatedProgress,
-              render: `Processing Aztec transaction... ${Math.round(
-                simulatedProgress * 100
-              )}%`,
-            })
-          }
-        }
-      }, 1000)
-
+      // Step 3: Initiating exit to Ethereum
+      setProgressStep(3, 'active')
       console.log('Initiating exit to L1...')
-      notify('info', `Initiating exit to L1...`)
 
       const l2TxReceipt = await l2BridgeContract.methods
         .exit_to_l1_public(
@@ -372,43 +280,50 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
           amount,
           EthAddress.ZERO,
           nonce
-          // { authWitnesses: authwitRequests }
         )
         .send()
         .wait({
           timeout: 200000,
         })
 
-      // Clear the interval and update progress
-      if (progressInterval) {
-        clearInterval(progressInterval)
-        progressInterval = null
+      // Store L2 to L1 message and transaction receipt in localStorage
+      const withdrawalData = {
+        id: Date.now().toString(), // Unique identifier for this attempt
+        l2ToL1Message: l2ToL1Message.toString(),
+        l2TxReceipt: {
+          txHash: l2TxReceipt.txHash.toString(),
+          blockNumber: l2TxReceipt.blockNumber?.toString(),
+        },
+        timestamp: Date.now(),
+        amount: amount.toString(),
+        l1Address,
+        l2Address: aztecAddress,
+        nonce: nonce.toString(),
+        success: false, // Initial state
+        l2TxHash: l2TxReceipt.txHash.toString(),
+        l2TxUrl: `https://aztecscan.xyz/tx-effects/${l2TxReceipt.txHash.toString()}`,
       }
 
-      // Update progress to show completion of Aztec transaction
-      if (toastIdRef.current !== null) {
-        toast.update(toastIdRef.current, {
-          progress: 0.7,
-          render:
-            'Aztec transaction confirmed! Preparing Ethereum withdrawal...',
-        })
-      }
+      // Get existing withdrawals or initialize empty array
+      const existingWithdrawals = localStorage.getItem('l2ToL1Withdrawals')
+      const withdrawals = existingWithdrawals
+        ? JSON.parse(existingWithdrawals)
+        : []
+
+      // Add new withdrawal to array
+      withdrawals.push(withdrawalData)
+      localStorage.setItem('l2ToL1Withdrawals', JSON.stringify(withdrawals))
 
       console.log('Exit to L1 transaction completed', {
         txReceipt: l2TxReceipt,
       })
+      setProgressStep(3, 'completed')
 
-      // Update toast progress
-      if (toastIdRef.current !== null) {
-        toast.update(toastIdRef.current, {
-          progress: 0.8,
-          render: 'Getting proof for Ethereum withdrawal...',
-        })
-      }
-
+      // Step 4: Getting proof for Ethereum withdrawal
+      setProgressStep(4, 'active')
       console.log('Getting L2 to L1 message membership witness...')
       const [l2ToL1MessageIndex, siblingPath] =
-        await aztecAccount?.aztecNode.getL2ToL1MessageMembershipWitness(
+        await aztecAccount.aztecNode.getL2ToL1MessageMembershipWitness(
           Number(l2TxReceipt.blockNumber!),
           l2ToL1Message
         )
@@ -416,102 +331,59 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         messageIndex: l2ToL1MessageIndex,
         siblingPath: siblingPath.toString(),
       })
+      setProgressStep(4, 'completed')
 
-      // Update toast progress
-      if (toastIdRef.current !== null) {
-        toast.update(toastIdRef.current, {
-          progress: 0.9,
-          render: 'Waiting for L1 confirmation (40 minutes)...',
-        })
-        // Close this toast after a short delay
-        setTimeout(() => {
-          toast.dismiss(toastIdRef.current as number | string)
-          toastIdRef.current = null
-        }, 2000)
-      }
+      // Step 5: Waiting for Ethereum confirmation
+      setProgressStep(5, 'active')
+      console.log('Waiting for L1 confirmation (40 minutes)...')
+      await new Promise((resolve) => setTimeout(resolve, 40 * 60 * 1000))
+      setProgressStep(5, 'completed')
 
-      // Create a new toast for the 40-minute wait
-      const waitToastId = toast('Waiting for L1 confirmation...', {
-        progress: 0,
-        autoClose: false,
-        closeButton: false,
-      })
-
-      // Start the 40-minute wait progress
-      const waitTime = 40 * 60 * 1000 // 40 minutes in milliseconds
-      const startTime = Date.now()
-      const endTime = startTime + waitTime
-
-      // Update progress every 30 seconds
-      progressInterval = setInterval(() => {
-        const currentTime = Date.now()
-        const elapsed = currentTime - startTime
-        const progress = Math.min(elapsed / waitTime, 0.99) // Progress from 0% to 99%
-
-        const minutesRemaining = Math.ceil(
-          (endTime - currentTime) / (60 * 1000)
-        )
-        toast.update(waitToastId, {
-          progress,
-          render: `Waiting for L1 confirmation (${minutesRemaining} minutes remaining)...`,
-        })
-      }, 30000) // Update every 30 seconds
-
-      // Wait for the full 40 minutes
-      await new Promise((resolve) => setTimeout(resolve, waitTime))
-      if (progressInterval) {
-        clearInterval(progressInterval)
-        progressInterval = null
-      }
-
-      // Show completion message
-      toast.update(waitToastId, {
-        progress: 1,
-        render: '✅ L1 confirmation complete!',
-        autoClose: 10000, // 10 seconds
-      })
-
-      // Create a new toast for the next steps
-      const nextStepsToastId = toast('Proceeding with withdrawal...', {
-        progress: 0,
-        autoClose: false,
-        closeButton: false,
-      })
-
-      await wait(5000)
+      // Step 6: Claiming tokens on Ethereum
+      setProgressStep(6, 'active')
       console.log('Initiating withdrawal on L1...')
+      try {
+        await manager.withdrawFunds(
+          amount,
+          EthAddress.fromString(l1Address),
+          BigInt(l2TxReceipt.blockNumber!),
+          l2ToL1MessageIndex,
+          siblingPath
+        )
 
-      // Update toast progress
-      toast.update(nextStepsToastId, {
-        progress: 0.2,
-        render: 'Initiating withdrawal on L1...',
-      })
+        // Update withdrawal data with success
+        const updatedWithdrawalData = {
+          ...withdrawalData,
+          success: true,
+          completedAt: Date.now(),
+          l1TxHash: l2TxReceipt.txHash.toString(), // Using L2 tx hash as reference
+          l1TxUrl: `https://sepolia.etherscan.io/tx/${l2TxReceipt.txHash.toString()}`,
+        }
 
-      // we need to wait for 20 to 40 minutes for the transaction to be confirmed on L1
-      await manager.withdrawFunds(
-        amount,
-        EthAddress.fromString(l1Address),
-        BigInt(l2TxReceipt.blockNumber!),
-        l2ToL1MessageIndex,
-        siblingPath
-      )
+        // Update the specific withdrawal in the array
+        const updatedWithdrawals = withdrawals.map((w: any) =>
+          w.id === withdrawalData.id ? updatedWithdrawalData : w
+        )
+        localStorage.setItem(
+          'l2ToL1Withdrawals',
+          JSON.stringify(updatedWithdrawals)
+        )
 
-      // Update toast to show completion
-      toast.update(nextStepsToastId, {
-        progress: 1,
-        render: '✅ Withdrawal complete!',
-        autoClose: 10000, // 10 seconds
-      })
+        // Clear withdrawal data from localStorage on success
+        localStorage.removeItem('l2ToL1Withdrawals')
+      } catch (error) {
+        // If withdrawal fails, keep the data in localStorage
+        const errorMessage =
+          error instanceof Error ? error.message : String(error)
 
-      // Clean up all toasts
-      if (toastIdRef.current) {
-        toast.dismiss(toastIdRef.current)
+        // console.error('Withdrawal failed:', error)
+        notify('error', `Failed to withdraw tokens. ${errorMessage}`)
+        throw error
       }
-      if (waitToastId) {
-        toast.dismiss(waitToastId)
-      }
-      toast.dismiss(nextStepsToastId)
+      setProgressStep(6, 'completed')
 
+      // Step 7: Withdrawal Complete
+      setProgressStep(7, 'active')
       console.log('Withdrawal completed successfully')
 
       const txHash = l2TxReceipt.txHash.toString()
@@ -521,17 +393,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       const aztecscanUrl = `https://aztecscan.xyz/tx-effects/${txHash}`
       console.log('View transaction on Aztecscan:', aztecscanUrl)
 
-      // Show a notification with the transaction link info
-      setTimeout(() => {
-        toast.info(`View withdrawal transaction on Aztecscan`, {
-          onClick: () => {
-            window.open(aztecscanUrl, '_blank')
-          },
-          autoClose: 10000,
-          closeOnClick: false,
-          style: { cursor: 'pointer' },
-        })
-      }, 1000)
+      // Set transaction URLs in the store
+      setTransactionUrls(null, aztecscanUrl)
 
       // Log successful withdrawal with enhanced data
       logInfo('Withdrawal from L2 to L1 completed', {
@@ -547,26 +410,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         aztecscanUrl,
       })
 
-      console.log(
-        'All done. Completing withdrawal with transaction hash:',
-        txHash
-      )
-      // toast.dismiss(toastIdRef.current as string | number)
+      await wait(3000)
+      setProgressStep(7, 'completed')
 
       return txHash
     } catch (error) {
-      // Clean up any intervals
-      if (progressInterval) {
-        clearInterval(progressInterval)
-        progressInterval = null
-      }
-
-      // Clean up any pending toast on error
-      if (toastIdRef.current !== null) {
-        toast.dismiss(toastIdRef.current as number | string)
-        toastIdRef.current = null
-      }
-
       // Log withdrawal failure with enhanced data
       logError('Withdrawal from L2 to L1 failed', {
         direction: 'L2_TO_L1',
@@ -580,6 +428,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         error: error instanceof Error ? error.message : 'Unknown error',
       })
 
+      // Show error notification
+      notify('error', 'Failed to withdraw tokens. Please try again.')
       throw error
     }
   }
@@ -623,7 +473,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
  * Hook to check if an address has a soulbound token on L2
  */
 export function useL2HasSoulboundToken() {
-  const { address: aztecAddress } = useAztecWallet()
+  const { aztecAddress } = useWalletStore()
 
   const queryKey = ['l2HasSoulboundToken', aztecAddress]
   const queryFn = async () => {
@@ -648,7 +498,7 @@ export function useL2HasSoulboundToken() {
  * Hook to mint a soulbound token on L2
  */
 export function useL2MintSoulboundToken(onSuccess: (data: any) => void) {
-  const { address: aztecAddress } = useAztecWallet()
+  const { aztecAddress } = useWalletStore()
   const queryClient = useQueryClient()
 
   const mutationFn = async () => {
@@ -675,4 +525,110 @@ export function useL2MintSoulboundToken(onSuccess: (data: any) => void) {
       error: 'Failed to mint Soulbound Token on Aztec',
     },
   })
+}
+
+export const useL2PendingTxCount = () => {
+  const { aztecAddress, isAztecConnected } = useWalletStore()
+  const handleL2Error = useL2ErrorHandler()
+
+  // Create a stable query key that doesn't change with renders
+  const queryKey = ['l2PendingTxCount', aztecAddress]
+
+  // Query function without tracking state
+  const queryFn = async (): Promise<number> => {
+    try {
+      if (!aztecAddress) {
+        throw new Error('Aztec address not found')
+      }
+
+      const response = await fetch(
+        'https://aztec-alpha-testnet-fullnode.zkv.xyz',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 15,
+            method: 'node_getPendingTxCount',
+            params: [],
+          }),
+        }
+      )
+
+      const data = await response.json()
+      return data.result as number
+    } catch (error) {
+      handleL2Error<number>(error, 'NODE')
+      throw error
+    }
+  }
+
+  // Use regular React Query instead of toast query
+  return useQuery<number, Error>({
+    queryKey,
+    queryFn,
+    enabled: !!aztecAddress,
+    meta: {
+      persist: false, // Mark this query for persistence
+    },
+  })
+}
+
+export const useL2TokenTransfer = () => {
+  const { aztecAddress, isAztecConnected } = useWalletStore()
+  const { l2TokenContract, l2TokenMetadata } = useContractStore()
+  const handleL2Error = useL2ErrorHandler()
+
+  const mutation = useMutation({
+    mutationFn: async ({
+      amount,
+      recipient,
+      isPrivate,
+    }: {
+      amount: string
+      recipient: string
+      isPrivate: boolean
+    }) => {
+      try {
+        if (!l2TokenContract) {
+          throw new Error('L2 token contract not found')
+        }
+        if (!aztecAddress) {
+          throw new Error('Aztec address not found')
+        }
+        if (!l2TokenMetadata) {
+          throw new Error('L2 token metadata not found')
+        }
+
+        console.log('Transferring L2 token...')
+
+        const amountInWei = parseUnits(amount, l2TokenMetadata.decimals)
+        const recipientAddress = AztecAddress.fromString(recipient)
+
+        let tx
+        if (isPrivate) {
+          tx = await l2TokenContract.methods
+            .transfer_to_private(recipientAddress, amountInWei)
+            .send()
+            .wait()
+        } else {
+          tx = await l2TokenContract.methods
+            .transfer(recipientAddress, amountInWei)
+            .send()
+            .wait()
+        }
+
+        console.log('Transfer tx:', tx)
+
+        return tx
+      } catch (error) {
+        handleL2Error<null>(error, 'TRANSACTION')
+        throw error
+      }
+    },
+  })
+
+  return mutation
 }

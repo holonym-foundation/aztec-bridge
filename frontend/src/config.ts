@@ -1,5 +1,9 @@
 import { Network, Token } from './types/bridge'
 
+// since aztec does not have a chain ID yet, i propose to use these values to organise token lists:
+// - testnet: 418719321 // keccak256('aztec-testnet')[0:4]
+// - sandbox:: 147120760, // keccak256('aztec-sandbox')[0:4]
+
 export const ADDRESS = {
   11155111: {
     // Sepolia

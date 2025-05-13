@@ -203,10 +203,6 @@ module.exports = {
         main: '#00000033',
       }
     },
-    fontFamily: {
-      inter: ['Inter', 'sans-serif'],
-      sans: ['Cormorant Garamond', 'sans-serif']
-    },
     fontWeight: {
       light: '300',
       regular: '400',

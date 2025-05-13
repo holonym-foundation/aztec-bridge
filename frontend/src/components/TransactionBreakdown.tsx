@@ -13,7 +13,7 @@ const TransactionBreakdown: React.FC<TransactionBreakdownProps> = ({
   if (!isOpen) {
     return (
       <button
-        className='w-full mt-4 p-4 rounded-md bg-white font-semibold flex items-center justify-between'
+        className='w-full p-4 rounded-md bg-white font-semibold flex items-center justify-center'
         onClick={onToggle}>
         <span>Transaction breakdown</span>
         <StyledImage
@@ -25,9 +25,9 @@ const TransactionBreakdown: React.FC<TransactionBreakdownProps> = ({
     )
   }
   return (
-    <div className='bg-white rounded-md p-4 mt-4'>
+    <div className='bg-[#F5F5F5] rounded-md p-4 mt-4'>
       <div
-        className='font-semibold text-lg mb-2 flex items-center justify-between cursor-pointer'
+        className='font-semibold text-lg mb-2 flex items-center justify-between cursor-pointer bg-white rounded-md p-2'
         onClick={onToggle}>
         <span>Back to Bridge</span>
         <button aria-label='Back to Bridge'>

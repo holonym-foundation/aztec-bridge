@@ -1,7 +1,6 @@
 'use client'
 import TextButton from '@/components/TextButton'
-import { useAztecWallet } from '@/hooks/useAztecWallet'
-import { useMetaMask } from '@/hooks/useMetaMask'
+import { useWalletSync } from '@/hooks/useWalletSync'
 import { ChangeEvent, useCallback, useEffect, useState, useRef } from 'react'
 import { Oval } from 'react-loader-spinner'
 // import { useBridge } from '@/hooks/useBridge'
@@ -50,6 +49,8 @@ import WalletSelectionModal from '@/components/model/WalletSelectionModal'
 import { AztecWalletType } from '@/types/wallet'
 import AzguardPrompt from '@/components/model/AzguardPrompt'
 import { useWalletStore } from '@/stores/walletStore'
+import { useBridgeStore } from '@/stores/bridgeStore'
+import { useRouter } from 'next/navigation'
 
 // Function to check if popups are blocked
 const isPopupBlocked = (): Promise<boolean> => {
@@ -66,12 +67,6 @@ const isPopupBlocked = (): Promise<boolean> => {
   })
 }
 
-const DEFAULT_BRIDGE_STATE: BridgeState = {
-  from: { network: L1_NETWORKS[0], token: L1_TOKENS[0] },
-  to: { network: L2_NETWORKS[0], token: L2_TOKENS[0] },
-  direction: BridgeDirection.L1_TO_L2,
-}
-
 const variants = {
   hidden: { opacity: 0, y: 100 },
   enter: { opacity: 1, y: 0 },
@@ -79,17 +74,17 @@ const variants = {
 }
 
 export default function Home() {
+  const router = useRouter()
+
   // UI state
-  const [bridgeConfig, setBridgeConfig] =
-    useState<BridgeState>(DEFAULT_BRIDGE_STATE)
-  const [inputAmount, setInputAmount] = useState<string>('')
-  const [usdValue, setUsdValue] = useState<string>('$0.00')
-  const inputRef = useRef<HTMLInputElement>(null)
   const [selectNetwork, setSelectNetwork] = useState<boolean>(false)
   const [selectToken, setSelectToken] = useState<boolean>(false)
   const [isFromSection, setIsFromSection] = useState<boolean>(true)
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [inputAmount, setInputAmount] = useState('')
+  const [usdValue, setUsdValue] = useState('')
 
   // Operational state
   const [showSBTModal, setShowSBTModal] = useState(false)
@@ -103,23 +98,40 @@ export default function Home() {
   // Notification system
   const notify = useToast()
 
-  // MetaMask wallet connection
+  // Bridge store
   const {
-    address: metaMaskAddress,
-    isConnected: isMetaMaskConnected,
-    connect: connectMetaMask,
-    disconnect: disconnectMetaMask,
-  } = useMetaMask()
+    bridgeConfig,
+    updateNetwork,
+    updateToken,
+    swapDirection,
+    setDirection,
+    setBridgeConfig,
+    resetStepState,
+  } = useBridgeStore()
 
-  // Aztec wallet connection
+  // Get wallet state from useWalletSync
   const {
-    account: aztecAccount,
-    address: aztecAddress,
-    isConnected: isAztecConnected,
-    isConnecting: isAztecConnecting,
-    connect: connectAztec,
-    disconnect: disconnectAztec,
-  } = useAztecWallet()
+    isMetaMaskConnected,
+    isAztecConnected,
+    connectMetaMask,
+    connectAztecWallet,
+    disconnectMetaMask,
+    disconnectAztec,
+    executeAztecTransaction,
+    azguardClient,
+  } = useWalletSync()
+
+  // Get UI state from walletStore
+  const {
+    showWalletModal,
+    showAzguardPrompt,
+    showMetaMaskPrompt,
+    setShowWalletModal,
+    setShowAzguardPrompt,
+    setShowMetaMaskPrompt,
+    aztecAddress,
+    metaMaskAddress,
+  } = useWalletStore()
 
   // Success callbacks
   const mintL1SBTOnSuccess = (data: any) => {
@@ -150,14 +162,16 @@ export default function Home() {
   const { mutate: mintL1SBT, isPending: mintL1SBTPending } =
     useL1MintSoulboundToken(mintL1SBTOnSuccess)
 
-  const { mutate: mintL1Tokens, isPending: mintL1TokensPending } =
-    useL1MintTokens()
+  // const { mutate: mintL1Tokens, isPending: mintL1TokensPending } =
+  //   useL1MintTokens()
 
   // L2 (Aztec) balances and operations
   const {
     data: l2Balance,
     isLoading: l2BalanceLoading,
     refetch: refetchL2Balance,
+    error: l2BalanceError,
+    isError: isL2BalanceError,
   } = useL2TokenBalance()
   const l2PrivateBalance = l2Balance?.privateBalance
   const l2PublicBalance = l2Balance?.publicBalance
@@ -171,14 +185,17 @@ export default function Home() {
       // Refetch balances after a successful bridge operation
       refetchL1Balance()
       refetchL2Balance()
-      setInputAmount('')
+      setBridgeConfig({
+        ...bridgeConfig,
+        amount: '',
+      })
       setBridgeCompleted(true)
 
       setTimeout(() => {
         setBridgeCompleted(false)
       }, 3000)
     },
-    [refetchL1Balance, refetchL2Balance]
+    [refetchL1Balance, refetchL2Balance, setBridgeConfig, bridgeConfig]
   )
 
   const { mutate: bridgeTokensToL2, isPending: bridgeTokensToL2Pending } =
@@ -207,41 +224,24 @@ export default function Home() {
   // Handle network selection
   const handleSelectNetwork = (network: NetworkType) => {
     const section = getCurrentSection()
-    setBridgeConfig((prev) => ({
-      ...prev,
-      [section]: { ...prev[section], network },
-    }))
+    updateNetwork(section, network)
     console.log('Selected network:', network)
   }
 
   // Handle token selection
   const handleSelectToken = (token: TokenType) => {
     const section = getCurrentSection()
-    setBridgeConfig((prev) => ({
-      ...prev,
-      [section]: { ...prev[section], token },
-    }))
+    updateToken(section, token)
     console.log('Selected token:', token)
   }
 
-  // Network and token swap handler
-  const handleSwap = () => {
-    setBridgeConfig((prev) => ({
-      from: prev.to,
-      to: prev.from,
-      direction:
-        prev.direction === BridgeDirection.L1_TO_L2
-          ? BridgeDirection.L2_TO_L1
-          : BridgeDirection.L1_TO_L2,
-    }))
-    setInputAmount('')
-  }
-
   // Input amount change handler
-  const handleAmountChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
+  const handleAmountChange = (value: string) => {
     if (value === '' || !isNaN(Number(value))) {
-      setInputAmount(value)
+      setBridgeConfig({
+        ...bridgeConfig,
+        amount: value,
+      })
     }
   }
 
@@ -263,17 +263,7 @@ export default function Home() {
     }
   }
 
-  // Get wallet store states and actions
-  const {
-    showWalletModal,
-    showAzguardPrompt,
-    showMetaMaskPrompt,
-    setShowWalletModal,
-    setShowAzguardPrompt,
-    setShowMetaMaskPrompt,
-  } = useWalletStore()
-
-  // Handler for wallet selection
+  // Handle wallet selection
   const handleWalletSelect = async (type: AztecWalletType) => {
     try {
       if (type === 'azguard' && !window.azguard) {
@@ -281,7 +271,7 @@ export default function Home() {
         setShowWalletModal(false)
         return
       }
-      await connectAztec(type)
+      await connectAztecWallet(type)
       setShowWalletModal(false)
     } catch (error) {
       notify(
@@ -315,24 +305,48 @@ export default function Home() {
   }, [])
 
   // Check if popups are blocked immediately after page load
+  // useEffect(() => {
+  //   if (typeof window !== 'undefined') {
+  //     // Immediately check if popups are blocked
+  //     isPopupBlocked().then((blocked) => {
+  //       setArePopupsBlocked(blocked)
+  //       if (blocked) {
+  //         console.log('Popups are blocked for this site')
+  //         logInfo('Popups are blocked', { blocked })
+  //         setShowPopupBlockedAlert(true)
+  //       } else {
+  //         console.log('Popups are allowed for this site')
+  //         logInfo('Popups are allowed', { blocked })
+  //       }
+  //     })
+  //   }
+  // }, [])
+
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // Immediately check if popups are blocked
-      isPopupBlocked().then((blocked) => {
-        setArePopupsBlocked(blocked)
-        if (blocked) {
-          console.log('Popups are blocked for this site')
-          logInfo('Popups are blocked', { blocked })
-          setShowPopupBlockedAlert(true)
-        } else {
-          console.log('Popups are allowed for this site')
-          logInfo('Popups are allowed', { blocked })
-        }
-      })
-    }
-  }, [])
+    resetStepState()
+  }, [resetStepState])
 
   if (!mounted) return null
+
+  const handleBridgeTokensToL2 = (amount: string) => {
+    console.log('Bridge tokens to L2:', amount)
+    setDirection(BridgeDirection.L1_TO_L2)
+    setBridgeConfig({
+      ...bridgeConfig,
+      amount: amount,
+    })
+    router.push('/progress')
+  }
+
+  const handleWithdrawTokensToL1 = (amount: string) => {
+    console.log('Withdraw tokens to L1:', amount)
+    setDirection(BridgeDirection.L2_TO_L1)
+    setBridgeConfig({
+      ...bridgeConfig,
+      amount: amount,
+    })
+    router.push('/progress')
+  }
 
   return (
     <>
@@ -340,6 +354,7 @@ export default function Home() {
         {showMetaMaskPrompt && (
           <MetaMaskPrompt onClose={() => setShowMetaMaskPrompt(false)} />
         )}
+
         {showAzguardPrompt && (
           <AzguardPrompt onClose={() => setShowAzguardPrompt(false)} />
         )}
@@ -385,7 +400,7 @@ export default function Home() {
         />
 
         <div className='grid grid-rows-[max-content_1fr_max-content] h-full'>
-          <div className='mt-4'>
+          <div className='p-5'>
             <BridgeHeader
               onClick={async () => {
                 await disconnectMetaMask()
@@ -394,7 +409,7 @@ export default function Home() {
               }}
             />
           </div>
-          <div className='p-5 py-3'>
+          <div className='px-5'>
             <AnimatePresence mode='popLayout'>
               {!showBreakdown ? (
                 <motion.div
@@ -409,14 +424,14 @@ export default function Home() {
                     setIsFromSection={setIsFromSection}
                     setSelectNetwork={setSelectNetwork}
                     setSelectToken={setSelectToken}
-                    inputAmount={inputAmount}
-                    setInputAmount={setInputAmount}
+                    inputAmount={bridgeConfig.amount}
+                    setInputAmount={handleAmountChange}
                     l1NativeBalance={l1NativeBalance}
                     l1Balance={l1Balance}
                     l2PublicBalance={l2PublicBalance}
                     direction={bridgeConfig.direction}
                     inputRef={inputRef as React.RefObject<HTMLInputElement>}
-                    onSwap={handleSwap}
+                    onSwap={swapDirection}
                   />
                   <TransactionBreakdown
                     isOpen={false}
@@ -440,51 +455,48 @@ export default function Home() {
             </AnimatePresence>
           </div>
           <div className='self-end'>
-            {' '}
-            <div className='bg-white rounded-md pt-4 px-5 flex flex-col h-full'>
-              <div className='flex-1'>
-                <div className='pb-4'>
-                  <BridgeActionButton
-                    // Connection states
-                    isMetaMaskConnected={isMetaMaskConnected}
-                    connectMetaMask={connectMetaMask}
-                    isAztecConnected={isAztecConnected}
-                    connectAztec={() => setShowWalletModal(true)}
-                    inputRef={inputRef}
-                    // Balance and amount states
-                    inputAmount={inputAmount}
-                    l1Balance={l1Balance || '0'}
-                    l2Balance={l2PublicBalance || '0'}
-                    l1BalanceLoading={l1BalanceLoading || nativeBalanceLoading}
-                    l2BalanceLoading={l2BalanceLoading}
-                    // Bridge direction
-                    direction={bridgeConfig.direction}
-                    // Core operations
-                    bridgeTokensToL2={bridgeTokensToL2}
-                    withdrawTokensToL1={withdrawTokensToL1}
-                    requestFaucet={requestFaucet}
-                    // Loading states
-                    isStateInitialized={balancesLoaded}
-                    requestFaucetPending={requestFaucetPending}
-                    bridgeTokensToL2Pending={bridgeTokensToL2Pending}
-                    withdrawTokensToL1Pending={withdrawTokensToL1Pending}
-                    // Faucet related
-                    isEligibleForFaucet={isEligibleForFaucet || false}
-                    needsGas={needsGas || false}
-                    needsTokensOnly={needsTokensOnly || false}
-                    // SBT related
-                    hasL1SBT={hasL1SBT}
-                    hasL2SBT={hasL2SBT}
-                    setShowSBTModal={setShowSBTModal}
-                    setCurrentSBTChain={setCurrentSBTChain}
-                    // Operation completion state
-                    bridgeCompleted={bridgeCompleted}
-                    // Disable if L2 node error
-                    l2NodeError={l2NodeIsReadyIsError && !l2NodeIsReadyLoading}
-                    l2NodeIsReadyLoading={l2NodeIsReadyLoading}
-                  />
-                </div>
-              </div>
+            <div className='rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[16px] pt-[16px] pr-[10px] pb-0 pl-[10px] w-full'>
+              <BridgeActionButton
+                // isDisabled={isMetaMaskConnected && isAztecConnected && isL2BalanceError}
+                isDisabled={isMetaMaskConnected && isAztecConnected && true}
+                // Connection states
+                isMetaMaskConnected={isMetaMaskConnected}
+                connectMetaMask={connectMetaMask}
+                isAztecConnected={isAztecConnected}
+                connectAztec={() => setShowWalletModal(true)}
+                inputRef={inputRef}
+                // Balance and amount states
+                inputAmount={bridgeConfig.amount}
+                l1Balance={l1Balance || '0'}
+                l2Balance={l2PublicBalance || '0'}
+                l1BalanceLoading={l1BalanceLoading || nativeBalanceLoading}
+                l2BalanceLoading={l2BalanceLoading}
+                // Bridge direction
+                direction={bridgeConfig.direction}
+                // Core operations
+                bridgeTokensToL2={handleBridgeTokensToL2}
+                withdrawTokensToL1={handleWithdrawTokensToL1}
+                requestFaucet={requestFaucet}
+                // Loading states
+                isStateInitialized={balancesLoaded}
+                requestFaucetPending={requestFaucetPending}
+                bridgeTokensToL2Pending={bridgeTokensToL2Pending}
+                withdrawTokensToL1Pending={withdrawTokensToL1Pending}
+                // Faucet related
+                isEligibleForFaucet={isEligibleForFaucet || false}
+                needsGas={needsGas || false}
+                needsTokensOnly={needsTokensOnly || false}
+                // SBT related
+                hasL1SBT={hasL1SBT}
+                hasL2SBT={hasL2SBT}
+                setShowSBTModal={setShowSBTModal}
+                setCurrentSBTChain={setCurrentSBTChain}
+                // Operation completion state
+                bridgeCompleted={bridgeCompleted}
+                // Disable if L2 node error
+                l2NodeError={l2NodeIsReadyIsError && !l2NodeIsReadyLoading}
+                l2NodeIsReadyLoading={l2NodeIsReadyLoading}
+              />
               <BridgeFooter />
             </div>
           </div>

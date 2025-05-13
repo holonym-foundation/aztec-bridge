@@ -30,4 +30,5 @@ export interface BridgeState {
   from: BridgeSectionState;
   to: BridgeSectionState;
   direction: BridgeDirection;
+  amount: string;
 }

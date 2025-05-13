@@ -4,8 +4,153 @@
 
 
 
+/* Suisse Intl */
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-THIN.OTF') format('opentype');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-THINIT.OTF') format('opentype');
+  font-weight: 100;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-LIGHT.OTF') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-LIGHTIT.OTF') format('opentype');
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-REGULAR.OTF') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-REGULARIT.OTF') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BOOK.OTF') format('opentype');
+  font-weight: 450;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BOOKIT.OTF') format('opentype');
+  font-weight: 450;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-MEDIUM.OTF') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-MEDIUMIT.OTF') format('opentype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-SEMIBOLD.OTF') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-SEMIBOLDIT.OTF') format('opentype');
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BOLD.OTF') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BOLDIT.OTF') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BLACK.OTF') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl';
+  src: url('/assets/fonts/SUISSEINTL-BLACKIT.OTF') format('opentype');
+  font-weight: 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl Hairline';
+  src: url('/assets/fonts/SUISSEINTL-HAIRLINE.OTF') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Suisse Intl Hairline';
+  src: url('/assets/fonts/SUISSEINTL-HAIRLINEIT.OTF') format('opentype');
+  font-weight: normal;
+  font-style: italic;
+  font-display: swap;
+}
+
 body {
-  color: rgb(var(--foreground-rgb));
-  background: radial-gradient(50% 50% at 50% 50%, #f2e7d4 0%, #f2f2f2 100%);
-  font-family: 'inter', sans-serif;
+  font-family: 'Suisse Intl', sans-serif;
+  /* background: radial-gradient(50% 50% at 50% 50%, #f2e7d4 0%, #f2f2f2 100%); */
+  background: radial-gradient(#E3E6FF, #FFFFFF);
 }

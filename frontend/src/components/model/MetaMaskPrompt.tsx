@@ -45,7 +45,7 @@ export default function MetaMaskPrompt({ onClose }: { onClose: () => void }) {
               </motion.button>
             </div>
             <div className='mt-4 mx-2.5'>
-              <p className='text-latest-grey-600 text-14 mb-6'>
+              <p className='text-[#737373] text-14 mb-6'>
                 To use our app seamlessly, please install MetaMask Wallet
               </p>
 
@@ -53,7 +53,7 @@ export default function MetaMaskPrompt({ onClose }: { onClose: () => void }) {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className='bg-latest-grey-200 p-4 rounded-lg mb-6 flex items-center gap-4'
+                className='bg-[#F5F5F5] p-2 rounded-lg mb-6 flex items-center gap-4'
               >
                 <img src='/assets/svg/metamask.svg' alt='MetaMask' />
                 <p className='text-latest-grey-600 text-14'>

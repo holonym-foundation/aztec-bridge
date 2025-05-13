@@ -1,7 +1,6 @@
 'use client'
 
-import { useAztecWallet } from '@/hooks/useAztecWallet'
-import { useMetaMask } from '@/hooks/useMetaMask'
+import { useWalletSync } from '@/hooks/useWalletSync'
 import { useWalletStore } from '@/stores/walletStore'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -232,30 +231,25 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
-  // MetaMask wallet connection
+  // Get wallet state from useWalletSync
   const {
-    address: metaMaskAddress,
-    isConnected: isMetaMaskConnected,
-    connect: connectMetaMask,
-    disconnect: disconnectMetaMask,
-  } = useMetaMask()
+    metaMaskAddress,
+    isMetaMaskConnected,
+    connectMetaMask,
+    disconnectMetaMask,
+    aztecAddress,
+    isAztecConnected,
+    disconnectAztec,
+  } = useWalletSync()
 
-  // Aztec wallet connection
-  const {
-    address: aztecAddress,
-    isConnected: isAztecConnected,
-    connect: connectAztec,
-    disconnect: disconnectAztec,
-  } = useAztecWallet()
+  // Get wallet store actions
+  const { setShowWalletModal } = useWalletStore()
 
   // Mobile menu state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Track if connect wallet button was pressed
   const [walletButtonPressed, setWalletButtonPressed] = useState(false)
-
-  // Get wallet store actions
-  const { setShowWalletModal } = useWalletStore()
 
   // Client-side rendering check
   const [mounted, setMounted] = useState(false)

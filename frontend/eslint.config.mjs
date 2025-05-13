@@ -24,7 +24,8 @@ const eslintConfig = [
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-unused-vars":"off",
       "@typescript-eslint/ban-ts-comment":"off",
-      "react/display-name": "off"
+      "react/display-name": "off",
+      "@next/next/no-img-element": "off",
     }
   }
 ];

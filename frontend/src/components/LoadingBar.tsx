@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 interface Step {
   id: number
   label: string
-  status: 'pending' | 'active' | 'completed'
+  status: 'pending' | 'active' | 'completed' | 'error'
 }
 
 interface LoadingBarProps {

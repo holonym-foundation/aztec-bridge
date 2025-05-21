@@ -4,10 +4,12 @@ import { useToast } from '@/hooks/useToast'
 import { useWalletSync } from '@/hooks/useWalletSync'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
+import { wait } from '@/utils'
 import Image from 'next/image'
 import Link from 'next/link'
 import React, { useEffect, useRef, useState } from 'react'
 import { Slide, toast, ToastContentProps } from 'react-toastify'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
 
 type WalletDisplayProps = {
   address?: string
@@ -227,11 +229,11 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
 
 interface HeaderProps {
   credentials?: React.ReactNode
-  privatePayments?: React.ReactNode
+  privacyMode?: React.ReactNode
 }
 
-// Custom toast component for Private Mode (with injected props)
-const PrivateModeToast = ({
+// Custom toast component for Privacy Mode (with injected props)
+const PrivacyModeToast = ({
   closeToast,
   toastProps,
 }: Partial<ToastContentProps>) => (
@@ -280,7 +282,7 @@ const PrivateModeToast = ({
   </div>
 )
 
-const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
+const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
   // Get wallet state from useWalletSync
   const {
     metaMaskAddress,
@@ -296,8 +298,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
   const { setShowWalletModal } = useWalletStore()
 
   // Add bridge store state for Private Payments toggle
-  const { isPrivatePaymentsEnabled, setPrivatePaymentsEnabled } =
-    useBridgeStore()
+  const { isPrivacyModeEnabled, setPrivacyModeEnabled } = useBridgeStore()
 
   // Mobile menu state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -398,8 +399,8 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
         )}
 
         <div className='flex items-center gap-4'>
-          {/* Private Payments Toggle UI */}
-          <div className='flex px-[3px] py-[3px] pl-[8px] justify-center items-center gap-[8px] rounded-[8px] bg-white shadow-[0px_2px_5px_0px_rgba(23,35,94,0.25)] z-[99999]'>
+          {/* Privacy Mode Toggle UI */}
+          <div className='flex px-[3px] py-[3px] pl-[8px] justify-center items-center gap-[8px] rounded-[8px] bg-white border border-[#D4D4D4] z-[99999] privacy-mode-toggle hover:shadow-md transition-shadow duration-200'>
             <Image
               src='/assets/svg/human.aztec.svg'
               alt='Aztec'
@@ -407,36 +408,44 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
               height={28}
             />
             <span className='text-[#0A0A0A] text-[14px] font-[450] leading-[20px] font-sans'>
-              Private Payments
+              Privacy Mode
             </span>
             <button
               className={`flex w-[40px] h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none
                 ${
-                  isPrivatePaymentsEnabled
+                  isPrivacyModeEnabled
                     ? 'bg-[#3B3B3B] justify-end pl-[19px]'
                     : 'bg-[#D4D4D4] justify-start pr-[19px]'
                 }`}
+              data-tooltip-id='privacy-mode-tooltip'
+              data-tooltip-content={
+                isPrivacyModeEnabled
+                  ? 'Disable privacy mode'
+                  : 'Enable privacy mode'
+              }
               onClick={() => {
-                setPrivatePaymentsEnabled(!isPrivatePaymentsEnabled)
+                setPrivacyModeEnabled(!isPrivacyModeEnabled)
 
-                if (!isPrivatePaymentsEnabled) {
+                if (!isPrivacyModeEnabled) {
                   setTimeout(() => {
-                    toast(PrivateModeToast, {
-                      // autoClose: 5000,
-                      autoClose: false,
+                    toast.dismiss() // Hide all existing toasts before showing new one
+                    // await wait(2000)
+                    // toast.dismiss('privacy-mode-toastId');
+                    toast(PrivacyModeToast, {
+                      autoClose: 5000,
                       closeButton: false,
-                      toastId: 'private-payments-toastId',
+                      toastId: 'privacy-mode-toastId',
                       closeOnClick: true,
                       hideProgressBar: true,
                       pauseOnHover: true,
                       position: 'top-right',
-                      className: 'private-payments-toast',
+                      className: 'privacy-mode-toast',
                       transition: Slide,
                     })
                   }, 800) // match your background animation duration
                 }
               }}
-              aria-pressed={isPrivatePaymentsEnabled}
+              aria-pressed={isPrivacyModeEnabled}
               tabIndex={0}
               style={{ border: 'none' }}>
               <span className='flex w-[18px] h-[18px] p-[1px] justify-center items-center flex-shrink-0 rounded-[6px] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.25)] transition-transform duration-200'>
@@ -547,9 +556,9 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
             </div>
           )}
 
-          {privatePayments && (
+          {privacyMode && (
             <div className='text-sm font-medium cursor-pointer hover:text-latest-grey-800 transition-colors duration-200'>
-              {privatePayments}
+              {privacyMode}
             </div>
           )}
 
@@ -580,6 +589,15 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
           </div>
         </div>
       )}
+
+      <ReactTooltip
+        id='privacy-mode-tooltip'
+        place='bottom'
+        className='z-[100]'
+        style={{
+          fontSize: '12px',
+        }}
+      />
     </header>
   )
 }

@@ -33,9 +33,9 @@ interface BridgeStoreState
     TransactionState {
   direction: BridgeDirection
 
-  // Private Payments toggle
-  isPrivatePaymentsEnabled: boolean
-  setPrivatePaymentsEnabled: (enabled: boolean) => void
+  // Privacy Mode toggle
+  isPrivacyModeEnabled: boolean
+  setPrivacyModeEnabled: (enabled: boolean) => void
 
   // Step actions
   setHeaderStep: (
@@ -135,16 +135,17 @@ const initialState = {
   ...initialStepState,
   ...initialBridgeConfigState,
   ...initialTransactionState,
-  isPrivatePaymentsEnabled: false,
+  isPrivacyModeEnabled: false,
 } as const
 
 const bridgeStore = create<BridgeStoreState>((set, get) => ({
   ...initialState,
   direction: BridgeDirection.L1_TO_L2,
 
-  // Private Payments toggle
-  isPrivatePaymentsEnabled: false,
-  setPrivatePaymentsEnabled: (enabled: boolean) => set({ isPrivatePaymentsEnabled: enabled }),
+  // Privacy Mode toggle
+  isPrivacyModeEnabled: false,
+  setPrivacyModeEnabled: (enabled: boolean) =>
+    set({ isPrivacyModeEnabled: enabled }),
 
   // Step actions
   setHeaderStep: (
@@ -269,6 +270,7 @@ const bridgeStore = create<BridgeStoreState>((set, get) => ({
 }))
 
 // Export main store with all state and actions
+// Step state
 export const useBridgeStore = () =>
   bridgeStore(
     useShallow((state) => ({
@@ -306,8 +308,8 @@ export const useBridgeStore = () =>
       resetStepState: state.resetStepState,
       reset: state.reset,
 
-      // Private Payments toggle
-      isPrivatePaymentsEnabled: state.isPrivatePaymentsEnabled,
-      setPrivatePaymentsEnabled: state.setPrivatePaymentsEnabled,
+      // Privacy Mode toggle
+      isPrivacyModeEnabled: state.isPrivacyModeEnabled,
+      setPrivacyModeEnabled: state.setPrivacyModeEnabled,
     }))
   )

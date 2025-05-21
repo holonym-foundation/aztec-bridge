@@ -151,8 +151,11 @@ body {
   font-family: 'Suisse Intl', sans-serif;
 }
 
-.toast-container {
+.Toastify__toast-container {
   border-radius: 8px !important;
+}
+
+.Toastify__toast-container .Toastify__toast:first-child {
   margin-top: 50px !important;
 }
 

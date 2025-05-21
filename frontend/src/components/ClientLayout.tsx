@@ -26,7 +26,7 @@ export default function ClientLayout({
         style={{ willChange: 'background' }}
       />
       {/* Grain overlay */}
-      <motion.div
+      {/* <motion.div
         className="absolute inset-0 z-10 pointer-events-none"
         animate={{
           opacity: isPrivacyModeEnabled ? 1 : 0,
@@ -34,11 +34,11 @@ export default function ClientLayout({
         transition={{ duration: 0.7, ease: 'easeInOut' }}
         style={{
           backgroundImage: 'url(assets/images/bgGrain.png)',
-          backgroundSize: 'contain',
+          backgroundSize: 'cover',
           backgroundRepeat: 'no-repeat',
           willChange: 'opacity',
         }}
-      />
+      /> */}
       {/* Main content */}
       <div className="relative z-20 flex flex-col min-h-screen">
         <BannerAztecTestnet />

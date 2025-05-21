@@ -1,4 +1,5 @@
 import { toast, ToastOptions } from 'react-toastify'
+import { ReactNode } from 'react'
 import {
   UseQueryOptions,
   UseMutationOptions,
@@ -22,7 +23,7 @@ type ToastType = 'default' | 'success' | 'info' | 'warn' | 'error'
 export const useToast = () => {
   const showToast = (
     type: ToastType,
-    message: string,
+    message: string | ReactNode,
     options?: ToastOptions
   ) => {
     // const position = toast. // adjust according to your needs

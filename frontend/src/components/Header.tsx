@@ -1,10 +1,13 @@
 'use client'
 
+import { useToast } from '@/hooks/useToast'
 import { useWalletSync } from '@/hooks/useWalletSync'
+import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
 import Image from 'next/image'
 import Link from 'next/link'
 import React, { useEffect, useRef, useState } from 'react'
+import { Slide, toast, ToastContentProps } from 'react-toastify'
 
 type WalletDisplayProps = {
   address?: string
@@ -81,9 +84,8 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
         className='flex pr-[8px] justify-center items-center gap-[12px] rounded-[8px] border border-[#D4D4D4] bg-white cursor-pointer hover:shadow-md transition-shadow duration-200'
         onClick={handleClick}
         data-tooltip-id={`tooltip-${walletType}`}>
- 
         <Image src={walletIcon} alt='Wallet' width={32} height={32} />
-               {networkIcon && (
+        {networkIcon && (
           <Image src={networkIcon} alt='Network' width={20} height={20} />
         )}
         <span className='text-sm font-medium'>
@@ -106,9 +108,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
           <div
             className='flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer relative transition-colors duration-150 hover:bg-latest-grey-300'
             onClick={handleCopyAddress}>
-              <div>
-                
-              </div>
+            <div></div>
             <svg
               width='16'
               height='16'
@@ -230,6 +230,56 @@ interface HeaderProps {
   privatePayments?: React.ReactNode
 }
 
+// Custom toast component for Private Mode (with injected props)
+const PrivateModeToast = ({
+  closeToast,
+  toastProps,
+}: Partial<ToastContentProps>) => (
+  <div className='grid grid-cols-[max-content_1fr_max-content] gap-4'>
+    <div className='flex p-[11.2px] items-center gap-[11.2px] rounded-full bg-[#737373]'>
+      <Image
+        src='/assets/svg/shield-check.svg'
+        alt='Shield Check'
+        width={34}
+        height={34}
+      />
+    </div>
+    <div className='flex flex-col justify-center items-start gap-[4px] flex-1'>
+      <span className='text-white font-sans text-[14px] font-semibold leading-[20px]'>
+        Private mode activated
+      </span>
+      <span className='text-[#D4D4D4] font-sans text-[12px] font-medium leading-[15.6px]'>
+        Private balances and transactions are used instead of public
+      </span>
+    </div>
+    <button
+      onClick={closeToast}
+      className='text-white hover:text-gray-300 focus:outline-none self-start'>
+      <svg
+        width='24'
+        height='24'
+        viewBox='0 0 24 24'
+        fill='none'
+        xmlns='http://www.w3.org/2000/svg'>
+        <path
+          d='M18 6L6 18'
+          stroke='white'
+          strokeWidth='2'
+          strokeLinecap='round'
+          strokeLinejoin='round'
+        />
+        <path
+          d='M6 6L18 18'
+          stroke='white'
+          strokeWidth='2'
+          strokeLinecap='round'
+          strokeLinejoin='round'
+        />
+      </svg>
+    </button>
+  </div>
+)
+
 const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
   // Get wallet state from useWalletSync
   const {
@@ -244,6 +294,10 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
 
   // Get wallet store actions
   const { setShowWalletModal } = useWalletStore()
+
+  // Add bridge store state for Private Payments toggle
+  const { isPrivatePaymentsEnabled, setPrivatePaymentsEnabled } =
+    useBridgeStore()
 
   // Mobile menu state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -266,10 +320,15 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
         // Reset the button press tracker after showing modal
         setWalletButtonPressed(false)
       }, 2000)
-      
+
       return () => clearTimeout(timer)
     }
-  }, [isMetaMaskConnected, isAztecConnected, walletButtonPressed, setShowWalletModal])
+  }, [
+    isMetaMaskConnected,
+    isAztecConnected,
+    walletButtonPressed,
+    setShowWalletModal,
+  ])
 
   // Handle connect wallet click
   const handleConnectWallet = async () => {
@@ -294,11 +353,15 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
     setMobileMenuOpen(!mobileMenuOpen)
   }
 
+  const notify = useToast()
+
   if (!mounted) {
     return (
       <header className='w-full px-4 flex justify-between items-center'>
         <div className='flex-shrink-0'>
-          <Link href='/' className="hover:opacity-80 transition-opacity duration-200">
+          <Link
+            href='/'
+            className='hover:opacity-80 transition-opacity duration-200'>
             <Image
               src='/assets/svg/human.tech.logo.svg'
               alt='human.tech'
@@ -314,7 +377,9 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
   return (
     <header className='w-full px-4 pt-3 flex justify-between items-center relative'>
       <div className='flex-shrink-0'>
-        <Link href='/' className="hover:opacity-80 transition-opacity duration-200">
+        <Link
+          href='/'
+          className='hover:opacity-80 transition-opacity duration-200'>
           <Image
             src='/assets/svg/human.tech.logo.svg'
             alt='human.tech'
@@ -332,13 +397,60 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
           </div>
         )}
 
-        {privatePayments && (
-          <div className='text-sm font-medium cursor-pointer hover:text-latest-grey-800 transition-colors duration-200'>
-            {privatePayments}
-          </div>
-        )}
+        <div className='flex items-center gap-4'>
+          {/* Private Payments Toggle UI */}
+          <div className='flex px-[3px] py-[3px] pl-[8px] justify-center items-center gap-[8px] rounded-[8px] bg-white shadow-[0px_2px_5px_0px_rgba(23,35,94,0.25)] z-[99999]'>
+            <Image
+              src='/assets/svg/human.aztec.svg'
+              alt='Aztec'
+              width={28}
+              height={28}
+            />
+            <span className='text-[#0A0A0A] text-[14px] font-[450] leading-[20px] font-sans'>
+              Private Payments
+            </span>
+            <button
+              className={`flex w-[40px] h-[24px] py-[3px] items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none
+                ${
+                  isPrivatePaymentsEnabled
+                    ? 'bg-[#3B3B3B] justify-end pl-[19px]'
+                    : 'bg-[#D4D4D4] justify-start pr-[19px]'
+                }`}
+              onClick={() => {
+                setPrivatePaymentsEnabled(!isPrivatePaymentsEnabled)
 
-        <div className='flex items-center gap-3'>
+                if (!isPrivatePaymentsEnabled) {
+                  setTimeout(() => {
+                    toast(PrivateModeToast, {
+                      // autoClose: 5000,
+                      autoClose: false,
+                      closeButton: false,
+                      toastId: 'private-payments-toastId',
+                      closeOnClick: true,
+                      hideProgressBar: true,
+                      pauseOnHover: true,
+                      position: 'top-right',
+                      className: 'private-payments-toast',
+                      transition: Slide,
+                    })
+                  }, 800) // match your background animation duration
+                }
+              }}
+              aria-pressed={isPrivatePaymentsEnabled}
+              tabIndex={0}
+              style={{ border: 'none' }}>
+              <span className='flex w-[18px] h-[18px] p-[1px] justify-center items-center flex-shrink-0 rounded-[6px] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.25)] transition-transform duration-200'>
+                <Image
+                  src='/assets/svg/shield.svg'
+                  alt='Shield'
+                  width={14}
+                  height={14}
+                />
+              </span>
+            </button>
+          </div>
+
+          {/* Wallet Controls */}
           {!isAnyWalletConnected ? (
             <ConnectWalletButton onClick={handleConnectWallet} />
           ) : (
@@ -367,21 +479,60 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
 
       {/* Mobile Menu Button */}
       <div className='md:hidden'>
-        <button 
+        <button
           onClick={toggleMobileMenu}
           className='p-2'
-          aria-label="Toggle mobile menu"
-        >
+          aria-label='Toggle mobile menu'>
           {mobileMenuOpen ? (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <svg
+              width='24'
+              height='24'
+              viewBox='0 0 24 24'
+              fill='none'
+              xmlns='http://www.w3.org/2000/svg'>
+              <path
+                d='M18 6L6 18'
+                stroke='currentColor'
+                strokeWidth='2'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              />
+              <path
+                d='M6 6L18 18'
+                stroke='currentColor'
+                strokeWidth='2'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              />
             </svg>
           ) : (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 12H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M3 6H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M3 18H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <svg
+              width='24'
+              height='24'
+              viewBox='0 0 24 24'
+              fill='none'
+              xmlns='http://www.w3.org/2000/svg'>
+              <path
+                d='M3 12H21'
+                stroke='currentColor'
+                strokeWidth='2'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              />
+              <path
+                d='M3 6H21'
+                stroke='currentColor'
+                strokeWidth='2'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              />
+              <path
+                d='M3 18H21'
+                stroke='currentColor'
+                strokeWidth='2'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              />
             </svg>
           )}
         </button>

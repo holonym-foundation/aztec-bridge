@@ -33,6 +33,10 @@ interface BridgeStoreState
     TransactionState {
   direction: BridgeDirection
 
+  // Private Payments toggle
+  isPrivatePaymentsEnabled: boolean
+  setPrivatePaymentsEnabled: (enabled: boolean) => void
+
   // Step actions
   setHeaderStep: (
     step: number,
@@ -131,11 +135,16 @@ const initialState = {
   ...initialStepState,
   ...initialBridgeConfigState,
   ...initialTransactionState,
+  isPrivatePaymentsEnabled: false,
 } as const
 
 const bridgeStore = create<BridgeStoreState>((set, get) => ({
   ...initialState,
   direction: BridgeDirection.L1_TO_L2,
+
+  // Private Payments toggle
+  isPrivatePaymentsEnabled: false,
+  setPrivatePaymentsEnabled: (enabled: boolean) => set({ isPrivatePaymentsEnabled: enabled }),
 
   // Step actions
   setHeaderStep: (
@@ -296,5 +305,9 @@ export const useBridgeStore = () =>
       // Reset
       resetStepState: state.resetStepState,
       reset: state.reset,
+
+      // Private Payments toggle
+      isPrivatePaymentsEnabled: state.isPrivatePaymentsEnabled,
+      setPrivatePaymentsEnabled: state.setPrivatePaymentsEnabled,
     }))
   )

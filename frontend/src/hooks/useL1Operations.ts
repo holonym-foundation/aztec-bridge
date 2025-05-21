@@ -529,6 +529,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       // const claimSecretHash = await computeSecretHash(claimSecret)
       // console.log('claimSecretHash ', claimSecretHash)
 
+      // TODO: better to store the secret and hash right here before passing it to function
+
       // Bridge tokens
       const { request } = await portalContract.simulate.depositToAztecPublic([
         aztecAddress as `0x${string}`,

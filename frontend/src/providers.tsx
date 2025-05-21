@@ -3,7 +3,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { type ReactNode, useEffect, useState } from 'react'
-import { ToastContainer } from 'react-toastify'
 import { WagmiProvider } from 'wagmi'
 import { config } from './wagmi'
 
@@ -50,7 +49,6 @@ export function Providers({
         {children}
         <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>
-      <ToastContainer />
     </WagmiProvider>
   )
 }

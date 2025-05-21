@@ -410,7 +410,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privatePayments }) => {
               Private Payments
             </span>
             <button
-              className={`flex w-[40px] h-[24px] py-[3px] items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none
+              className={`flex w-[40px] h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none
                 ${
                   isPrivatePaymentsEnabled
                     ? 'bg-[#3B3B3B] justify-end pl-[19px]'

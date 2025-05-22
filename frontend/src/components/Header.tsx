@@ -400,7 +400,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
 
         <div className='flex items-center gap-4'>
           {/* Privacy Mode Toggle UI */}
-          <div className='flex px-[3px] py-[3px] pl-[8px] justify-center items-center gap-[8px] rounded-[8px] bg-white border border-[#D4D4D4] z-[99999] privacy-mode-toggle hover:shadow-md transition-shadow duration-200'>
+          <div className='flex px-[3px] py-[3px] pl-[8px] justify-center items-center gap-[8px] rounded-[8px] bg-white border border-[#D4D4D4] !z-[999999] relative privacy-mode-toggle hover:shadow-md transition-shadow duration-200'>
             <Image
               src='/assets/svg/human.aztec.svg'
               alt='Aztec'
@@ -411,12 +411,11 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
               Privacy Mode
             </span>
             <button
-              className={`flex w-[40px] h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none
-                ${
-                  isPrivacyModeEnabled
-                    ? 'bg-[#3B3B3B] justify-end pl-[19px]'
-                    : 'bg-[#D4D4D4] justify-start pr-[19px]'
-                }`}
+              className={`flex w-[40px] h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none relative z-[9999999] ${
+                isPrivacyModeEnabled
+                  ? 'bg-[#3B3B3B] justify-end pl-[19px]'
+                  : 'bg-[#D4D4D4] justify-start pr-[19px]'
+              }`}
               data-tooltip-id='privacy-mode-tooltip'
               data-tooltip-content={
                 isPrivacyModeEnabled
@@ -428,7 +427,8 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
 
                 if (!isPrivacyModeEnabled) {
                   setTimeout(() => {
-                    toast.dismiss() // Hide all existing toasts before showing new one
+                    toast.dismiss()
+                    // Hide all existing toasts before showing new one
                     // await wait(2000)
                     // toast.dismiss('privacy-mode-toastId');
                     toast(PrivacyModeToast, {
@@ -442,7 +442,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
                       className: 'privacy-mode-toast',
                       transition: Slide,
                     })
-                  }, 800) // match your background animation duration
+                  }, 1000) // match your background animation duration
                 }
               }}
               aria-pressed={isPrivacyModeEnabled}

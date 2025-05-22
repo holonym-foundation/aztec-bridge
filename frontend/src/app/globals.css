@@ -153,6 +153,7 @@ body {
 
 .Toastify__toast-container {
   border-radius: 8px !important;
+  pointer-events: none !important;
 }
 
 .Toastify__toast-container .Toastify__toast:first-child {
@@ -170,9 +171,14 @@ body {
   /* padding: 0 !important; */
   /* margin: 0 !important; */
   margin-top: 50px !important;
+  pointer-events: auto !important;
 }
 
 .privacy-mode-toast .Toastify__toast-body {
   /* padding: 0 !important; */
   /* margin: 0 !important; */
+}
+
+.privacy-mode-toggle {
+  pointer-events: auto !important;
 }

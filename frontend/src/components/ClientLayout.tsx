@@ -19,7 +19,7 @@ export default function ClientLayout({
         className="absolute inset-0 z-0"
         animate={{
           background: isPrivacyModeEnabled
-            ? 'radial-gradient(#8B8EA8, #B3B1C8)'
+            ? 'radial-gradient(#6B6E88, #8B89A8)'
             : 'radial-gradient(#E3E6FF, #FFFFFF)',
         }}
         transition={{ duration: 0.7, ease: 'easeInOut' }}

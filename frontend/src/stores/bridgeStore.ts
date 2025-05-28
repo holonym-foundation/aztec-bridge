@@ -270,7 +270,11 @@ const bridgeStore = create<BridgeStoreState>((set, get) => ({
 
   // Reset
   resetStepState: () => set({ ...initialStepState }),
-  reset: () => set({ ...initialState, direction: BridgeDirection.L1_TO_L2 }),
+  reset: () => set((state) => ({ 
+    ...initialState, 
+    direction: BridgeDirection.L1_TO_L2,
+    isPrivacyModeEnabled: state.isPrivacyModeEnabled 
+  })),
 }))
 
 // Export main store with all state and actions

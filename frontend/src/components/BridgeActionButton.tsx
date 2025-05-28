@@ -129,7 +129,10 @@ function BridgeActionButton({
     direction === BridgeDirection.L2_TO_L1 ? 'withdrawal' : 'bridge'
 
   const getOperationLabel = (direction: BridgeDirection) =>
-    direction === BridgeDirection.L2_TO_L1 ? 'Withdraw Tokens' : 'Bridge Tokens'
+    // direction === BridgeDirection.L2_TO_L1 ? 'Withdraw Tokens' : 'Bridge Tokens'
+    direction === BridgeDirection.L2_TO_L1 ? 'Withdraw Tokens coming soon' : 'Bridge Tokens'
+
+  isDisabled = direction === BridgeDirection.L2_TO_L1
 
   const getBalanceForDirection = (
     direction: BridgeDirection,

@@ -1,0 +1,20 @@
+L1 Token names and symbols
+1. USDC - USDC
+2. USDT - USDT 
+3. DAI - DAI
+4. HUMAN - HUMAN
+5. GOAT - GOAT
+6. WBTC - WBTC
+
+
+L2 Token names and symbols
+1. Clean USDC - cUSDC
+2. Clean USDT - cUSDT
+3. Clean DAI - cDAI
+4. Clean HUMAN - cHUMN
+5. Clean GOAT - cGOAT
+6. Clean WBTC - cWBTC
+
+
+
+

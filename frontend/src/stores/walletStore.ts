@@ -4,7 +4,7 @@ import { AztecWalletType } from '@/types/wallet'
 import { sdk, connectWallet } from '../aztec'
 import { AzguardClient } from '@azguardwallet/client'
 import { useAccount as useAztecAccount } from '@nemi-fi/wallet-sdk/react'
-import { showToast } from '@/utils/toast'
+import { showToast } from '@/hooks/useToast'
 import { sepolia } from 'wagmi/chains'
 
 // Add type declaration for window.azguard
@@ -21,8 +21,7 @@ interface WalletState {
   // UI State
   showWalletModal: boolean
   showAzguardPrompt: boolean
-  showMetaMaskPrompt: boolean
-  
+
   // Aztec Wallet State
   aztecWalletType: AztecWalletType | null
   aztecAddress: string | null
@@ -31,18 +30,17 @@ interface WalletState {
   isAztecConnecting: boolean
   aztecError: Error | null
   azguardClient: AzguardClient | null
-  
+
   // MetaMask State
   metaMaskAddress: `0x${string}` | null
   isMetaMaskConnected: boolean
   metaMaskChainId: number | null
   metaMaskError: Error | null
-  
+
   // UI Actions
   setShowWalletModal: (show: boolean) => void
   setShowAzguardPrompt: (show: boolean) => void
-  setShowMetaMaskPrompt: (show: boolean) => void
-  
+
   // Aztec Actions
   setAztecWalletType: (type: AztecWalletType | null) => void
   setAztecState: (state: {
@@ -53,16 +51,16 @@ interface WalletState {
   }) => void
   disconnectAztecWallet: () => Promise<void>
   executeAztecTransaction: (actions: any[]) => Promise<string>
-  
+
   // MetaMask Actions
-  setMetaMaskState: (state: { 
+  setMetaMaskState: (state: {
     address: string | null
     isConnected: boolean
     chainId: number | null
-    error?: Error | null 
+    error?: Error | null
   }) => void
   switchMetaMaskChain: (chainId: number) => Promise<void>
-  
+
   // Reset
   reset: () => void
 }
@@ -77,7 +75,6 @@ const getInitialWalletType = (): AztecWalletType | null => {
 const initialState = {
   showWalletModal: false,
   showAzguardPrompt: false,
-  showMetaMaskPrompt: false,
   aztecWalletType: getInitialWalletType(),
   aztecAddress: null,
   aztecAccount: null,
@@ -97,7 +94,6 @@ const walletStore = create<WalletState>((set, get) => ({
   // UI Actions
   setShowWalletModal: (show) => set({ showWalletModal: show }),
   setShowAzguardPrompt: (show) => set({ showAzguardPrompt: show }),
-  setShowMetaMaskPrompt: (show) => set({ showMetaMaskPrompt: show }),
 
   // Aztec Actions
   setAztecWalletType: (type) => {
@@ -111,26 +107,28 @@ const walletStore = create<WalletState>((set, get) => ({
 
   setAztecState: (state) => {
     // Get wallet type from localStorage if not already set
-    const storedWalletType = localStorage.getItem(AZTEC_WALLET_KEY) as AztecWalletType | null
-    
+    const storedWalletType = localStorage.getItem(
+      AZTEC_WALLET_KEY
+    ) as AztecWalletType | null
+
     set({
       aztecAddress: state.address,
       aztecAccount: state.account,
       isAztecConnected: state.isConnected,
       aztecError: state.error || null,
-      aztecWalletType: storedWalletType
+      aztecWalletType: storedWalletType,
     })
   },
 
   disconnectAztecWallet: async () => {
     try {
       await sdk.disconnect()
-      set({ 
+      set({
         azguardClient: null,
         aztecAddress: null,
         aztecAccount: null,
         isAztecConnected: false,
-        aztecWalletType: null
+        aztecWalletType: null,
       })
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
@@ -141,30 +139,35 @@ const walletStore = create<WalletState>((set, get) => ({
 
   executeAztecTransaction: async (actions: any[]) => {
     const { aztecWalletType, azguardClient } = get()
-    
+
     if (aztecWalletType === 'azguard' && azguardClient) {
       const results = await azguardClient.execute(actions)
       if (results.length > 0 && results[0].status === 'success') {
         return results[0].txHash
       } else {
-        const error = new Error(`Transaction failed: ${results[0]?.error || 'Unknown error'}`)
+        const error = new Error(
+          `Transaction failed: ${results[0]?.error || 'Unknown error'}`
+        )
         showToast('error', error.message)
         throw error
       }
     } else {
-      const error = new Error('Transaction execution not supported for this wallet type')
+      const error = new Error(
+        'Transaction execution not supported for this wallet type'
+      )
       showToast('error', error.message)
       throw error
     }
   },
 
   // MetaMask Actions
-  setMetaMaskState: (state) => set({
-    metaMaskAddress: state.address as `0x${string}`,
-    isMetaMaskConnected: state.isConnected,
-    metaMaskChainId: state.chainId,
-    metaMaskError: state.error || null
-  }),
+  setMetaMaskState: (state) =>
+    set({
+      metaMaskAddress: state.address as `0x${string}`,
+      isMetaMaskConnected: state.isConnected,
+      metaMaskChainId: state.chainId,
+      metaMaskError: state.error || null,
+    }),
 
   switchMetaMaskChain: async (chainId: number) => {
     try {
@@ -192,8 +195,7 @@ export const useWalletStore = () =>
       // UI State
       showWalletModal: state.showWalletModal,
       showAzguardPrompt: state.showAzguardPrompt,
-      showMetaMaskPrompt: state.showMetaMaskPrompt,
-      
+
       // Aztec State
       aztecWalletType: state.aztecWalletType,
       aztecAddress: state.aztecAddress,
@@ -202,29 +204,28 @@ export const useWalletStore = () =>
       isAztecConnecting: state.isAztecConnecting,
       aztecError: state.aztecError,
       azguardClient: state.azguardClient,
-      
+
       // MetaMask State
       metaMaskAddress: state.metaMaskAddress,
       isMetaMaskConnected: state.isMetaMaskConnected,
       metaMaskChainId: state.metaMaskChainId,
       metaMaskError: state.metaMaskError,
-      
+
       // UI Actions
       setShowWalletModal: state.setShowWalletModal,
       setShowAzguardPrompt: state.setShowAzguardPrompt,
-      setShowMetaMaskPrompt: state.setShowMetaMaskPrompt,
-      
+
       // Aztec Actions
       setAztecWalletType: state.setAztecWalletType,
       setAztecState: state.setAztecState,
       disconnectAztecWallet: state.disconnectAztecWallet,
       executeAztecTransaction: state.executeAztecTransaction,
-      
+
       // MetaMask Actions
       setMetaMaskState: state.setMetaMaskState,
       switchMetaMaskChain: state.switchMetaMaskChain,
-      
+
       // Reset
       reset: state.reset,
     }))
-  ) 
+  )

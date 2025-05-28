@@ -70,7 +70,8 @@ const LoadingBar: React.FC<LoadingBarProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className='text-neutral-600 text-sm'>
-            {steps[currentStep]?.label || 'Processing...'}
+            {/* {steps[currentStep]?.label || 'Processin ...'} */}
+            {steps[currentStep]?.label}
           </motion.p>
         </motion.div>
       )}

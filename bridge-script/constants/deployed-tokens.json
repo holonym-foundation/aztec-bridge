@@ -1,0 +1,17 @@
+{
+  "deployedAt": "2025-05-28T19:00:37.432Z",
+  "sponsoredFeeAddress": "0x1260a43ecf03e985727affbbe3e483e60b836ea821b6305bea1c53398b986047",
+  "tokens": [
+    {
+      "symbol": "USDC",
+      "decimals": 6,
+      "logo": "/assets/svg/USDC.svg",
+      "l1TokenContract": "0xcb37542c74a08dae1f6607be060d7bf41fea8138",
+      "l2TokenContract": "0x105485e0b41e2f9746a05d331a6fd256ede4edbb7a149d5e5f51663c449344a0",
+      "l2BridgeContract": "0x2d934507f8e2776ede23008b56f73026b2e474dfb56df01cd59447ac48deb496",
+      "l1PortalContract": "0xf7a67a0875a7c12ed356d14b9a6f5dc15ae4bb46",
+      "feeAssetHandler": "0xc9c0321141048562f93cbf3a1344f64c5b516318",
+      "sponsoredFee": "0x1260a43ecf03e985727affbbe3e483e60b836ea821b6305bea1c53398b986047"
+    }
+  ]
+}

@@ -5,10 +5,10 @@ import { useContractStore } from '../stores/contractStore'
 import { AztecWalletType } from '@/types/wallet'
 import { AzguardClient } from '@azguardwallet/client'
 import { useWalletStore } from '@/stores/walletStore'
-import {
-  TokenContract,
-  TokenContractArtifact,
-} from '../constants/aztec/artifacts/Token'
+// import {
+//   TokenContract,
+//   TokenContractArtifact,
+// } from '../constants/aztec/artifacts/Token'
 
 declare global {
   interface Window {
@@ -49,96 +49,96 @@ export function useAztecWallet() {
         const connectedAccount = await connectWallet('azguard')
         return connectedAccount
 
-        // Check if Azguard extension is installed
-        if (!AzguardClient.isAzguardInstalled()) {
-          throw new Error('Azguard wallet extension not found')
-        }
-
-        // Create Azguard client
-        const azguardWallet = await AzguardClient.create()
-
-        if (!azguardWallet.connected) {
-          // if (true) {
-          // Connect to Azguard wallet
-          console.log('Connecting to Azguard wallet')
-          await azguardWallet.connect(
-            {
-              name: 'Bridge to Aztec ',
-            },
-            [
-              {
-                chains: ['aztec:11155111'], // aztec testnet
-                methods: [
-                  'send_transaction',
-                  'add_private_authwit',
-                  'simulate_views',
-                  'call',
-                  'register_contract',
-                ],
-              },
-            ]
-          )
-        }
-
-        const account = azguardWallet.accounts[0]
-        const address = account.substring(account.lastIndexOf(':') + 1)
-
-        setAzguardClient(azguardWallet)
-        console.log('Getting balances using azguard')
-
-        const [resultRegisterContract, redultSimulateViews] =
-          await azguardWallet.execute([
-            {
-              kind: 'register_contract',
-              chain: 'aztec:11155111',
-              address:
-                '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
-              artifact: TokenContractArtifact,
-            },
-            {
-              kind: 'simulate_views',
-              account: account,
-              calls: [
-                {
-                  kind: 'call',
-                  contract:
-                    '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
-                  method: 'balance_of_public',
-                  args: [address],
-                },
-                {
-                  kind: 'call',
-                  contract:
-                    '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
-                  method: 'balance_of_private',
-                  args: [address],
-                },
-              ],
-            },
-          ])
-
-        console.log('resultRegisterContract ', resultRegisterContract)
-        console.log('redultSimulateViews ', redultSimulateViews)
-
-        // // ensure successful status
-        // if (result.status !== 'ok') {
-        //   console.log('result ', result)
-        //   throw new Error('Simulation failed')
+        // // Check if Azguard extension is installed
+        // if (!AzguardClient.isAzguardInstalled()) {
+        //   throw new Error('Azguard wallet extension not found')
         // }
 
-        // console.log('result ', result)
-        // if (result?.result) {
-        //   // simulation results are in the same order as the calls above
-        //   const [publicBalance, privateBalance] = (result.result as any)
-        //     ?.decoded
+        // // Create Azguard client
+        // const azguardWallet = await AzguardClient.create()
 
-        //   console.log('Public balance', publicBalance)
-        //   console.log('Private balance', privateBalance)
-
-        //   console.log('Balances fetched using azguard')
+        // if (!azguardWallet.connected) {
+        //   // if (true) {
+        //   // Connect to Azguard wallet
+        //   console.log('Connecting to Azguard wallet')
+        //   await azguardWallet.connect(
+        //     {
+        //       name: 'Bridge to Aztec ',
+        //     },
+        //     [
+        //       {
+        //         chains: ['aztec:11155111'], // aztec testnet
+        //         methods: [
+        //           'send_transaction',
+        //           'add_private_authwit',
+        //           'simulate_views',
+        //           'call',
+        //           'register_contract',
+        //         ],
+        //       },
+        //     ]
+        //   )
         // }
 
-        return azguardWallet
+        // const account = azguardWallet.accounts[0]
+        // const address = account.substring(account.lastIndexOf(':') + 1)
+
+        // setAzguardClient(azguardWallet)
+        // console.log('Getting balances using azguard')
+
+        // const [resultRegisterContract, redultSimulateViews] =
+        //   await azguardWallet.execute([
+        //     {
+        //       kind: 'register_contract',
+        //       chain: 'aztec:11155111',
+        //       address:
+        //         '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
+        //       artifact: TokenContractArtifact,
+        //     },
+        //     {
+        //       kind: 'simulate_views',
+        //       account: account,
+        //       calls: [
+        //         {
+        //           kind: 'call',
+        //           contract:
+        //             '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
+        //           method: 'balance_of_public',
+        //           args: [address],
+        //         },
+        //         {
+        //           kind: 'call',
+        //           contract:
+        //             '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
+        //           method: 'balance_of_private',
+        //           args: [address],
+        //         },
+        //       ],
+        //     },
+        //   ])
+
+        // console.log('resultRegisterContract ', resultRegisterContract)
+        // console.log('redultSimulateViews ', redultSimulateViews)
+
+        // // // ensure successful status
+        // // if (result.status !== 'ok') {
+        // //   console.log('result ', result)
+        // //   throw new Error('Simulation failed')
+        // // }
+
+        // // console.log('result ', result)
+        // // if (result?.result) {
+        // //   // simulation results are in the same order as the calls above
+        // //   const [publicBalance, privateBalance] = (result.result as any)
+        // //     ?.decoded
+
+        // //   console.log('Public balance', publicBalance)
+        // //   console.log('Private balance', privateBalance)
+
+        // //   console.log('Balances fetched using azguard')
+        // // }
+
+        // return azguardWallet
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))

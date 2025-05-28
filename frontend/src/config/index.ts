@@ -1,4 +1,5 @@
-import { Network, Token } from './types/bridge'
+import { Network, Token } from '@/types/bridge'
+// -------------------------------------
 
 // since aztec does not have a chain ID yet, i propose to use these values to organise token lists:
 // - testnet: 418719321 // keccak256('aztec-testnet')[0:4]
@@ -11,9 +12,9 @@ export const ADDRESS = {
     CHAIN_NAME: 'Sepolia',
     L1: {
       PORTAL_SBT_CONTRACT: '0x983ad7bdc7701a77a6c22e2245d7eafe893b21fe',
-      TOKEN_CONTRACT: '0x24ca8bf6d17d0f6844eacee733fa183d343c1dc4',
-      FEE_ASSET_HANDLER_CONTRACT: '0x3e3b95db7788bddb59f2a43f0a1385f858f6a08e',
-      PORTAL_CONTRACT: '0x7e73a94be39327533faa90947cae5fc215349287',
+      TOKEN_CONTRACT: '0xcb37542c74a08dae1f6607be060d7bf41fea8138',
+      FEE_ASSET_HANDLER_CONTRACT: '0xc9c0321141048562f93cbf3a1344f64c5b516318',
+      PORTAL_CONTRACT: '0xf7a67a0875a7c12ed356d14b9a6f5dc15ae4bb46',
     },
   },
   1337: {
@@ -21,12 +22,9 @@ export const ADDRESS = {
     CHAIN_ID: 1337,
     CHAIN_NAME: 'Aztec Testnet',
     L2: {
-      TOKEN_CONTRACT:
-        '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
-      TOKEN_BRIDGE_CONTRACT:
-        '0x2d964ce22db58c33f6e3e29cd2c2550ca310610f4917955ecb59bc7b6f97d6a7',
-      SPONSORED_FEE_PAYMENT_CONTRACT:
-        '0x0b27e30667202907fc700d50e9bc816be42f8141fae8b9f2281873dbdb9fc2e5',
+      TOKEN_CONTRACT: '0x105485e0b41e2f9746a05d331a6fd256ede4edbb7a149d5e5f51663c449344a0',
+      TOKEN_BRIDGE_CONTRACT: '0x2d934507f8e2776ede23008b56f73026b2e474dfb56df01cd59447ac48deb496',
+      SPONSORED_FEE_PAYMENT_CONTRACT: '0x1260a43ecf03e985727affbbe3e483e60b836ea821b6305bea1c53398b986047',
     },
   },
 } as const
@@ -100,10 +98,10 @@ export const L1_TOKENS: Token[] = [
   {
     id: 1,
     img: '/assets/svg/USDC.svg',
-    title: 'Test USDC',
+    title: 'USDC',
     symbol: 'USDC',
     decimals: 6,
-    address: '0x24ca8bf6d17d0f6844eacee733fa183d343c1dc4',
+    address: '0xcb37542c74a08dae1f6607be060d7bf41fea8138',
   },
   // {
   //   id: 2,
@@ -130,9 +128,9 @@ export const L2_TOKENS: Token[] = [
     id: 1,
     img: '/assets/svg/USDC.svg',
     title: 'Clean USDC',
-    symbol: 'USDC',
+    symbol: 'cUSDC',
     decimals: 6,
-    address: '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
+    address: '0x2d934507f8e2776ede23008b56f73026b2e474dfb56df01cd59447ac48deb496',
   },
   // {
   //   id: 2,

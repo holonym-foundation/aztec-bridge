@@ -15,6 +15,7 @@ import {
   useL1MintTokens,
   useL1NativeBalance,
   useL1TokenBalance,
+  useL1TokenBalances,
 } from '@/hooks/useL1Operations'
 import {
   useL2HasSoulboundToken,
@@ -24,7 +25,7 @@ import {
   useL1ContractAddresses,
   useL2NodeIsReady,
 } from '@/hooks/useL2Operations'
-import { useToast } from '@/hooks/useToast'
+import { showToast, useToast } from '@/hooks/useToast'
 import clsxm from '@/utils/clsxm'
 import NetworkModal from '@/components/model/Network'
 import TokensModal from '@/components/model/TokensModal'
@@ -40,7 +41,7 @@ import BridgeFooter from '@/components/BridgeFooter'
 import BridgeHeader from '@/components/BridgeHeader'
 import { motion, AnimatePresence } from 'framer-motion'
 import BridgeActionButton from '@/components/BridgeActionButton'
-import { L1_NETWORKS, L2_NETWORKS, L1_TOKENS, L2_TOKENS } from '@/config'
+import { L1_NETWORKS, L2_NETWORKS, L1_TOKENS, L2_TOKENS, ADDRESS } from '@/config'
 import MetaMaskPrompt from '@/components/model/MetaMaskPrompt'
 import BalanceCard from '@/components/BalanceCard'
 import { logInfo, logError } from '@/utils/datadog'
@@ -101,12 +102,14 @@ export default function Home() {
   // Bridge store
   const {
     bridgeConfig,
+    isPrivacyModeEnabled,
     updateNetwork,
     updateToken,
     swapDirection,
     setDirection,
     setBridgeConfig,
     resetStepState,
+    reset: resetBridgeStore,
   } = useBridgeStore()
 
   // Get wallet state from useWalletSync
@@ -125,10 +128,8 @@ export default function Home() {
   const {
     showWalletModal,
     showAzguardPrompt,
-    showMetaMaskPrompt,
     setShowWalletModal,
     setShowAzguardPrompt,
-    setShowMetaMaskPrompt,
     aztecAddress,
     metaMaskAddress,
   } = useWalletStore()
@@ -152,12 +153,28 @@ export default function Home() {
   } = useL2NodeIsReady()
 
   // L1 (Ethereum) balances and operations
-  const { data: l1NativeBalance } = useL1NativeBalance()
   const {
-    data: l1Balance,
+    data: l1TokenBalances = [],
     isLoading: l1BalanceLoading,
     refetch: refetchL1Balance,
-  } = useL1TokenBalance()
+  } = useL1TokenBalances()
+
+  // native token
+  const sepoliaNativeTokens = l1TokenBalances.find(
+    (token) => token.type === 'native' && token.network?.chainId === 11155111
+  )
+  const l1NativeBalance = sepoliaNativeTokens?.balance_formatted
+
+  const l1Balance = l1TokenBalances.find(
+    (token) => token.type === 'erc20' && token.network?.chainId === 11155111 && token.address === ADDRESS[11155111].L1.TOKEN_CONTRACT
+  )?.balance_formatted
+
+  // const { data: l1NativeBalance } = useL1NativeBalance()
+  // const {
+  //   data: l1Balance,
+  //   ,
+  //   refetch: refetchL1Balance,
+  // } = useL1TokenBalance()
   const { data: hasL1SBT } = useL1HasSoulboundToken()
   const { mutate: mintL1SBT, isPending: mintL1SBTPending } =
     useL1MintSoulboundToken(mintL1SBTOnSuccess)
@@ -167,12 +184,13 @@ export default function Home() {
 
   // L2 (Aztec) balances and operations
   const {
-    data: l2Balance,
+    data: l2Balance = { privateBalance: null, publicBalance: null },
     isLoading: l2BalanceLoading,
     refetch: refetchL2Balance,
     error: l2BalanceError,
     isError: isL2BalanceError,
   } = useL2TokenBalance()
+
   const l2PrivateBalance = l2Balance?.privateBalance
   const l2PublicBalance = l2Balance?.publicBalance
   const { data: hasL2SBT } = useL2HasSoulboundToken()
@@ -213,7 +231,6 @@ export default function Home() {
     needsTokensOnly,
     isEligibleForFaucet,
     hasGas,
-    nativeBalanceLoading,
     balancesLoaded,
   } = useL1Faucet()
 
@@ -294,37 +311,30 @@ export default function Home() {
         referrer: document.referrer || 'direct',
       })
     }
-
-    // Check for MetaMask
-    const checkMetaMask = async () => {
-      if (typeof window !== 'undefined' && !window.ethereum) {
-        setShowMetaMaskPrompt(true)
-      }
-    }
-    checkMetaMask()
   }, [])
 
   // Check if popups are blocked immediately after page load
-  // useEffect(() => {
-  //   if (typeof window !== 'undefined') {
-  //     // Immediately check if popups are blocked
-  //     isPopupBlocked().then((blocked) => {
-  //       setArePopupsBlocked(blocked)
-  //       if (blocked) {
-  //         console.log('Popups are blocked for this site')
-  //         logInfo('Popups are blocked', { blocked })
-  //         setShowPopupBlockedAlert(true)
-  //       } else {
-  //         console.log('Popups are allowed for this site')
-  //         logInfo('Popups are allowed', { blocked })
-  //       }
-  //     })
-  //   }
-  // }, [])
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Immediately check if popups are blocked
+      isPopupBlocked().then((blocked) => {
+        setArePopupsBlocked(blocked)
+        if (blocked) {
+          console.log('Popups are blocked for this site')
+          logInfo('Popups are blocked', { blocked })
+          setShowPopupBlockedAlert(true)
+        } else {
+          console.log('Popups are allowed for this site')
+          logInfo('Popups are allowed', { blocked })
+        }
+      })
+    }
+  }, [])
 
   useEffect(() => {
     resetStepState()
-  }, [resetStepState])
+    resetBridgeStore()
+  }, [resetStepState, resetBridgeStore])
 
   if (!mounted) return null
 
@@ -351,10 +361,6 @@ export default function Home() {
   return (
     <>
       <RootStyle>
-        {showMetaMaskPrompt && (
-          <MetaMaskPrompt onClose={() => setShowMetaMaskPrompt(false)} />
-        )}
-
         {showAzguardPrompt && (
           <AzguardPrompt onClose={() => setShowAzguardPrompt(false)} />
         )}
@@ -405,10 +411,46 @@ export default function Home() {
               onClick={async () => {
                 await disconnectMetaMask()
                 await disconnectAztec()
+                localStorage.clear()
                 window.location.reload()
+
+
+                // const fakePromise = new Promise((resolve, reject) => {
+                //   setTimeout(() => {
+                //     // Change to resolve() to test success, or reject() to test error
+                //     resolve('All done!')
+
+                //     // reject(new Error('Something went wrong!'))
+                //   }, 5000)
+                // })
+
+                // notify.promise(
+                //   fakePromise,
+                //   {
+                //     pending: {
+                //       message: 'Processing...',
+                //       heading: 'Please wait',
+                //     },
+                //     success: {
+                //       message: 'Operation successful!',
+                //       heading: 'Success',
+                //     },
+                //     error: { message: 'Operation failed!', heading: 'Error' },
+                //   }
+                //   // { autoClose: false, animatePromise: true }
+                // )
+                // showToast.promise(
+                //   fakePromise,
+                //   {
+                //     pending: 'Processing...',
+                //     success: 'Operation successful!',
+                //     error: 'Operation failed!',
+                //   }
+                // )
               }}
             />
           </div>
+
           <div className='px-5'>
             <AnimatePresence mode='popLayout'>
               {!showBreakdown ? (
@@ -428,10 +470,11 @@ export default function Home() {
                     setInputAmount={handleAmountChange}
                     l1NativeBalance={l1NativeBalance}
                     l1Balance={l1Balance}
-                    l2PublicBalance={l2PublicBalance}
+                    l2Balance={l2Balance }
                     direction={bridgeConfig.direction}
                     inputRef={inputRef as React.RefObject<HTMLInputElement>}
                     onSwap={swapDirection}
+                    isPrivacyModeEnabled={isPrivacyModeEnabled}
                   />
                   <TransactionBreakdown
                     isOpen={false}
@@ -454,11 +497,12 @@ export default function Home() {
               )}
             </AnimatePresence>
           </div>
+
           <div className='self-end'>
             <div className='rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[16px] pt-[16px] pr-[10px] pb-0 pl-[10px] w-full'>
               <BridgeActionButton
                 // isDisabled={isMetaMaskConnected && isAztecConnected && isL2BalanceError}
-                isDisabled={isMetaMaskConnected && isAztecConnected && true}
+                // isDisabled={isMetaMaskConnected && isAztecConnected && true}
                 // Connection states
                 isMetaMaskConnected={isMetaMaskConnected}
                 connectMetaMask={connectMetaMask}
@@ -467,9 +511,9 @@ export default function Home() {
                 inputRef={inputRef}
                 // Balance and amount states
                 inputAmount={bridgeConfig.amount}
-                l1Balance={l1Balance || '0'}
+                l1Balance={l1Balance?.toString() || '0'}
                 l2Balance={l2PublicBalance || '0'}
-                l1BalanceLoading={l1BalanceLoading || nativeBalanceLoading}
+                l1BalanceLoading={l1BalanceLoading}
                 l2BalanceLoading={l2BalanceLoading}
                 // Bridge direction
                 direction={bridgeConfig.direction}

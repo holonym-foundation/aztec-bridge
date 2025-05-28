@@ -8,16 +8,19 @@ import {
   AztecAddress,
   EthAddress,
   Fr,
-  L1TokenPortalManager,
 } from '@aztec/aztec.js'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import { formatUnits, parseUnits } from 'viem'
+import { formatUnits, parseUnits, encodeFunctionData } from 'viem'
 import { usePublicClient, useWalletClient } from 'wagmi'
 import { useToast, useToastMutation } from './useToast'
 import { wait } from '@/utils'
 import { useL2ErrorHandler } from '@/utils/l2ErrorHandler'
 import { useMutation } from '@tanstack/react-query'
+import { requestHumanWallet } from '@/stores/humanWalletStore'
+import { SILK_METHOD } from '@silk-wallet/silk-wallet-sdk'
+import PortalSBTJson from '../constants/PortalSBT.json'
+import { TokenPortalAbi } from '@aztec/l1-artifacts'
 
 // Define types for balance queries
 export interface L2TokenBalanceData {
@@ -92,6 +95,7 @@ export const useL2TokenBalance = () => {
       }
     } catch (error) {
       handleL2Error<L2TokenBalanceData>(error, 'BALANCE')
+      console.log("error ", error);
       throw error
     }
   }
@@ -170,38 +174,12 @@ export function useL2TokenInfo() {
 export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
   const { metaMaskAddress: l1Address } = useWalletStore()
   const { aztecAddress, aztecAccount } = useWalletStore()
-  const publicClient = usePublicClient()
-  const { data: walletClient } = useWalletClient()
   const queryClient = useQueryClient()
   const notify = useToast()
   const { setProgressStep, setTransactionUrls } = useBridgeStore()
 
   const { l1ContractAddresses, l2TokenContract, l2BridgeContract } =
     useContractStore()
-
-  const getL1PortalManager = useCallback(() => {
-    if (
-      !publicClient ||
-      !walletClient ||
-      !l1ContractAddresses?.outboxAddress.toString()
-    ) {
-      console.log('Missing required dependencies for L1 portal manager')
-      return null
-    }
-
-    const manager = new L1TokenPortalManager(
-      EthAddress.fromString(ADDRESS[11155111].L1.PORTAL_CONTRACT),
-      EthAddress.fromString(ADDRESS[11155111].L1.TOKEN_CONTRACT),
-      EthAddress.fromString(ADDRESS[11155111].L1.FEE_ASSET_HANDLER_CONTRACT),
-      EthAddress.fromString(l1ContractAddresses?.outboxAddress.toString()),
-      // @ts-ignore
-      publicClient,
-      walletClient,
-      logger
-    )
-
-    return manager
-  }, [publicClient, walletClient, l1ContractAddresses])
 
   const mutationFn = async (amount: bigint) => {
     try {
@@ -227,11 +205,6 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         l1Address: l1Address,
         l2Address: aztecAddress,
       })
-
-      const manager = getL1PortalManager()
-      if (!manager) {
-        throw new Error('Failed to create L1 portal manager')
-      }
 
       // Step 1: Setting up authorization for withdrawal
       setProgressStep(1, 'active')
@@ -260,14 +233,21 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
 
       // Step 2: Preparing withdrawal message
       setProgressStep(2, 'active')
-      console.log('Getting L2 to L1 message...')
-      const l2ToL1Message = await manager.getL2ToL1MessageLeaf(
-        amount,
-        EthAddress.fromString(l1Address),
-        l2BridgeContract.address,
-        EthAddress.ZERO
-      )
-      console.log('Retrieved L2 to L1 message: ', l2ToL1Message.toString())
+      console.log('Getting L2 bridge address...')
+      
+      // Get the L2 bridge address using the portal contract
+      const messageData = encodeFunctionData({
+        abi: TokenPortalAbi,
+        functionName: 'l2Bridge',
+        args: []
+      })
+
+      const l2BridgeAddress = await requestHumanWallet(SILK_METHOD.eth_call, [{
+        to: ADDRESS[11155111].L1.PORTAL_CONTRACT,
+        data: messageData
+      }, 'latest'])
+
+      console.log('Retrieved L2 bridge address: ', l2BridgeAddress.toString())
       setProgressStep(2, 'completed')
 
       // Step 3: Initiating exit to Ethereum
@@ -289,7 +269,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       // Store L2 to L1 message and transaction receipt in localStorage
       const withdrawalData = {
         id: Date.now().toString(), // Unique identifier for this attempt
-        l2ToL1Message: l2ToL1Message.toString(),
+        l2BridgeAddress: l2BridgeAddress.toString(),
         l2TxReceipt: {
           txHash: l2TxReceipt.txHash.toString(),
           blockNumber: l2TxReceipt.blockNumber?.toString(),
@@ -325,7 +305,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       const [l2ToL1MessageIndex, siblingPath] =
         await aztecAccount.aztecNode.getL2ToL1MessageMembershipWitness(
           Number(l2TxReceipt.blockNumber!),
-          l2ToL1Message
+          l2BridgeAddress
         )
       console.log('Retrieved membership witness', {
         messageIndex: l2ToL1MessageIndex,
@@ -343,21 +323,37 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       setProgressStep(6, 'active')
       console.log('Initiating withdrawal on L1...')
       try {
-        await manager.withdrawFunds(
-          amount,
-          EthAddress.fromString(l1Address),
-          BigInt(l2TxReceipt.blockNumber!),
-          l2ToL1MessageIndex,
-          siblingPath
-        )
+        // Prepare the withdrawal transaction
+        const withdrawData = encodeFunctionData({
+          abi: TokenPortalAbi,
+          functionName: 'withdraw',
+          args: [
+            l1Address,
+            amount,
+            false, // _withCaller
+            BigInt(l2TxReceipt.blockNumber!),
+            l2ToL1MessageIndex,
+            siblingPath
+          ]
+        })
+
+        // Send the withdrawal transaction
+        const txHash = await requestHumanWallet(SILK_METHOD.eth_sendTransaction, [{
+          from: l1Address,
+          to: ADDRESS[11155111].L1.PORTAL_CONTRACT,
+          data: withdrawData
+        }])
+
+        // Wait for transaction receipt
+        const receipt = await requestHumanWallet(SILK_METHOD.eth_getTransactionReceipt, [txHash])
 
         // Update withdrawal data with success
         const updatedWithdrawalData = {
           ...withdrawalData,
           success: true,
           completedAt: Date.now(),
-          l1TxHash: l2TxReceipt.txHash.toString(), // Using L2 tx hash as reference
-          l1TxUrl: `https://sepolia.etherscan.io/tx/${l2TxReceipt.txHash.toString()}`,
+          l1TxHash: receipt.transactionHash,
+          l1TxUrl: `https://sepolia.etherscan.io/tx/${receipt.transactionHash}`,
         }
 
         // Update the specific withdrawal in the array
@@ -376,7 +372,6 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         const errorMessage =
           error instanceof Error ? error.message : String(error)
 
-        // console.error('Withdrawal failed:', error)
         notify('error', `Failed to withdraw tokens. ${errorMessage}`)
         throw error
       }
@@ -485,7 +480,6 @@ export function useL2HasSoulboundToken() {
     queryKey,
     queryFn,
     enabled: !!aztecAddress,
-    staleTime: 60 * 1000, // 1 minute
     meta: {
       persist: true, // Mark this query for persistence
     },

@@ -1,21 +1,26 @@
 import { useEffect, useCallback } from 'react'
-import { useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
-import { injected } from 'wagmi/connectors'
-import { sepolia } from 'wagmi/chains'
 import { useAccount as useAztecAccount } from '@nemi-fi/wallet-sdk/react'
 import { sdk, connectWallet } from '../aztec'
 import { useWalletStore } from '@/stores/walletStore'
 import { useContractStore } from '@/stores/contractStore'
-import { showToast } from '@/utils/toast'
+import { showToast } from '@/hooks/useToast'
 import { logError } from '@/utils/datadog'
 import { AztecWalletType } from '@/types/wallet'
+import { useHumanWalletStore } from '@/stores/humanWalletStore'
+import { sepolia } from 'wagmi/chains'
 
 export function useWalletSync() {
   // MetaMask hooks
-  const { address: metaMaskAddress, isConnected: isMetaMaskConnected, chainId } = useAccount()
-  const { connect } = useConnect()
-  const { disconnect: wagmiDisconnect } = useDisconnect()
-  const { switchChain } = useSwitchChain()
+  const {
+    address: metaMaskAddress,
+    isConnected: isMetaMaskConnected,
+    chainId,
+    walletName,
+    login: connect,
+    logout: wagmiDisconnect,
+    switchChain,
+    signMessage,
+  } = useHumanWalletStore()
 
   // Aztec hooks
   const account = useAztecAccount(sdk)
@@ -23,14 +28,14 @@ export function useWalletSync() {
   const isAztecConnected = !!aztecAddress
 
   // Get store actions
-  const { 
+  const {
     setMetaMaskState,
     setAztecWalletType,
     setAztecState,
     disconnectAztecWallet,
     executeAztecTransaction,
     azguardClient,
-    setShowWalletModal
+    setShowWalletModal,
   } = useWalletStore()
 
   // Get contract store actions
@@ -41,7 +46,7 @@ export function useWalletSync() {
     setMetaMaskState({
       address: metaMaskAddress || null,
       isConnected: isMetaMaskConnected,
-      chainId: chainId || null
+      chainId: chainId || null,
     })
   }, [metaMaskAddress, isMetaMaskConnected, chainId, setMetaMaskState])
 
@@ -51,9 +56,9 @@ export function useWalletSync() {
       setAztecState({
         address: aztecAddress,
         account: account,
-        isConnected: true
+        isConnected: true,
       })
-      
+
       // Update contract state
       setL2Contracts(account)
     } else {
@@ -61,9 +66,9 @@ export function useWalletSync() {
       setAztecState({
         address: null,
         account: null,
-        isConnected: false
+        isConnected: false,
       })
-      
+
       // Reset contract state
       resetContracts()
     }
@@ -74,7 +79,7 @@ export function useWalletSync() {
     const handleNetworkSwitch = async () => {
       if (isMetaMaskConnected && chainId && chainId !== sepolia.id) {
         try {
-          await switchChain({ chainId: sepolia.id })
+          await switchChain(sepolia.id)
         } catch (error) {
           logError('Failed to switch network', { error, chainId })
           showToast('error', 'Failed to switch to Sepolia network')
@@ -87,8 +92,9 @@ export function useWalletSync() {
   // Connect MetaMask
   const connectMetaMask = useCallback(async () => {
     try {
-      await connect({ connector: injected() })
+      await connect()
     } catch (error) {
+      console.log('🚀MMM - ~ connectMetaMask ~ error:', error)
       logError('Failed to connect MetaMask', { error })
       showToast('error', 'Failed to connect MetaMask wallet')
       throw error
@@ -96,35 +102,43 @@ export function useWalletSync() {
   }, [connect])
 
   // Connect Aztec Wallet
-  const connectAztecWallet = useCallback(async (type: AztecWalletType) => {
-    try {
-      const connectedAccount = await connectWallet(type)
-      
-      // Update wallet type
-      setAztecWalletType(type)
-      
-      // Update Aztec state
-      setAztecState({
-        address: connectedAccount?.address.toString() || null,
-        account: connectedAccount,
-        isConnected: !!connectedAccount
-      })
-      
-      // Update contract state
-      if (connectedAccount) {
-        setL2Contracts(connectedAccount)
+  const connectAztecWallet = useCallback(
+    async (type: AztecWalletType) => {
+      try {
+        const connectedAccount = await connectWallet(type)
+
+        // Update wallet type
+        setAztecWalletType(type)
+
+        // Update Aztec state
+        setAztecState({
+          address: connectedAccount?.address.toString() || null,
+          account: connectedAccount,
+          isConnected: !!connectedAccount,
+        })
+
+        // Update contract state
+        if (connectedAccount) {
+          setL2Contracts(connectedAccount)
+        }
+
+        // Close wallet modal
+        setShowWalletModal(false)
+
+        return connectedAccount
+      } catch (error) {
+        logError('Failed to connect Aztec wallet', { error })
+        showToast(
+          'error',
+          `Failed to connect to ${type} wallet: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        )
+        throw error
       }
-      
-      // Close wallet modal
-      setShowWalletModal(false)
-      
-      return connectedAccount
-    } catch (error) {
-      logError('Failed to connect Aztec wallet', { error })
-      showToast('error', `Failed to connect to ${type} wallet: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      throw error
-    }
-  }, [setAztecWalletType, setAztecState, setL2Contracts, setShowWalletModal])
+    },
+    [setAztecWalletType, setAztecState, setL2Contracts, setShowWalletModal]
+  )
 
   // Disconnect MetaMask
   const disconnectMetaMask = useCallback(async () => {
@@ -152,7 +166,7 @@ export function useWalletSync() {
     isMetaMaskConnected,
     connectMetaMask,
     disconnectMetaMask,
-    
+
     // Aztec
     aztecAddress,
     isAztecConnected,
@@ -161,4 +175,4 @@ export function useWalletSync() {
     executeAztecTransaction,
     azguardClient,
   }
-} 
+}

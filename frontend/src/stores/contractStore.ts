@@ -2,12 +2,14 @@ import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { AztecAddress, readFieldCompressedString } from '@aztec/aztec.js'
 import { ADDRESS } from '@/config'
-import { TokenContract } from '../constants/aztec/artifacts/Token'
+// import { TokenContract } from '../constants/aztec/artifacts/Token'
 import { TokenBridgeContract } from '@aztec/noir-contracts.js/TokenBridge'
+import { TokenContract } from '@aztec/noir-contracts.js/Token'
 import { Contract } from '@nemi-fi/wallet-sdk/eip1193'
+import { showToast } from '@/hooks/useToast'
 
-class L2Token extends Contract.fromAztec(TokenContract) {}
-class L2TokenBridge extends Contract.fromAztec(TokenBridgeContract) {}
+class L2Token extends Contract.fromAztec(TokenContract as any) {}
+class L2TokenBridge extends Contract.fromAztec(TokenBridgeContract as any) {}
 
 // Use intersection type instead of extending
 type L2TokenMetadata = {
@@ -48,12 +50,12 @@ const contractStore = create<ContractState>((set) => ({
       // })
 
       const token = await L2Token.at(
-        AztecAddress.fromString(ADDRESS[1337].L2.TOKEN_CONTRACT),
+        AztecAddress.fromString(ADDRESS[1337].L2.TOKEN_CONTRACT) as any,
         aztecAccount
       )
 
       const bridge = await L2TokenBridge.at(
-        AztecAddress.fromString(ADDRESS[1337].L2.TOKEN_BRIDGE_CONTRACT),
+        AztecAddress.fromString(ADDRESS[1337].L2.TOKEN_BRIDGE_CONTRACT) as any,
         aztecAccount
       )
 
@@ -85,7 +87,9 @@ const contractStore = create<ContractState>((set) => ({
         l1ContractAddresses,
       })
     } catch (error) {
-      console.error('Failed to setup contracts', error)
+      console.log('Failed to setup contracts', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      showToast('error', `Failed to setup contracts: ${errorMessage}`)
     }
   },
 

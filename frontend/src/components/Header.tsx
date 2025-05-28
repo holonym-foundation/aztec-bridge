@@ -1,24 +1,27 @@
 'use client'
 
+import { Icon } from '@iconify/react'
 import { useToast } from '@/hooks/useToast'
 import { useWalletSync } from '@/hooks/useWalletSync'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
+import { useL1TokenBalances } from '@/hooks/useL1Operations'
 import { wait } from '@/utils'
 import Image from 'next/image'
 import Link from 'next/link'
 import React, { useEffect, useRef, useState } from 'react'
-import { Slide, toast, ToastContentProps } from 'react-toastify'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
+import { silkUrl } from '@/config/l1.config'
 
 type WalletDisplayProps = {
   address?: string
   isConnected: boolean
   walletIcon: string
   networkIcon?: string
+  balance?: string
   onClick?: () => void
   onDisconnect?: () => void
-  walletType: 'metamask' | 'aztec'
+  walletType: 'humanWallet' | 'aztec'
 }
 
 const WalletDisplay: React.FC<WalletDisplayProps> = ({
@@ -26,6 +29,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
   isConnected,
   walletIcon,
   networkIcon,
+  balance,
   onClick,
   onDisconnect,
   walletType,
@@ -78,6 +82,11 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
     setShowDropdown(false)
   }
 
+  const handleOpenWallet = () => {
+    window.open(silkUrl, '_blank', 'noopener,noreferrer')
+    setShowDropdown(false)
+  }
+
   if (!isConnected) return null
 
   return (
@@ -86,17 +95,26 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
         className='flex pr-[8px] justify-center items-center gap-[12px] rounded-[8px] border border-[#D4D4D4] bg-white cursor-pointer hover:shadow-md transition-shadow duration-200'
         onClick={handleClick}
         data-tooltip-id={`tooltip-${walletType}`}>
-        <Image src={walletIcon} alt='Wallet' width={32} height={32} />
+        <div className='flex w-8 h-8 p-1 justify-center items-center rounded-[8px] bg-[#E5EFFF]'>
+          <Image src={walletIcon} alt='Wallet' width={32} height={32} />
+        </div>
         {networkIcon && (
           <Image src={networkIcon} alt='Network' width={20} height={20} />
         )}
-        <span className='text-sm font-medium'>
-          {address
-            ? `${address.substring(0, 6)}...${address.substring(
-                address.length - 4
-              )}`
-            : ''}
-        </span>
+        <div className='flex items-center gap-2'>
+          <span className='text-sm font-medium'>
+            {address
+              ? `${address.substring(0, 6)}...${address.substring(
+                  address.length - 4
+                )}`
+              : ''}
+          </span>
+          {balance && walletType === 'humanWallet' && (
+            <span className='text-xs text-gray-500'>
+              {balance} ETH
+            </span>
+          )}
+        </div>
         <Image
           src='/assets/svg/drop-down-logo.svg'
           alt='Dropdown'
@@ -110,67 +128,23 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
           <div
             className='flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer relative transition-colors duration-150 hover:bg-latest-grey-300'
             onClick={handleCopyAddress}>
-            <div></div>
-            <svg
-              width='16'
-              height='16'
-              viewBox='0 0 24 24'
-              fill='none'
-              xmlns='http://www.w3.org/2000/svg'>
-              <path
-                d='M8 5H6C4.89543 5 4 5.89543 4 7V19C4 20.1046 4.89543 21 6 21H16C17.1046 21 18 20.1046 18 19V17'
-                stroke='currentColor'
-                strokeWidth='2'
-                strokeLinecap='round'
-                strokeLinejoin='round'
-              />
-              <path
-                d='M8 9H6C4.89543 9 4 9.89543 4 11V19C4 20.1046 4.89543 21 6 21H16C17.1046 21 18 20.1046 18 19V17'
-                stroke='currentColor'
-                strokeWidth='2'
-                strokeLinecap='round'
-                strokeLinejoin='round'
-                strokeDasharray='0.2 4'
-                strokeDashoffset='2'
-              />
-              <rect
-                x='8'
-                y='3'
-                width='12'
-                height='12'
-                rx='2'
-                stroke='currentColor'
-                strokeWidth='2'
-                strokeLinecap='round'
-                strokeLinejoin='round'
-              />
-            </svg>
+            <Icon icon='ph:copy' width={20} height={20} />
             <span>{copied ? 'Copied!' : 'Copy Address'}</span>
           </div>
+
+          {window?.silk?.isSilk && walletType === 'humanWallet' && (
+            <div
+              className='flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer relative transition-colors duration-150 hover:bg-latest-grey-300'
+              onClick={handleOpenWallet}>
+              <Icon icon='majesticons:open' width={20} height={20} />
+              <span>Open Human Wallet</span>
+            </div>
+          )}
+
           <div
             className='flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer text-red-500 transition-colors duration-150 hover:bg-latest-grey-300'
             onClick={handleDisconnect}>
-            <svg
-              width='16'
-              height='16'
-              viewBox='0 0 24 24'
-              fill='none'
-              xmlns='http://www.w3.org/2000/svg'>
-              <path
-                d='M16 17L21 12M21 12L16 7M21 12H9'
-                stroke='currentColor'
-                strokeWidth='2'
-                strokeLinecap='round'
-                strokeLinejoin='round'
-              />
-              <path
-                d='M9 3H7C4.79086 3 3 4.79086 3 7V17C3 19.2091 4.79086 21 7 21H9'
-                stroke='currentColor'
-                strokeWidth='2'
-                strokeLinecap='round'
-                strokeLinejoin='round'
-              />
-            </svg>
+            <Icon icon='ph:sign-out' width={20} height={20} />
             <span>Disconnect</span>
           </div>
         </div>
@@ -232,56 +206,6 @@ interface HeaderProps {
   privacyMode?: React.ReactNode
 }
 
-// Custom toast component for Privacy Mode (with injected props)
-const PrivacyModeToast = ({
-  closeToast,
-  toastProps,
-}: Partial<ToastContentProps>) => (
-  <div className='grid grid-cols-[max-content_1fr_max-content] gap-4'>
-    <div className='flex p-[11.2px] items-center gap-[11.2px] rounded-full bg-[#737373]'>
-      <Image
-        src='/assets/svg/shield-check.svg'
-        alt='Shield Check'
-        width={34}
-        height={34}
-      />
-    </div>
-    <div className='flex flex-col justify-center items-start gap-[4px] flex-1'>
-      <span className='text-white font-sans text-[14px] font-semibold leading-[20px]'>
-        Private mode activated
-      </span>
-      <span className='text-[#D4D4D4] font-sans text-[12px] font-medium leading-[15.6px]'>
-        Private balances and transactions are used instead of public
-      </span>
-    </div>
-    <button
-      onClick={closeToast}
-      className='text-white hover:text-gray-300 focus:outline-none self-start'>
-      <svg
-        width='24'
-        height='24'
-        viewBox='0 0 24 24'
-        fill='none'
-        xmlns='http://www.w3.org/2000/svg'>
-        <path
-          d='M18 6L6 18'
-          stroke='white'
-          strokeWidth='2'
-          strokeLinecap='round'
-          strokeLinejoin='round'
-        />
-        <path
-          d='M6 6L18 18'
-          stroke='white'
-          strokeWidth='2'
-          strokeLinecap='round'
-          strokeLinejoin='round'
-        />
-      </svg>
-    </button>
-  </div>
-)
-
 const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
   // Get wallet state from useWalletSync
   const {
@@ -299,6 +223,15 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
 
   // Add bridge store state for Private Payments toggle
   const { isPrivacyModeEnabled, setPrivacyModeEnabled } = useBridgeStore()
+
+  // Get L1 token balances for native balance display
+  const { data: l1TokenBalances = [] } = useL1TokenBalances()
+
+  // Extract native token balance for Sepolia
+  const sepoliaNativeTokens = l1TokenBalances.find(
+    (token) => token.type === 'native' && token.network?.chainId === 11155111
+  )
+  const l1NativeBalance = sepoliaNativeTokens?.balance_formatted?.toString()
 
   // Mobile menu state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -416,33 +349,23 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
                   ? 'bg-[#3B3B3B] justify-end pl-[19px]'
                   : 'bg-[#D4D4D4] justify-start pr-[19px]'
               }`}
-              data-tooltip-id='privacy-mode-tooltip'
-              data-tooltip-content={
-                isPrivacyModeEnabled
-                  ? 'Disable privacy mode'
-                  : 'Enable privacy mode'
-              }
+              // data-tooltip-id='privacy-mode-tooltip'
+              // data-tooltip-content={
+              //   isPrivacyModeEnabled
+              //     ? 'Disable privacy mode'
+              //     : 'Enable privacy mode'
+              // }
               onClick={() => {
                 setPrivacyModeEnabled(!isPrivacyModeEnabled)
 
                 if (!isPrivacyModeEnabled) {
                   setTimeout(() => {
-                    toast.dismiss()
-                    // Hide all existing toasts before showing new one
-                    // await wait(2000)
-                    // toast.dismiss('privacy-mode-toastId');
-                    toast(PrivacyModeToast, {
-                      autoClose: 5000,
-                      closeButton: false,
-                      toastId: 'privacy-mode-toastId',
-                      closeOnClick: true,
-                      hideProgressBar: true,
-                      pauseOnHover: true,
-                      position: 'top-right',
-                      className: 'privacy-mode-toast',
-                      transition: Slide,
+                    notify('privacy-mode', {
+                      message:
+                        'Private balances and transactions are used instead of public',
+                      heading: 'Private mode activated',
                     })
-                  }, 1000) // match your background animation duration
+                  }, 1500)
                 }
               }}
               aria-pressed={isPrivacyModeEnabled}
@@ -467,10 +390,11 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
               <WalletDisplay
                 address={metaMaskAddress}
                 isConnected={isMetaMaskConnected}
-                walletIcon='/assets/svg/meta-mask-wallet-logo.svg'
+                walletIcon='/assets/svg/silk-logo.svg'
                 networkIcon='/assets/svg/network-logo.svg'
+                balance={l1NativeBalance}
                 onDisconnect={disconnectMetaMask}
-                walletType='metamask'
+                walletType='humanWallet'
               />
 
               <WalletDisplay
@@ -556,11 +480,52 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
             </div>
           )}
 
-          {privacyMode && (
-            <div className='text-sm font-medium cursor-pointer hover:text-latest-grey-800 transition-colors duration-200'>
-              {privacyMode}
-            </div>
-          )}
+          {/* Privacy Mode Toggle UI (Mobile) */}
+          <div className='flex px-[3px] py-[3px] pl-[8px] w-[240px] justify-center items-center gap-[8px] rounded-[8px] bg-white border border-[#D4D4D4] !z-[999999] relative privacy-mode-toggle hover:shadow-md transition-shadow duration-200 max-w-[190px]'>
+            <Image
+              src='/assets/svg/human.aztec.svg'
+              alt='Aztec'
+              width={28}
+              height={28}
+            />
+            <span className='text-[#0A0A0A] text-[14px] font-[450] leading-[20px] font-sans'>
+              Privacy Mode
+            </span>
+            <button
+              className={`flex w-[40px] h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none relative z-[9999999] ${
+                isPrivacyModeEnabled
+                  ? 'bg-[#3B3B3B] justify-end pl-[19px]'
+                  : 'bg-[#D4D4D4] justify-start pr-[19px]'
+              }`}
+              onClick={() => {
+                setPrivacyModeEnabled(!isPrivacyModeEnabled)
+
+                if (!isPrivacyModeEnabled) {
+                  setTimeout(() => {
+                    notify(
+                      'privacy-mode',
+                      {
+                        message:
+                          'Private balances and transactions are used instead of public',
+                        heading: 'Private mode activated',
+                      },
+                    )
+                  }, 1500)
+                }
+              }}
+              aria-pressed={isPrivacyModeEnabled}
+              tabIndex={0}
+              style={{ border: 'none' }}>
+              <span className='flex w-[18px] h-[18px] p-[1px] justify-center items-center flex-shrink-0 rounded-[6px] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.25)] transition-transform duration-200'>
+                <Image
+                  src='/assets/svg/shield.svg'
+                  alt='Shield'
+                  width={14}
+                  height={14}
+                />
+              </span>
+            </button>
+          </div>
 
           <div className='flex flex-col items-start gap-3'>
             {!isAnyWalletConnected ? (
@@ -571,9 +536,10 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
                   address={metaMaskAddress}
                   isConnected={isMetaMaskConnected}
                   walletIcon='/assets/svg/meta-mask-wallet-logo.svg'
-                  networkIcon='/assets/svg/network-logo.svg'
+                  // networkIcon='/assets/svg/network-logo.svg'
+                  balance={l1NativeBalance}
                   onDisconnect={disconnectMetaMask}
-                  walletType='metamask'
+                  walletType='humanWallet'
                 />
 
                 <WalletDisplay
@@ -590,14 +556,15 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
         </div>
       )}
 
-      <ReactTooltip
+      {/* <ReactTooltip
         id='privacy-mode-tooltip'
         place='bottom'
         className='z-[100]'
         style={{
           fontSize: '12px',
+          padding: '4px 8px',
         }}
-      />
+      /> */}
     </header>
   )
 }

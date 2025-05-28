@@ -41,8 +41,8 @@ export default function ProgressPage() {
 
   const steps = getProgressSteps()
 
-  // const bridgeAmount = bridgeConfig.amount
-  const bridgeAmount = '10'
+  const bridgeAmount = bridgeConfig.amount
+  // const bridgeAmount = '10'
 
   // const { aztecAddress, metaMaskAddress } = useWalletStore()
   const { l1ContractAddresses, l2BridgeContract } = useContractStore()
@@ -63,10 +63,16 @@ export default function ProgressPage() {
     isError: withdrawTokensToL1Error,
   } = useL2WithdrawTokensToL1()
 
+  // console.log({
+  //   isBridgeTokensToL2Error,
+  //   // withdrawTokensToL1Error,
+  // })
   // Add countdown timer with controls
+  const L1_TO_L2_TIME = 10 * 60 // 10 minutes
+  const L2_TO_L1_TIME = 40 * 60 // 40 minutes
   const [count, { startCountdown, stopCountdown, resetCountdown }] =
     useCountdown({
-      countStart: direction === 'L1_TO_L2' ? 5 * 60 : 40 * 60, // Convert minutes to seconds
+      countStart: direction === 'L1_TO_L2' ? L1_TO_L2_TIME : L2_TO_L1_TIME, // Convert minutes to seconds
       intervalMs: 1000,
     })
 
@@ -81,11 +87,14 @@ export default function ProgressPage() {
 
   // Calculate total time taken
   const totalTimeTaken = () => {
-    const totalSeconds = direction === 'L1_TO_L2' ? 5 * 60 : 40 * 60
+    const totalSeconds =
+      direction === 'L1_TO_L2' ? L1_TO_L2_TIME : L2_TO_L1_TIME
     const timeTaken = totalSeconds - count
     const minutes = Math.floor(timeTaken / 60)
     const seconds = timeTaken % 60
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    return `${minutes.toString().padStart(2, '0')}:${seconds
+      .toString()
+      .padStart(2, '0')}`
   }
 
   // Start countdown when component mounts
@@ -99,7 +108,8 @@ export default function ProgressPage() {
   // Handle bridge operation
   const handleBridgeOperation = useCallback(async () => {
     try {
-      const amount = parseUnits(bridgeAmount || '0', 6) // Assuming 6 decimals for USDC
+      // L2 to L1: L2 token has 6 decimals
+      const amount = parseUnits(bridgeAmount || '0', 6)
       if (bridgeConfig.direction === BridgeDirection.L1_TO_L2) {
         await bridgeTokensToL2(amount)
       } else {
@@ -109,17 +119,32 @@ export default function ProgressPage() {
       console.error('Bridge operation failed:', error)
       // Error will be handled by the error effect
     }
-  }, [bridgeAmount, bridgeConfig.direction, bridgeTokensToL2, withdrawTokensToL1])
+  }, [
+    bridgeAmount,
+    bridgeConfig.direction,
+    bridgeTokensToL2,
+    withdrawTokensToL1,
+  ])
 
   // Start bridge operation when component mounts
   useEffect(() => {
-    if (Number(bridgeAmount) > 0 && !operationStarted.current) {
-      operationStarted.current = true
-      handleBridgeOperation()
-    } else if (Number(bridgeAmount) === 0) {
-      router.push('/')
-    }
-  }, [bridgeAmount, bridgeConfig.direction, bridgeTokensToL2, withdrawTokensToL1, router, handleBridgeOperation])
+    // ? added 2 seconds delay because isBridgeTokensToL2Error or withdrawTokensToL1Error is not working as expected when called to early
+    setTimeout(() => {
+      if (Number(bridgeAmount) > 0 && !operationStarted.current) {
+        operationStarted.current = true
+        handleBridgeOperation()
+      } else if (Number(bridgeAmount) === 0) {
+        router.push('/')
+      }
+    }, 2000)
+  }, [
+    bridgeAmount,
+    bridgeConfig.direction,
+    bridgeTokensToL2,
+    withdrawTokensToL1,
+    router,
+    handleBridgeOperation,
+  ])
 
   // Handle errors and stop animation
   useEffect(() => {
@@ -127,18 +152,24 @@ export default function ProgressPage() {
     if (hasError) {
       // Stop the timer
       stopCountdown()
-      
+
       // Set current step to error
-      const currentStep = steps.findIndex(step => step.status === 'active')
+      const currentStep = steps.findIndex((step) => step.status === 'active')
       if (currentStep !== -1) {
         setProgressStep(currentStep + 1, 'error')
       }
     }
-  }, [isBridgeTokensToL2Error, withdrawTokensToL1Error, steps, setProgressStep, stopCountdown])
+  }, [
+    isBridgeTokensToL2Error,
+    withdrawTokensToL1Error,
+    steps,
+    setProgressStep,
+    stopCountdown,
+  ])
 
   // Stop timer when all steps are completed
   useEffect(() => {
-    if (steps.every(step => step.status === 'completed')) {
+    if (steps.every((step) => step.status === 'completed')) {
       stopCountdown()
     }
   }, [steps, stopCountdown])
@@ -195,20 +226,20 @@ export default function ProgressPage() {
 
   return (
     <RootStyle className=''>
-      <div className='p-5'>
+      <div className='px-5 pt-5'>
         <div className='flex items-center gap-4'>
           <BridgeHeader />
         </div>
 
         {/* Progress Card */}
-        <div className='bg-white rounded-md mt-5 p-4'>
+        <div className='bg-white rounded-md mt-2 p-4'>
           <div
             className='flex items-center justify-center cursor-pointer'
             // onClick={async () => {
             //   const amount = parseUnits(bridgeAmount || '0', 6) // Assuming 6 decimals for USDC
             //   await bridgeTokensToL2(amount)
             // }}
-            >
+          >
             <StyledImage
               src='/assets/svg/progress.svg'
               alt=''
@@ -231,7 +262,7 @@ export default function ProgressPage() {
             </p>
             <p className='font-semibold text-14'>~{formattedTime()}</p>
           </div>
-          {steps.every(step => step.status === 'completed') && (
+          {steps.every((step) => step.status === 'completed') && (
             <div className='flex justify-between mt-[2px]'>
               <p className='text-14 font-medium text-latest-grey-100'>
                 Total time taken{' '}
@@ -286,14 +317,14 @@ export default function ProgressPage() {
         </div>
       </div>
 
-      <div className='flex flex-col items-center justify-center px-5'>
+      <div className='flex flex-row items-center justify-center px-5 mt-2 gap-4'>
         {l1TxUrl && (
           <a
             href={l1TxUrl}
             target='_blank'
             rel='noopener noreferrer'
             className='text-14 font-semibold text-blue-200 bg-blue-300 hover:text-blue-100 mt-2 block px-4 py-2 rounded-full'>
-            View L1 Transaction ↗
+            View L1 Tx ↗
           </a>
         )}
 
@@ -303,10 +334,15 @@ export default function ProgressPage() {
             target='_blank'
             rel='noopener noreferrer'
             className='text-14 font-semibold text-[#9333ea] bg-[#f3e8ff] hover:text-[#6b21a8] mt-2 block px-4 py-2 rounded-full'>
-            View L2 Transaction ↗
+            View L2 Tx ↗
           </a>
         )}
-        {(steps.every(step => step.status === 'completed') || isBridgeTokensToL2Error || withdrawTokensToL1Error) && (
+      </div>
+
+      <div className='flex flex-row items-center justify-center px-5 mt-4'>
+        {(steps.every((step) => step.status === 'completed') ||
+          isBridgeTokensToL2Error ||
+          withdrawTokensToL1Error) && (
           <TextButton className='' onClick={() => router.push('/')}>
             Back to Main Screen
           </TextButton>

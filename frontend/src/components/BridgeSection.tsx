@@ -18,10 +18,14 @@ interface BridgeSectionProps {
   setInputAmount: (amount: string) => void
   l1NativeBalance: string | number | null | undefined
   l1Balance: string | number | null | undefined
-  l2PublicBalance: string | number | null | undefined
+  l2Balance: {
+    privateBalance: string | number | null | undefined
+    publicBalance: string | number | null | undefined
+  }
   direction: BridgeDirection
   inputRef: React.RefObject<HTMLInputElement>
   onSwap?: () => void
+  isPrivacyModeEnabled: boolean
 }
 
 const BridgeSection: React.FC<BridgeSectionProps> = ({
@@ -33,17 +37,23 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   setInputAmount,
   l1NativeBalance,
   l1Balance,
-  l2PublicBalance,
+  l2Balance,
   direction,
   inputRef,
   onSwap,
+  isPrivacyModeEnabled,
 }) => {
   // Normalize balances to strings
   const l1NativeBalanceStr =
     l1NativeBalance != null ? l1NativeBalance.toString() : ''
   const l1BalanceStr = l1Balance != null ? l1Balance.toString() : ''
+
   const l2PublicBalanceStr =
-    l2PublicBalance != null ? l2PublicBalance.toString() : ''
+    l2Balance?.publicBalance != null ? l2Balance?.publicBalance.toString() : ''
+  const l2PrivateBalanceStr =
+    l2Balance?.privateBalance != null ? l2Balance?.privateBalance.toString() : ''
+
+  const l2BalanceStr = isPrivacyModeEnabled ? l2PrivateBalanceStr : l2PublicBalanceStr
 
   // Swap icon rotation state
   const [swapRotation, setSwapRotation] = useState(0)
@@ -135,7 +145,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                 </p>
               </div>
             </div> */}
-            <div className='flex flex-col gap-2 w-full justify-between items-center'>
+            <div className='flex flex-col gap-2 w-full justify-between items-end'>
               <p className='text-latest-grey-500 text-12 font-medium'>
                 Balance:
               </p>
@@ -143,7 +153,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                 <p className='text-latest-grey-500 text-12 font-medium break-all'>
                   {direction === BridgeDirection.L1_TO_L2
                     ? l1BalanceStr
-                    : l2PublicBalanceStr}
+                    : l2BalanceStr}
                 </p>
                 <p className='text-latest-grey-500 text-12 font-medium'>
                   {bridge.from.token?.title}
@@ -162,7 +172,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
               setInputAmount(
                 direction === BridgeDirection.L1_TO_L2
                   ? l1BalanceStr
-                  : l2PublicBalanceStr
+                  : l2BalanceStr
               )
             }>
             Max
@@ -241,7 +251,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
           </p>
           <p className='text-latest-grey-500 text-12 font-medium break-all'>
             {direction === BridgeDirection.L1_TO_L2
-              ? l2PublicBalanceStr
+              ? l2BalanceStr
               : l1BalanceStr}{' '}
             {bridge.to.token?.title}
           </p>

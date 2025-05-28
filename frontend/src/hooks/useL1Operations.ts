@@ -1,10 +1,9 @@
-import { ADDRESS } from '@/config'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useContractStore } from '@/stores/contractStore'
 import { useWalletStore } from '@/stores/walletStore'
 import { truncateDecimals, wait } from '@/utils'
+import axios from 'axios'
 import { logError, logInfo } from '@/utils/datadog'
-import { logger } from '@/utils/logger'
 import {
   AztecAddress,
   EthAddress,
@@ -16,33 +15,72 @@ import {
 import { TestERC20Abi, TokenPortalAbi } from '@aztec/l1-artifacts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import { formatEther, formatUnits, getContract } from 'viem'
-import { usePublicClient, useWalletClient } from 'wagmi'
+import {
+  formatEther,
+  formatUnits,
+  getContract,
+  encodeFunctionData,
+  createPublicClient,
+  http,
+} from 'viem'
+import { sepolia } from 'viem/chains'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { useToast, useToastMutation, useToastQuery } from './useToast'
 import { extractEvent } from '@aztec/ethereum'
+import { requestHumanWallet } from '@/stores/humanWalletStore'
+import { SILK_METHOD } from '@silk-wallet/silk-wallet-sdk'
+import {
+  I_UserTokenBalance,
+  T_AlchemyTokenBalanceResponse,
+  T_UserTokenType,
+} from '@/types/token.balances.types'
+import { NFT } from '@/types/nft.types'
+import { axiosErrorMessage } from './helper'
+import { networkConfig, silkUrl } from '@/config/l1.config'
+import { ADDRESS } from '@/config'
 
 // Fix the bytecode format
 const PortalSBTAbi = PortalSBTJson.abi
 
+// Create a public client for transaction receipt polling
+const publicClient = createPublicClient({
+  chain: sepolia,
+  transport: http(),
+})
+
 export function useL1NativeBalance() {
   const { metaMaskAddress: l1Address } = useWalletStore()
-  const publicClient = usePublicClient()
-  // const { data: nativeBalance } = useBalance({
-  //   address: l1Address,
-  // })
 
   const queryKey = ['l1NativeBalance', l1Address]
   const queryFn = async () => {
     if (!l1Address) return null
 
-    const balance = await publicClient.getBalance({
-      address: l1Address,
-    })
+    const chainIds = [11155111]
+    console.log('calling alchemy')
 
-    const balanceFormatEther = formatEther(balance)
-    const formattedBalance = truncateDecimals(balanceFormatEther)
-    return formattedBalance
+    try {
+      const url = `${silkUrl}/api/alchemy/tokens-balances`
+
+      const response = await axios.post<T_AlchemyTokenBalanceResponse[]>(url, {
+        address: l1Address,
+        chains: chainIds,
+      })
+
+      const tokens = response?.data
+      console.log('tokens ', tokens)
+    } catch (error) {
+      console.log('error ', error)
+    }
+
+    // const balance = await requestHumanWallet(SILK_METHOD.eth_getBalance, [
+    //   l1Address,
+    //   'latest',
+    // ])
+    // console.log('balance ', balance)
+    // // const balance = '0'
+    // const balanceFormatEther = formatEther(BigInt(balance as string))
+    // const formattedBalance = truncateDecimals(balanceFormatEther)
+    return 0
   }
 
   return useQuery({
@@ -59,21 +97,26 @@ export function useL1NativeBalance() {
 
 export function useL1TokenBalance() {
   const { metaMaskAddress: l1Address } = useWalletStore()
-  const publicClient = usePublicClient()
 
   const queryKey = ['l1TokenBalance', l1Address]
   const queryFn = async () => {
     if (!l1Address) return null
 
-    const balance = await publicClient.readContract({
-      address: ADDRESS[11155111].L1.TOKEN_CONTRACT as `0x${string}`,
+    const data = encodeFunctionData({
       abi: TestERC20Abi,
       functionName: 'balanceOf',
       args: [l1Address],
     })
 
+    const balance = await requestHumanWallet(SILK_METHOD.eth_call, [
+      {
+        to: ADDRESS[11155111].L1.TOKEN_CONTRACT,
+        data,
+      },
+    ])
+
     // TODO: this should come from token
-    const balanceFormat = formatUnits(balance as bigint, 6)
+    const balanceFormat = formatUnits(BigInt(balance as string), 6)
     return balanceFormat
   }
 
@@ -89,37 +132,163 @@ export function useL1TokenBalance() {
 
 // -----------------------------------
 
+/**
+ * Hook to get token balances for an address across multiple chains
+ */
+export function useL1TokenBalances() {
+  const { metaMaskAddress: l1Address } = useWalletStore()
+  const notify = useToast()
+
+  const queryKey = ['l1TokenBalances', l1Address]
+  const queryFn = async () => {
+    try {
+      const response = await axios.post<T_AlchemyTokenBalanceResponse[]>(
+        '/api/alchemy/tokens-balances',
+        {
+          address: l1Address,
+          chains: [11155111], // Sepolia testnet
+        }
+      )
+
+      const tokens = response?.data
+
+      const tokenBalnces = tokens?.map(
+        (token: T_AlchemyTokenBalanceResponse) => {
+          let tokenType: T_UserTokenType
+
+          if (!token.tokenAddress || token.tokenAddress === null) {
+            tokenType = 'native'
+          } else {
+            tokenType = 'erc20'
+          }
+
+          const formattedBalance = formatUnits(
+            BigInt(token.tokenBalance),
+            token?.tokenMetadata?.decimals ?? 18
+          )
+          const balance_formatted = truncateDecimals(formattedBalance)
+
+          const usdExchangeRate =
+            token.tokenPrices?.find((price: any) => price.currency === 'usd')
+              ?.value || '0'
+
+          const usdValue = Number(balance_formatted) * Number(usdExchangeRate)
+          const usdValueTruncated = truncateDecimals(usdValue, 2)
+
+          return {
+            address: token.tokenAddress,
+            name: token.tokenMetadata.name,
+            symbol: token.tokenMetadata.symbol,
+            decimals: token.tokenMetadata.decimals,
+            chain: networkConfig[token.chainId]?.name || '',
+            network: networkConfig[token.chainId],
+            logo: token.tokenMetadata.logo || undefined,
+            type: tokenType,
+            balance: token.tokenBalance,
+            balance_formatted: balance_formatted,
+            balance_usd_value: usdValueTruncated,
+            exchange_rate: Number(usdExchangeRate),
+          }
+        }
+      ) as I_UserTokenBalance[]
+
+      console.log('tokenBalnces ', tokenBalnces)
+      return tokenBalnces
+    } catch (error) {
+      const errMsg = axiosErrorMessage(error)
+      notify('error', errMsg)
+
+      throw error
+    }
+  }
+
+  return useToastQuery({
+    queryKey,
+    queryFn,
+    enabled: !!l1Address,
+    // Data stays fresh for 1 minute, then triggers a background refetch
+    // This means: instant cached data for 1 minute, then auto-refresh
+    // staleTime: 60 * 1000, // 1 minute
+    meta: {
+      persist: true,
+    },
+  })
+}
+
+/**
+ * Hook to get NFTs for an address across multiple chains
+ */
+export function useL1NFTs() {
+  const { metaMaskAddress: l1Address } = useWalletStore()
+
+  const queryKey = ['l1NFTs', l1Address]
+  const queryFn = async () => {
+    try {
+      const response = await axios.post<NFT[]>('/api/alchemy/nfts', {
+        address: l1Address,
+        chains: [11155111], // Sepolia testnet
+      })
+
+      return response.data
+    } catch (error) {
+      console.error('Error fetching NFTs:', error)
+      throw error
+    }
+  }
+
+  return useToastQuery({
+    queryKey,
+    queryFn,
+    enabled: !!l1Address,
+    // Data stays fresh for 1 minute, then triggers a background refetch
+    // This means: instant cached data for 1 minute, then auto-refresh
+    // staleTime: 60 * 1000, // 1 minute
+    meta: {
+      persist: true,
+    },
+  })
+}
+
+// -----------------------------------
+
 export function useL1Faucet() {
   const { metaMaskAddress: l1Address } = useWalletStore()
   const queryClient = useQueryClient()
+
+  // L1 (Ethereum) balances and operations
   const {
-    data: nativeBalance,
-    isLoading: nativeBalanceLoading,
-    refetch: refetchNativeBalance,
-  } = useL1NativeBalance()
-  const {
-    data: tokenBalance,
-    isLoading: tokenBalanceLoading,
-    refetch: refetchTokenBalance,
-  } = useL1TokenBalance()
-  const publicClient = usePublicClient()
-  const { data: walletClient } = useWalletClient()
+    data: l1TokenBalances = [],
+    isLoading: l1BalanceLoading,
+    refetch: refetchL1Balance,
+  } = useL1TokenBalances()
+
+  // native token
+  const sepoliaNativeTokens = l1TokenBalances.find(
+    (token) => token.type === 'native' && token.network?.chainId === 11155111
+  )
+  const l1NativeBalance = sepoliaNativeTokens?.balance_formatted
+
+  const l1Balance = l1TokenBalances.find(
+    (token) =>
+      token.type === 'erc20' &&
+      token.network?.chainId === 11155111 &&
+      token.address === ADDRESS[11155111].L1.TOKEN_CONTRACT
+  )?.balance_formatted
 
   const notify = useToast()
 
   const mintNativeAmount = 0.01
-  const mintTokenAmount = 0
+  const mintTokenAmount = 10
 
   // Helper function to check if user has gas
-  const hasGas = !!nativeBalance && Number(nativeBalance) > mintNativeAmount
+  const hasGas = !!l1NativeBalance && Number(l1NativeBalance || 0) > mintNativeAmount
 
   // Check balances - only if balance data is loaded
-  const balancesLoaded = !nativeBalanceLoading && !tokenBalanceLoading
+  const balancesLoaded = !l1BalanceLoading
   const needsGas =
     balancesLoaded &&
-    (!nativeBalance || Number(nativeBalance) <= mintNativeAmount)
-  const needsTokens =
-    balancesLoaded && tokenBalance && Number(tokenBalance) <= mintTokenAmount
+    (!l1NativeBalance || Number(l1NativeBalance || 0) <= mintNativeAmount)
+  const needsTokens = balancesLoaded && Number(l1Balance || 0) <= mintTokenAmount
 
   // User is eligible for faucet if they need gas OR tokens
   // Check if user has gas but still needs tokens - they should be eligible for tokens only
@@ -144,8 +313,8 @@ export function useL1Faucet() {
       if (!l1Address) throw new Error('Wallet not connected')
 
       console.log('Starting faucet request with state:', {
-        nativeBalance,
-        tokenBalance,
+        l1NativeBalance,
+        l1Balance,
         hasGas,
         needsGas,
         needsTokens,
@@ -158,7 +327,7 @@ export function useL1Faucet() {
       // Step 1: If needed, get ETH for gas
       if (needsGas) {
         try {
-          notify('info', 'Getting ETH...')
+          // notify('info', 'Getting ETH...')
           // Request gas from faucet
           const response = await fetch('/api/faucet', {
             method: 'POST',
@@ -183,14 +352,10 @@ export function useL1Faucet() {
 
           // Wait for the gas transaction to be processed
           // console.log('Waiting for gas transaction to be confirmed...')
-          await wait(30000) // 30 seconds
+          // await wait(30000) // 30 seconds
 
           // Refresh balances to reflect new gas balance
-          await refetchNativeBalance()
-
-          // await queryClient.invalidateQueries({
-          //   queryKey: ['l1NativeBalance', l1Address],
-          // })
+          await refetchL1Balance()
 
           // Create an Etherscan URL for the transaction
           const etherscanUrl = `https://sepolia.etherscan.io/tx/${gasResult.txHash}`
@@ -201,7 +366,6 @@ export function useL1Faucet() {
             onClick: () => {
               window.open(etherscanUrl, '_blank')
             },
-            autoClose: 10000, // 10 seconds
             closeOnClick: false,
             style: { cursor: 'pointer' },
           })
@@ -219,7 +383,7 @@ export function useL1Faucet() {
         console.log('Checking if tokens need to be minted...')
 
         const currentNativeBalance =
-          result?.balances?.recipient?.after || nativeBalance
+          result?.balances?.recipient?.after || l1NativeBalance
 
         // const hasEnoughGas = Number(currentNativeBalance) >= mintNativeAmount
         const hasEnoughGas = true
@@ -227,8 +391,8 @@ export function useL1Faucet() {
         if (hasEnoughGas) {
           console.log('User has gas. Requesting tokens from API...')
           try {
-            notify('info', 'Getting tokens...')
-            await wait(30000) // 30 seconds
+            // notify('info', 'Getting tokens...')
+            // await wait(30000) // 30 seconds
 
             // Call our mint-tokens API endpoint
             const response = await fetch('/api/mint-tokens', {
@@ -252,11 +416,7 @@ export function useL1Faucet() {
             console.log('Tokens minted successfully via API:', mintResult)
             // await wait(30000) // 30 seconds
 
-            await refetchTokenBalance()
-
-            // await queryClient.invalidateQueries({
-            //   queryKey: ['l1TokenBalance', l1Address],
-            // })
+            await refetchL1Balance()
 
             // Wait for the query to complete
             // await wait(30000) // 30 seconds
@@ -320,7 +480,7 @@ export function useL1Faucet() {
         }, 10000) // 10 seconds
       },
       toastMessages: {
-        pending: 'Processing faucet and token ...',
+        pending: 'Processing faucet and token',
         success: 'Faucet completed successfully!',
         error: 'Faucet request failed',
       },
@@ -330,8 +490,7 @@ export function useL1Faucet() {
     needsTokensOnly,
     isEligibleForFaucet,
     hasGas,
-    nativeBalanceLoading,
-    tokenBalanceLoading,
+    l1BalanceLoading,
     balancesLoaded,
   }
 }
@@ -339,8 +498,6 @@ export function useL1Faucet() {
 // -----------------------------------
 export function useL1MintTokens() {
   const { metaMaskAddress: l1Address } = useWalletStore()
-  const publicClient = usePublicClient()
-  const { data: walletClient } = useWalletClient()
   const queryClient = useQueryClient()
   const { data: nativeBalance } = useL1NativeBalance()
   const { data: tokenBalance } = useL1TokenBalance()
@@ -355,7 +512,7 @@ export function useL1MintTokens() {
   const isEligibleForTokens = hasGas && !hasTokens
 
   const mutationFn = async () => {
-    if (!walletClient || !l1Address) throw new Error('Wallet not connected')
+    if (!l1Address) throw new Error('Wallet not connected')
 
     // Check eligibility
     if (!hasGas) {
@@ -364,29 +521,32 @@ export function useL1MintTokens() {
       )
     }
 
-    // if (hasTokens) {
-    //   throw new Error('You already have tokens')
-    // }
-
     const mintAmount = BigInt(1000000000000000000)
 
     console.log('Minting tokens for address:', l1Address)
 
-    // Simulate the transaction
-    const { request } = await publicClient.simulateContract({
-      address: ADDRESS[11155111].L1.TOKEN_CONTRACT as `0x${string}`,
+    // Prepare the transaction data
+    const data = encodeFunctionData({
       abi: TestERC20Abi,
       functionName: 'mint',
       args: [l1Address, mintAmount],
-      account: l1Address as `0x${string}`,
     })
 
     // Send the transaction
-    const hash = await walletClient.writeContract(request)
-    console.log('Mint transaction sent, hash:', hash)
+    const txHash = await requestHumanWallet(SILK_METHOD.eth_sendTransaction, [
+      {
+        from: l1Address,
+        to: ADDRESS[11155111].L1.TOKEN_CONTRACT,
+        data,
+      },
+    ])
+    console.log('Mint transaction sent, hash:', txHash)
 
     // Wait for confirmation
-    const receipt = await publicClient.waitForTransactionReceipt({ hash })
+    const receipt = await requestHumanWallet(
+      SILK_METHOD.eth_getTransactionReceipt,
+      [txHash]
+    )
     console.log('Mint transaction confirmed, receipt:', receipt)
     return receipt
   }
@@ -424,10 +584,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
     isMetaMaskConnected,
     aztecAddress,
   } = useWalletStore()
-  const publicClient = usePublicClient()
-  const { data: walletClient } = useWalletClient()
   const queryClient = useQueryClient()
-  const { setProgressStep, setTransactionUrls } = useBridgeStore()
+  const { setProgressStep, setTransactionUrls, isPrivacyModeEnabled } = useBridgeStore()
   const notify = useToast()
 
   const { l1ContractAddresses, l2BridgeContract } = useContractStore()
@@ -446,14 +604,6 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         throw new Error(
           'L2 bridge contract not initialized. Please wait for contract initialization to complete.'
         )
-      }
-
-      if (!publicClient) {
-        throw new Error('Public client not connected')
-      }
-
-      if (!walletClient) {
-        throw new Error('Wallet client not connected')
       }
 
       if (!l1ContractAddresses?.outboxAddress) {
@@ -475,89 +625,110 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         l2Address: aztecAddress,
       })
 
-      const l1TokenAddress = ADDRESS[11155111].L1
-        .TOKEN_CONTRACT as `0x${string}`
-      const l1PortalAddress = ADDRESS[11155111].L1
-        .PORTAL_CONTRACT as `0x${string}`
-
-      // const l2TokenAddress = ADDRESS[11155111].L2.TOKEN_CONTRACT
-      // const l2PortalAddress = ADDRESS[11155111].L2.PORTAL_CONTRACT
-
-      // Get token contract instance
-      const tokenContract = getContract({
-        address: l1TokenAddress,
-        abi: TestERC20Abi,
-        client: walletClient,
-      })
-
-      // Get portal contract instance
-      const portalContract = getContract({
-        address: l1PortalAddress,
-        abi: TokenPortalAbi,
-        client: walletClient,
-      })
+      const l1TokenAddress = ADDRESS[11155111].L1.TOKEN_CONTRACT
+      const l1PortalAddress = ADDRESS[11155111].L1.PORTAL_CONTRACT
 
       // Check allowance
-      const userAddress = walletClient.account.address
-      const allowance = await tokenContract.read.allowance([
-        userAddress,
-        l1PortalAddress,
+      const allowanceData = encodeFunctionData({
+        abi: TestERC20Abi,
+        functionName: 'allowance',
+        args: [l1Address as `0x${string}`, l1PortalAddress],
+      })
+
+      const allowance = await requestHumanWallet(SILK_METHOD.eth_call, [
+        {
+          to: l1TokenAddress,
+          data: allowanceData,
+        },
       ])
 
       // Approve tokens if necessary
-      if (allowance < amount) {
-        const approveTxHash = await tokenContract.write.approve([
-          l1PortalAddress,
-          amount,
-        ])
+      if (BigInt(allowance as string) < amount) {
+        const approveData = encodeFunctionData({
+          abi: TestERC20Abi,
+          functionName: 'approve',
+          args: [l1PortalAddress, amount],
+        })
+
+        const approveTxHash = await requestHumanWallet(
+          SILK_METHOD.eth_sendTransaction,
+          [
+            {
+              from: l1Address as `0x${string}`,
+              to: l1TokenAddress,
+              data: approveData,
+            },
+          ]
+        )
+
+        // OLD CODE: const approveReceipt = await requestHumanWallet(SILK_METHOD.eth_getTransactionReceipt, [approveTxHash])
+        // ISSUE: eth_getTransactionReceipt returns null if transaction hasn't been mined yet
+        // SOLUTION: Use viem's waitForTransactionReceipt which polls until transaction is confirmed
+        // Wait for approve transaction to be mined using viem polling
+        console.log('Waiting for approve transaction to be mined...')
         const approveReceipt = await publicClient.waitForTransactionReceipt({
           hash: approveTxHash,
         })
-        console.log('🚀MMM - ~ approveReceipt:', approveReceipt.transactionHash)
       }
 
       const [claimSecret, claimSecretHash] = await generateClaimSecret()
+      // TODO: store these at this point in the local storage
 
-      // // Generate claim secret using Ethereum wallet signature
-      // const message = `Bridge to Aztec: ${amount.toString()} tokens to ${aztecAddress}`
-      // const signature = await walletClient.signMessage({ message })
-      // console.log('signature ', signature)
+      // Bridge tokens - use different function based on privacy mode
+      const functionName = isPrivacyModeEnabled ? 'depositToAztecPrivate' : 'depositToAztecPublic'
+      const args = isPrivacyModeEnabled 
+        ? [amount, claimSecretHash.toString()] as const
+        : [aztecAddress as `0x${string}`, amount, claimSecretHash.toString()] as const
 
-      // // Use the signature as the claim secret and compute its hash
-      // const claimSecret = Fr.fromString(signature)
-      // console.log('claimSecret ', claimSecret)
-      // const claimSecretHash = await computeSecretHash(claimSecret)
-      // console.log('claimSecretHash ', claimSecretHash)
+      const bridgeData = encodeFunctionData({
+        abi: TokenPortalAbi,
+        functionName,
+        args,
+      })
 
-      // TODO: better to store the secret and hash right here before passing it to function
-
-      // Bridge tokens
-      const { request } = await portalContract.simulate.depositToAztecPublic([
-        aztecAddress as `0x${string}`,
-        amount,
-        claimSecretHash.toString(),
+      const txHash = await requestHumanWallet(SILK_METHOD.eth_sendTransaction, [
+        {
+          from: l1Address as `0x${string}`,
+          to: l1PortalAddress,
+          data: bridgeData,
+        },
       ])
 
-      const txHash = await walletClient.writeContract(request)
+      // OLD CODE: const txReceipt = await requestHumanWallet(SILK_METHOD.eth_getTransactionReceipt, [txHash])
+      // ISSUE: eth_getTransactionReceipt returns null if transaction hasn't been mined yet
+      // SOLUTION: Use viem's waitForTransactionReceipt which polls until transaction is confirmed
+      // Wait for bridge transaction to be mined using viem polling
+      console.log('Waiting for bridge transaction to be mined...')
       const txReceipt = await publicClient.waitForTransactionReceipt({
         hash: txHash,
       })
 
-      const l1TxHash = txReceipt.transactionHash.toString()
+      const l1TxHash = txReceipt?.transactionHash?.toString()
       const l1TxUrl = `https://sepolia.etherscan.io/tx/${l1TxHash}`
 
       setTransactionUrls(l1TxUrl, null)
 
-      // Extract the event to get the message hash and leaf index
+      // Extract the event to get the message hash and leaf index - use different event based on privacy mode
+      const eventName = isPrivacyModeEnabled ? 'DepositToAztecPrivate' : 'DepositToAztecPublic'
+      
+      // Create filter functions for cleaner code
+      const privateEventFilter = (log: any) => 
+        log.args.amount === amount && 
+        log.args.secretHashForL2MessageConsumption === claimSecretHash.toString()
+      
+      const publicEventFilter = (log: any) => 
+        log.args.secretHash === claimSecretHash.toString() && 
+        log.args.amount === amount && 
+        log.args.to === aztecAddress
+      
+      const eventFilter = isPrivacyModeEnabled ? privateEventFilter : publicEventFilter
+      
       const log = extractEvent(
         txReceipt.logs,
-        portalContract.address,
-        portalContract.abi,
-        'DepositToAztecPublic',
-        (log) =>
-          log.args.secretHash === claimSecretHash.toString() &&
-          log.args.amount === amount &&
-          log.args.to === aztecAddress
+        l1PortalAddress,
+        TokenPortalAbi,
+        eventName,
+        eventFilter
       )
 
       const messageHash = log.args.key
@@ -578,6 +749,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         success: false, // Initial state
         l1TxHash: l1TxHash,
         l1TxUrl: l1TxUrl,
+        isPrivacyModeEnabled: isPrivacyModeEnabled,
       }
 
       // Get existing claims or initialize empty array
@@ -593,20 +765,31 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       setProgressStep(2, 'active')
       console.log('Waiting for Ethereum confirmation...')
       await wait(120000) // 2 minutes
+      // await wait(180000) // 3 minutes
 
       // Step 3: Claiming tokens on Aztec Network
       setProgressStep(2, 'completed')
       setProgressStep(3, 'active')
 
       try {
-        const sendResult = l2BridgeContract.methods
-          .claim_public(
-            AztecAddress.fromString(aztecAddress),
-            amount,
-            claimSecret,
-            messageLeafIndex
-          )
-          .send()
+        console.log('isPrivacyModeEnabled ', isPrivacyModeEnabled)
+        const sendResult = isPrivacyModeEnabled
+          ? l2BridgeContract.methods
+              .claim_private(
+                AztecAddress.fromString(aztecAddress),
+                amount,
+                claimSecret,
+                messageLeafIndex
+              )
+              .send()
+          : l2BridgeContract.methods
+              .claim_public(
+                AztecAddress.fromString(aztecAddress),
+                amount,
+                claimSecret,
+                messageLeafIndex
+              )
+              .send()
 
         const claimReceipt = await sendResult.wait({ timeout: 200000 })
         console.log('l2 claimReceipt ', claimReceipt)
@@ -653,8 +836,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
 
         return l2TxHash
       } catch (error) {
-        // If claim_public fails, keep the data in localStorage
-        console.error('Claim public failed:', error)
+        // If claim fails, keep the data in localStorage
+        console.error('Claim failed:', error)
         throw error
       }
     } catch (error) {
@@ -695,10 +878,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       } else if (errorMessage.includes('0xfb8f41b2')) {
         notify(
           'error',
-          'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page ',
-          {
-            autoClose: 5000,
-          }
+          'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page '
         )
 
         logError('Bridge from L1 to L2 failed with contract error', {
@@ -714,14 +894,9 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             'Contract reverted with signature 0xfb8f41b2. Recommend reload.',
           errorSignature: '0xfb8f41b2',
         })
-        // throw new Error(
-        //   'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page and try with a 25% smaller amount.'
-        // )
       } else {
         // For any other errors, show a generic error message
-        notify('error', errorMessage, {
-          autoClose: 5000,
-        })
+        notify('error', `Bridge transaction failed: ${errorMessage}`)
 
         logError('Bridge from L1 to L2 failed', {
           direction: 'L1_TO_L2',
@@ -761,23 +936,32 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
  */
 export function useL1HasSoulboundToken() {
   const { metaMaskAddress: l1Address } = useWalletStore()
-  const publicClient = usePublicClient()
+  const notify = useToast()
 
   const queryKey = ['l1HasSoulboundToken', l1Address]
   const queryFn = async () => {
     if (!l1Address) return false
 
     try {
-      const hasSBT = await publicClient.readContract({
-        address: ADDRESS[11155111].L1.PORTAL_SBT_CONTRACT as `0x${string}`,
+      const data = encodeFunctionData({
         abi: PortalSBTAbi,
         functionName: 'hasSoulboundToken',
         args: [l1Address],
       })
 
-      return hasSBT
+      const hasSBT = await requestHumanWallet(SILK_METHOD.eth_call, [
+        {
+          to: ADDRESS[11155111].L1.PORTAL_SBT_CONTRACT,
+          data,
+        },
+      ])
+
+      return Boolean(hasSBT)
     } catch (error) {
       console.error('Error checking L1 SBT status:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
+      notify('error', 'Failed to check SBT status on Ethereum: ' + errorMessage)
       return false
     }
   }
@@ -786,7 +970,12 @@ export function useL1HasSoulboundToken() {
     queryKey,
     queryFn,
     enabled: !!l1Address,
-    staleTime: 60 * 1000, // 1 minute
+    // staleTime: 60 * 1000, // 1 minute
+    // toastMessages: {
+    //   pending: 'Checking SBT status on Ethereum...',
+    //   success: 'SBT status checked successfully on Ethereum!',
+    //   error: 'Failed to check SBT status on Ethereum',
+    // },
     meta: {
       persist: true, // Mark this query for persistence
     },
@@ -800,35 +989,39 @@ export function useL1HasSoulboundToken() {
  */
 export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
   const { metaMaskAddress: l1Address } = useWalletStore()
-  const { data: walletClient } = useWalletClient()
-  const publicClient = usePublicClient()
-  const queryClient = useQueryClient()
 
   const notify = useToast()
 
   const mutationFn = async () => {
-    if (!walletClient || !l1Address) {
+    if (!l1Address) {
       throw new Error('Wallet not connected')
     }
 
     try {
-      // Simulate the mint transaction
-      const { request } = await publicClient.simulateContract({
-        address: ADDRESS[11155111].L1.PORTAL_SBT_CONTRACT as `0x${string}`,
+      // Prepare the mint transaction
+      const data = encodeFunctionData({
         abi: PortalSBTAbi,
         functionName: 'mint',
         args: [],
-        account: l1Address as `0x${string}`,
       })
 
       // Send the transaction
-      const hash = await walletClient.writeContract(request)
+      const txHash = await requestHumanWallet(SILK_METHOD.eth_sendTransaction, [
+        {
+          from: l1Address,
+          to: ADDRESS[11155111].L1.PORTAL_SBT_CONTRACT,
+          data,
+        },
+      ])
 
       // Wait for confirmation
-      const receipt = await publicClient.waitForTransactionReceipt({ hash })
-      const txHash = receipt.transactionHash.toString()
+      const receipt = await requestHumanWallet(
+        SILK_METHOD.eth_getTransactionReceipt,
+        [txHash]
+      )
+      const txHashStr = receipt?.transactionHash?.toString()
 
-      const etherscanUrl = `https://sepolia.etherscan.io/tx/${txHash}`
+      const etherscanUrl = `https://sepolia.etherscan.io/tx/${txHashStr}`
       notify(
         'info',
         `SBT minted successfully on Ethereum! Click to view on Ethereum`,
@@ -836,16 +1029,15 @@ export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
           onClick: () => {
             window.open(etherscanUrl, '_blank')
           },
-          autoClose: 10000, // 10 seconds
           closeOnClick: false,
           style: { cursor: 'pointer' },
         }
       )
 
-      logger.info('SBT minted successfully on L1', { receipt })
+      console.log('SBT minted successfully on L1', { receipt })
       return receipt
     } catch (error) {
-      logger.error('Failed to mint SBT on L1', { error })
+      console.log('Failed to mint SBT on L1', { error })
       throw error
     }
   }
@@ -853,15 +1045,18 @@ export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
   return useToastMutation({
     mutationFn,
     onSuccess: (data) => {
-      queryClient.invalidateQueries({
-        queryKey: ['l1HasSoulboundToken', l1Address],
-      })
       onSuccess(data)
     },
-    toastMessages: {
-      pending: 'Minting SBT on Ethereum...',
-      success: 'SBT minted successfully on Ethereum!',
-      error: 'Failed to mint SBT on Ethereum',
+    onError: (error) => {
+      console.log('🚀MMM - ~ mutationFn ~ error:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
+      notify('error', errorMessage)
     },
+    // toastMessages: {
+    //   pending: 'Minting SBT on Ethereum...',
+    //   success: 'SBT minted successfully on Ethereum!',
+    //   error: 'Failed to mint SBT on Ethereum',
+    // },
   })
 }

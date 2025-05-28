@@ -19,7 +19,7 @@ export const maxDuration = 300
 // Example: FAUCET_PRIVATE_KEY=0x1234...
 
 // Amount of ETH to send for gas (0.05 ETH)
-const FAUCET_AMOUNT = parseEther('0.05')
+const FAUCET_AMOUNT = parseEther('0.02')
 
 // Note: This API doesn't implement server-side rate limiting
 // Rate limiting is handled by the client using localStorage to prevent

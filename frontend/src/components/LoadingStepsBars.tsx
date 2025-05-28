@@ -34,7 +34,11 @@ const LoadingStepsBars: React.FC<LoadingStepsBarsProps> = ({
               {(isActive || isCompleted || isError) && (
                 <motion.div
                   className={`absolute top-0 left-0 h-1 rounded-full ${
-                    isError ? 'bg-red' : isCompleted ? 'bg-[#FF990A]' : 'bg-[#9D9D9D]'
+                    isError
+                      ? 'bg-red'
+                      : isCompleted
+                      ? 'bg-[#FF990A]'
+                      : 'bg-[#9D9D9D]'
                   }`}
                   initial={{ width: 0 }}
                   animate={
@@ -72,8 +76,14 @@ const LoadingStepsBars: React.FC<LoadingStepsBarsProps> = ({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.3 }}>
-          <p className={`text-sm ${steps[currentStep]?.status === 'error' ? 'text-red' : 'text-neutral-600'}`}>
-            {steps[currentStep]?.label || 'Processing...'}
+          <p
+            className={`text-sm ${
+              steps[currentStep]?.status === 'error'
+                ? 'text-red'
+                : 'text-neutral-600'
+            }`}>
+            {/* {steps[currentStep]?.label || 'Processing...'} */}
+            {steps[currentStep]?.label}
           </p>
         </motion.div>
       </AnimatePresence>

@@ -265,9 +265,9 @@ function BridgeActionButton({
       try {
         await requestFaucet()
       } catch (error) {
-        const errorMsg =
-          error instanceof Error ? error.message : 'Unknown error'
-        notify('error', `Faucet request failed: ${errorMsg}`)
+        // const errorMsg =
+        //   error instanceof Error ? error.message : 'Unknown error'
+        // notify('error', `Faucet request failed: ${errorMsg}`)
       } finally {
         setIsOperationPending(false)
       }
@@ -331,7 +331,7 @@ function BridgeActionButton({
 
     // Priority 3: Faucet (gas and tokens)
     if (needsGas || needsTokensOnly)
-      return needsTokensOnly ? 'Get Tokens' : 'Get Testnet ETH for Demo'
+      return needsTokensOnly ? 'Get Tokens' : 'Get Testnet ETH'
 
     // Priority 4: SBT requirements
     const requiredChain = getSBTChainForDirection(direction)

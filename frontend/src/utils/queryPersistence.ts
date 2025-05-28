@@ -55,7 +55,6 @@ export function setupQueryPersistence(queryClient: QueryClient) {
         },
       },
     })
-    console.log('Query persistence setup successfully')
   } catch (error) {
     console.error('Failed to setup query persistence:', error)
   }

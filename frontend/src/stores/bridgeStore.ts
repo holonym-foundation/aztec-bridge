@@ -135,7 +135,7 @@ const initialState = {
   ...initialStepState,
   ...initialBridgeConfigState,
   ...initialTransactionState,
-  isPrivacyModeEnabled: false,
+  isPrivacyModeEnabled: typeof window !== 'undefined' ? localStorage.getItem('privacyModeEnabled') === 'true' : false,
 } as const
 
 const bridgeStore = create<BridgeStoreState>((set, get) => ({
@@ -143,9 +143,13 @@ const bridgeStore = create<BridgeStoreState>((set, get) => ({
   direction: BridgeDirection.L1_TO_L2,
 
   // Privacy Mode toggle
-  isPrivacyModeEnabled: false,
-  setPrivacyModeEnabled: (enabled: boolean) =>
-    set({ isPrivacyModeEnabled: enabled }),
+  isPrivacyModeEnabled: typeof window !== 'undefined' ? localStorage.getItem('privacyModeEnabled') === 'true' : false,
+  setPrivacyModeEnabled: (enabled: boolean) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('privacyModeEnabled', enabled.toString())
+    }
+    set({ isPrivacyModeEnabled: enabled })
+  },
 
   // Step actions
   setHeaderStep: (

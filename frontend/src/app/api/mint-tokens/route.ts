@@ -8,8 +8,8 @@ import { TestERC20Abi } from '@aztec/l1-artifacts'
 // Configure Vercel function timeout (300 seconds for Pro plan)
 export const maxDuration = 300
 
-// Amount of tokens to mint (100,000)
-const MINT_AMOUNT = parseUnits('1000000', 6)
+// Amount of tokens to mint (1000)
+const TOKEN_AMOUNT = 1000
 
 // Get environment variables
 let privateKey = process.env.FAUCET_PRIVATE_KEY
@@ -56,6 +56,16 @@ export async function POST(request: NextRequest) {
         chain: sepolia,
         transport: http(rpcUrl),
       })
+
+      // Get token decimals from contract
+      const decimals = await publicClient.readContract({
+        address: ADDRESS[11155111].L1.TOKEN_CONTRACT as `0x${string}`,
+        abi: TestERC20Abi,
+        functionName: 'decimals',
+      })
+
+      // Calculate mint amount with proper decimals
+      const MINT_AMOUNT = parseUnits(TOKEN_AMOUNT.toString(), decimals)
 
       // Create wallet with private key - using local signing
       const walletClient = createWalletClient({

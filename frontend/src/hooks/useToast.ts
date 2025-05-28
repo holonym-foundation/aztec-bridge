@@ -1,5 +1,9 @@
-import { toast, ToastOptions } from 'react-toastify'
-import { ReactNode } from 'react'
+import {
+  Slide,
+  toast,
+  ToastOptions,
+} from 'react-toastify'
+import React from 'react'
 import {
   UseQueryOptions,
   UseMutationOptions,
@@ -7,220 +11,321 @@ import {
   useMutation,
   QueryFunction,
 } from '@tanstack/react-query'
+import PrivacyModeToast from '@/components/toast/PrivacyModeToast'
+import DefaultToast from '@/components/toast/DFToast'
+import InfoToast from '@/components/toast/InfoToast'
+import LoadingToast from '@/components/toast/LoadingToast'
+import SuccessToast from '@/components/toast/SuccessToast'
+import WarningToast from '@/components/toast/WarningToast'
+import ErrorToast from '@/components/toast/ErrorToast'
 // import 'react-toastify/dist/ReactToastify.min.css' // we import it in _app.tsx
 
-// USAGE:
-//  const notify = useToast();
-//  notify('error', 'Wallet not connected!');
-//  notify('info', 'Airdrop requested:');
-//  notify('warn', 'Airdrop requested:');
-//  notify('success', 'Airdrop successful!',);
-//  notify('error', `Airdrop failed! ${error?.message}`);
-//  notify.promise(myPromise, {pending: 'Loading...', success: 'Success!', error: 'Error!'});
+/**
+ * Toast System with Loading Spinner Support
+ * 
+ * @example Basic Usage
+ * const notify = useToast()
+ * notify('success', 'Operation completed!')
+ * notify('error', { message: 'Failed!', heading: 'Error' })
+ * 
+ * @example Promise Toasts
+ * notify.promise(somePromise, {
+ *   pending: 'Loading...',
+ *   success: 'Done!',
+ *   error: 'Failed!'
+ * }, { animatePromise: true })
+ * 
+ * @example React Query
+ * useToastQuery({ queryFn, toastMessages: { pending: '...', success: '...', error: '...' } })
+ * useToastMutation({ mutationFn, toastMessages: { pending: '...', success: '...', error: '...' } })
+ */
 
-type ToastType = 'default' | 'success' | 'info' | 'warn' | 'error'
+// ============================================================================
+// TYPES
+// ============================================================================
+
+type ToastType = 'default' | 'success' | 'info' | 'warn' | 'error' | 'privacy-mode'
+
+type ToastMessageInput = string | { message: string; heading?: string }
+
+type CustomToastOptions = ToastOptions & {
+  animatePromise?: boolean
+}
+
+type ToastMessageObject = {
+  message: string
+  heading?: string
+  options?: ToastOptions
+}
+
+type ToastMessages = {
+  pending?: string | ToastMessageObject
+  success?: string | ToastMessageObject
+  error?: string | ToastMessageObject
+}
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const DEFAULT_TOAST_OPTIONS: ToastOptions = {
+  position: 'top-right',
+  autoClose: 15000,
+  pauseOnHover: true,
+  pauseOnFocusLoss: true,
+  closeButton: false,
+  closeOnClick: true,
+  icon: false,
+  transition: Slide,
+}
+
+const LOADING_TOAST_OPTIONS: Partial<ToastOptions> = {
+  closeButton: false,
+  closeOnClick: false,
+  autoClose: false,
+}
+
+// ============================================================================
+// TOAST COMPONENT MAPPING
+// ============================================================================
+
+const TOAST_COMPONENTS = {
+  default: DefaultToast,
+  success: SuccessToast,
+  info: InfoToast,
+  warn: WarningToast,
+  error: ErrorToast,
+  'privacy-mode': PrivacyModeToast,
+} as const
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Normalizes message input to object format
+ */
+const normalizeMessage = (input: string | { message: string; heading?: string }) =>
+  typeof input === 'string' ? { message: input } : input
+
+/**
+ * Extracts options from toast message object
+ */
+const extractOptions = (messageObj: string | ToastMessageObject) =>
+  typeof messageObj === 'object' ? messageObj.options || {} : {}
+
+/**
+ * Creates merged options with proper precedence
+ */
+const createMergedOptions = (baseOptions: ToastOptions, customOptions: ToastOptions = {}) => ({
+  ...DEFAULT_TOAST_OPTIONS,
+  ...baseOptions,
+  ...customOptions,
+})
+
+/**
+ * Creates a toast with the specified component and options
+ */
+const createToast = (
+  type: ToastType,
+  message: string,
+  heading?: string,
+  options: ToastOptions = {}
+) => {
+  const Component = TOAST_COMPONENTS[type]
+  const toastOptions = createMergedOptions({}, options)
+  
+  return toast(
+    React.createElement(Component, {
+      heading,
+      message,
+    }),
+    {
+      className: `${type}-toast`,
+      // ...(type === 'privacy-mode' ? { toastId: 'privacy-mode-toastId' } : {}),
+      ...toastOptions,
+    }
+  )
+}
+
+/**
+ * Creates a loading toast
+ */
+const createLoadingToast = (message: string, heading?: string, options: ToastOptions = {}) => {
+  const mergedOptions = createMergedOptions({}, options)
+  
+  return toast(
+    React.createElement(LoadingToast, { heading, message }),
+    {
+      ...mergedOptions,
+      className: 'loading-toast',
+      ...LOADING_TOAST_OPTIONS,
+    }
+  )
+}
+
+/**
+ * Updates a toast to success or error state
+ */
+const updateToastState = (
+  toastId: string | number,
+  type: 'success' | 'error',
+  message: string,
+  heading?: string,
+  options: ToastOptions = {}
+) => {
+  const Component = TOAST_COMPONENTS[type]
+  const mergedOptions = createMergedOptions({}, options)
+  
+  toast.update(toastId, {
+    render: React.createElement(Component, { heading, message }),
+    className: `${type}-toast from-loading`,
+    type,
+    isLoading: false,
+    ...mergedOptions,
+  })
+}
+
+/**
+ * Handles promise toast logic
+ */
+const handlePromiseToast = <T>(
+  promise: Promise<T>,
+  messages: {
+    pending: string | { message: string; heading?: string }
+    success: string | { message: string; heading?: string }
+    error: string | { message: string; heading?: string }
+  },
+  options: CustomToastOptions = {}
+): Promise<T> => {
+  const { animatePromise, ...toastOptions } = options
+  
+  // Create loading toast
+  const pendingMsg = normalizeMessage(messages.pending)
+  const pendingOptions = extractOptions(messages.pending)
+  const toastId = createLoadingToast(pendingMsg.message, pendingMsg.heading, pendingOptions)
+
+  return promise
+    .then((data) => {
+      const successMsg = normalizeMessage(messages.success)
+      const successOptions = extractOptions(messages.success)
+      
+      if (animatePromise) {
+        toast.dismiss(toastId)
+        createToast('success', successMsg.message, successMsg.heading, {
+          ...toastOptions,
+          ...successOptions,
+          className: 'success-toast from-loading',
+        })
+      } else {
+        updateToastState(toastId, 'success', successMsg.message, successMsg.heading, {
+          ...toastOptions,
+          ...successOptions,
+        })
+      }
+      return data
+    })
+    .catch((error) => {
+      const errorMsg = normalizeMessage(messages.error)
+      const errorOptions = extractOptions(messages.error)
+      
+      if (animatePromise) {
+        toast.dismiss(toastId)
+        createToast('error', errorMsg.message, errorMsg.heading, {
+          ...toastOptions,
+          ...errorOptions,
+          className: 'error-toast from-loading',
+        })
+      } else {
+        updateToastState(toastId, 'error', errorMsg.message, errorMsg.heading, {
+          ...toastOptions,
+          ...errorOptions,
+        })
+      }
+      throw error
+    })
+}
+
+// ============================================================================
+// MAIN HOOK
+// ============================================================================
 
 export const useToast = () => {
   const showToast = (
     type: ToastType,
-    message: string | ReactNode,
-    options?: ToastOptions
+    input: ToastMessageInput,
+    options?: CustomToastOptions
   ) => {
-    // const position = toast. // adjust according to your needs
-    const position = 'top-right'
-
-    options = {
-      autoClose: 10000, // 10 seconds
-      ...options,
-    }
-
-    switch (type) {
-      case 'success':
-        toast.success(message, {
-          position,
-          ...options,
-        })
-
-        break
-
-      case 'info':
-        toast.info(message, {
-          position,
-          ...options,
-        })
-
-        break
-
-      case 'warn':
-        toast.warn(message, {
-          position,
-          ...options,
-        })
-
-        break
-
-      case 'error':
-        toast.error(message, {
-          position,
-          ...options,
-        })
-
-        break
-
-      default:
-        toast(message, {
-          position,
-          ...options,
-        })
-
-        break
-    }
+    const { message, heading } = normalizeMessage(input)
+    createToast(type, message, heading, options)
   }
 
-  // Add promise support
-  showToast.promise = <T>(
-    promise: Promise<T>,
-    messages: {
-      pending: string
-      success: string
-      error: string | { render: (data: { data: any }) => string }
-    },
-    options?: ToastOptions
-  ) => {
-    const position = 'top-right'
-
-    // Create a loading toast
-    const toastId = toast.loading(messages.pending, {
-      position,
-      ...options,
-    })
-
-    // Handle the promise resolution
-    promise
-      .then((data) => {
-        // Update with success message
-        toast.update(toastId, {
-          render: messages.success,
-          type: 'success',
-          isLoading: false,
-          autoClose: 5000,
-          ...options,
-        })
-        return data
-      })
-      .catch((error) => {
-        // For errors, we'll dismiss this toast and create a new error toast
-        // to avoid the generic "Error occurred" message
-        toast.dismiss(toastId)
-
-        // Create a custom error message that includes the actual error
-        const errorMessage =
-          typeof messages.error === 'string'
-            ? `${messages.error}: ${error?.message || 'Unknown error'}`
-            : messages.error.render({ data: error })
-
-        // Show the detailed error message
-        toast.error(errorMessage, {
-          position,
-          ...options,
-        })
-
-        throw error
-      })
-
-    return promise
-  }
+  showToast.promise = handlePromiseToast
+  showToast.dismiss = (toastId?: string | number) => toast.dismiss(toastId)
+  showToast.dismissAll = () => toast.dismiss()
 
   return showToast
 }
 
-// NOTE: Handling promises
-// https://fkhadra.github.io/react-toastify/promise
-// https://blog.logrocket.com/using-react-toastify-style-toast-messages/
-// const myPromise = new Promise((resolve) =>
-//     fetch("https://jsonplaceholder.typicode.com/post")
-//       .then((response) => response.json())
-//       .then((json) => setTimeout(() => resolve(json), 3000))
-//   );
+// ============================================================================
+// REACT QUERY HOOKS
+// ============================================================================
 
-//   useEffect(() => {
-//     toast.promise(myPromise, {
-//       pending: "Promise is pending",
-//       success: "Promise  Loaded",
-//       error: "error"
-//     });
-//   }, []);
-
-// Toast messages type
-type ToastMessages = {
-  pending?: string
-  success?: string
-  error?: string
-}
-
-// Toast-enabled React Query hooks
 export function useToastQuery<
   TQueryFnData = unknown,
   TError = unknown,
   TData = TQueryFnData,
   TQueryKey extends Array<unknown> = unknown[]
 >(
-  options: Omit<
-    UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
-    'queryFn'
-  > & {
+  options: Omit<UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>, 'queryFn'> & {
     queryFn: QueryFunction<TQueryFnData, TQueryKey>
     toastMessages?: ToastMessages
-    /**
-     * When true, toast notifications will only be shown on the initial fetch,
-     * not background refreshes
-     */
     silentRefresh?: boolean
   }
 ) {
   const notify = useToast()
-  const {
-    toastMessages,
-    queryFn,
-    silentRefresh = true,
-    ...queryOptions
-  } = options
+  const { toastMessages, queryFn, silentRefresh = true, ...queryOptions } = options
 
   return useQuery({
     ...queryOptions,
     queryFn: async (context) => {
-      // Execute the original queryFn
+      let toastId: string | number | undefined
+
       try {
         const result = queryFn(context)
-        // Ensure it's a promise
         const resultPromise = Promise.resolve(result)
 
-        // Show toast if messages are provided and we're either not silencing refresh toasts
-        // or if we're doing the initial fetch (isPending and no data)
-        if (toastMessages && toastMessages.pending) {
-          // Only show the toast if:
-          // 1. We have a pending message AND
-          // 2. Either:
-          //    a. We're not silencing refreshes OR
-          //    b. It's the initial load (no data exists yet)
-          const isInitialLoad = !context.signal // Signal is undefined on initial load
-
+        // Show loading toast if messages are provided
+        if (toastMessages?.pending) {
+          const isInitialLoad = !context.signal
           if (!silentRefresh || isInitialLoad) {
-            notify.promise(resultPromise, {
-              pending: toastMessages.pending || 'Loading...',
-              success: toastMessages.success || 'Success!',
-              error: toastMessages.error || 'An error occurred',
-            })
+            const pendingMsg = normalizeMessage(toastMessages.pending)
+            const pendingOptions = extractOptions(toastMessages.pending)
+            toastId = createLoadingToast(pendingMsg.message, pendingMsg.heading, pendingOptions)
           }
         }
 
-        return result
+        const data = await resultPromise
+
+        // Show success toast
+        if (toastId && toastMessages?.success) {
+          const successMsg = normalizeMessage(toastMessages.success)
+          const successOptions = extractOptions(toastMessages.success)
+          updateToastState(toastId, 'success', successMsg.message, successMsg.heading, successOptions)
+        }
+
+        return data
       } catch (error) {
-        // Handle synchronous errors
-        if (toastMessages?.error) {
-          const errorMsg =
-            error instanceof Error ? error.message : 'Unknown error'
-          notify('error', `${toastMessages.error}: ${errorMsg}`)
+        // Show error toast
+        if (toastId && toastMessages?.error) {
+          const errorMsg = normalizeMessage(toastMessages.error)
+          const errorOptions = extractOptions(toastMessages.error)
+          updateToastState(toastId, 'error', errorMsg.message, errorMsg.heading, errorOptions)
+        } else if (toastMessages?.error && !toastId) {
+          // Fallback for when there's no loading toast
+          const errorMsg = normalizeMessage(toastMessages.error)
+          const errorOptions = extractOptions(toastMessages.error)
+          notify('error', errorMsg, errorOptions)
         }
         throw error
       }
@@ -234,43 +339,80 @@ export function useToastMutation<
   TVariables = void,
   TContext = unknown
 >(
-  options: Omit<
-    UseMutationOptions<TData, TError, TVariables, TContext>,
-    'mutationFn'
-  > & {
+  options: Omit<UseMutationOptions<TData, TError, TVariables, TContext>, 'mutationFn'> & {
     mutationFn: (variables: TVariables) => Promise<TData>
     toastMessages?: ToastMessages
   }
 ) {
   const notify = useToast()
   const { toastMessages, mutationFn, ...mutationOptions } = options
+  const toastIdRef = React.useRef<string | number | undefined>(undefined)
 
   return useMutation({
     ...mutationOptions,
     mutationFn: async (variables) => {
       try {
-        // Execute the original mutationFn
-        const resultPromise = mutationFn(variables)
-
-        // Show toast if messages are provided
-        if (toastMessages) {
-          notify.promise(resultPromise, {
-            pending: toastMessages.pending || 'Processing...',
-            success: toastMessages.success || 'Success!',
-            error: toastMessages.error || 'An error occurred',
-          })
+        // Show loading toast
+        if (toastMessages?.pending) {
+          const pendingMsg = normalizeMessage(toastMessages.pending)
+          const pendingOptions = extractOptions(toastMessages.pending)
+          toastIdRef.current = createLoadingToast(pendingMsg.message, pendingMsg.heading, pendingOptions)
         }
 
-        return resultPromise
+        return await mutationFn(variables)
       } catch (error) {
-        // Handle synchronous errors
-        if (toastMessages?.error) {
-          const errorMsg =
-            error instanceof Error ? error.message : 'Unknown error'
-          notify('error', `${toastMessages.error}: ${errorMsg}`)
+        // Handle error in mutationFn
+        if (toastIdRef.current && toastMessages?.error) {
+          const errorMsg = normalizeMessage(toastMessages.error)
+          const errorOptions = extractOptions(toastMessages.error)
+          updateToastState(toastIdRef.current, 'error', errorMsg.message, errorMsg.heading, errorOptions)
+          toastIdRef.current = undefined
         }
         throw error
       }
     },
+    onSuccess: (data, variables, context) => {
+      // Handle success
+      if (toastIdRef.current && toastMessages?.success) {
+        const successMsg = normalizeMessage(toastMessages.success)
+        const successOptions = extractOptions(toastMessages.success)
+        updateToastState(toastIdRef.current, 'success', successMsg.message, successMsg.heading, successOptions)
+        toastIdRef.current = undefined
+      } else if (toastMessages?.success && !toastIdRef.current) {
+        // Fallback
+        const successMsg = normalizeMessage(toastMessages.success)
+        const successOptions = extractOptions(toastMessages.success)
+        notify('success', successMsg, successOptions)
+      }
+      
+      mutationOptions.onSuccess?.(data, variables, context)
+    },
+    onError: (error, variables, context) => {
+      // Handle error fallback
+      if (toastMessages?.error && !toastIdRef.current) {
+        const errorMsg = normalizeMessage(toastMessages.error)
+        const errorOptions = extractOptions(toastMessages.error)
+        notify('error', errorMsg, errorOptions)
+      }
+      
+      mutationOptions.onError?.(error, variables, context)
+    },
   })
 }
+
+// ============================================================================
+// STANDALONE FUNCTIONS
+// ============================================================================
+
+export const showToast = (
+  type: ToastType,
+  input: ToastMessageInput,
+  options?: ToastOptions
+) => {
+  const { message, heading } = normalizeMessage(input)
+  createToast(type, message, heading, options)
+}
+
+showToast.promise = handlePromiseToast
+showToast.dismiss = (toastId?: string | number) => toast.dismiss(toastId)
+showToast.dismissAll = () => toast.dismiss()

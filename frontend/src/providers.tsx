@@ -3,17 +3,20 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { type ReactNode, useEffect, useState } from 'react'
-import { WagmiProvider } from 'wagmi'
-import { config } from './wagmi'
-import { Slide, ToastContainer } from 'react-toastify'
+import { ToastContainer } from 'react-toastify'
+import { useHumanWalletStore } from './stores/humanWalletStore'
 
-export function Providers({
-  children,
-  initialState,
-}: {
-  children: ReactNode
-  initialState?: any
-}) {
+function InitializeHumanWallet() {
+  const { initializeHumanWallet } = useHumanWalletStore()
+
+  useEffect(() => {
+    initializeHumanWallet()
+  }, [initializeHumanWallet])
+
+  return null
+}
+
+export function Providers({ children }: { children: ReactNode }) {
   // Create QueryClient in component to ensure it's created on the client side
   const [queryClient] = useState(
     () =>
@@ -21,7 +24,7 @@ export function Providers({
         defaultOptions: {
           queries: {
             // Configuration optimized for stale-while-revalidate pattern
-            staleTime: 1000 * 30, // 30 seconds - shorter stale time to refresh data more frequently
+            // staleTime: 1000 * 30, // 30 seconds - shorter stale time to refresh data more frequently
             gcTime: 1000 * 60 * 60 * 24, // 24 hours
             refetchOnMount: 'always', // Always refetch on mount to ensure fresh data
             refetchOnWindowFocus: true, // Refetch when window regains focus
@@ -49,13 +52,13 @@ export function Providers({
 
   return (
     <>
-      <WagmiProvider config={config} initialState={initialState}>
-        <QueryClientProvider client={queryClient}>
-          {children}
-          <ReactQueryDevtools initialIsOpen={false} />
-        </QueryClientProvider>
-      </WagmiProvider>
-      <ToastContainer transition={Slide} toastClassName={'toast-container'} />
+      <QueryClientProvider client={queryClient}>
+        <InitializeHumanWallet />
+
+        {children}
+        <ReactQueryDevtools initialIsOpen={false} />
+      </QueryClientProvider>
+      <ToastContainer toastClassName={'toast-container'} newestOnTop={true} />
     </>
   )
 }

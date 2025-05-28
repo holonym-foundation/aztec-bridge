@@ -1,4 +1,4 @@
-import { NetworkConfigItem } from "silk-wallet-internal"
+import { NetworkConfigItem } from "@/config/l1.config"
 
 export interface NFTMetadata {
   name: string

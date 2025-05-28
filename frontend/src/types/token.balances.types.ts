@@ -1,4 +1,4 @@
-import { NetworkConfigItem } from 'silk-wallet-internal'
+import { NetworkConfigItem } from "@/config/l1.config"
 
 export type T_UserTokenType =
   | 'native'

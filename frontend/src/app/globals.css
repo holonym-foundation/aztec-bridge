@@ -155,11 +155,16 @@ body {
   border-radius: 8px !important;
   width: 337px !important;
   padding: 12px !important;
-  /* pointer-events: none !important; */
+  pointer-events: auto !important;
 }
 
 .Toastify__toast-container {
-  /* pointer-events: none !important; */
+  z-index: 50 !important;
+  pointer-events: none !important;
+}
+
+.Toastify__toast-container .Toastify__toast {
+  pointer-events: auto !important;
 }
 
 .Toastify__toast-container .Toastify__toast:first-child {

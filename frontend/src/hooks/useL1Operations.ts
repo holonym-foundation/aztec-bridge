@@ -67,7 +67,6 @@ export function useL1NativeBalance() {
       })
 
       const tokens = response?.data
-      console.log('tokens ', tokens)
     } catch (error) {
       console.log('error ', error)
     }
@@ -192,7 +191,6 @@ export function useL1TokenBalances() {
         }
       ) as I_UserTokenBalance[]
 
-      console.log('tokenBalnces ', tokenBalnces)
       return tokenBalnces
     } catch (error) {
       const errMsg = axiosErrorMessage(error)
@@ -481,7 +479,7 @@ export function useL1Faucet() {
       },
       toastMessages: {
         pending: 'Processing faucet and token',
-        success: 'Faucet completed successfully!',
+        success: 'Request for Faucet funds completed successfully',
         error: 'Faucet request failed',
       },
     }),

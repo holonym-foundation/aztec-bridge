@@ -142,7 +142,7 @@ const createToast = (
     }),
     {
       className: `${type}-toast`,
-      // ...(type === 'privacy-mode' ? { toastId: 'privacy-mode-toastId' } : {}),
+      ...(type === 'privacy-mode' ? { toastId: 'privacy-mode-toastId' } : {}),
       ...toastOptions,
     }
   )

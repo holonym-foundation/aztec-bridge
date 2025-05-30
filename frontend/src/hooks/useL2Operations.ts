@@ -4,14 +4,10 @@ import { useContractStore } from '@/stores/contractStore'
 import { useWalletStore } from '@/stores/walletStore'
 import { logError, logInfo } from '@/utils/datadog'
 import { logger } from '@/utils/logger'
-import {
-  AztecAddress,
-  EthAddress,
-  Fr,
-} from '@aztec/aztec.js'
+import { AztecAddress, EthAddress, Fr, IntentAction } from '@aztec/aztec.js'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import { formatUnits, parseUnits, encodeFunctionData } from 'viem'
+import { formatUnits, parseUnits, encodeFunctionData, http, createPublicClient } from 'viem'
 import { usePublicClient, useWalletClient } from 'wagmi'
 import { useToast, useToastMutation } from './useToast'
 import { wait } from '@/utils'
@@ -21,6 +17,14 @@ import { requestHumanWallet } from '@/stores/humanWalletStore'
 import { SILK_METHOD } from '@silk-wallet/silk-wallet-sdk'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { TokenPortalAbi } from '@aztec/l1-artifacts'
+import { sepolia } from 'viem/chains'
+import { BatchCall } from '@nemi-fi/wallet-sdk/eip1193'
+
+// Create a public client for transaction receipt polling
+const publicClient = createPublicClient({
+  chain: sepolia,
+  transport: http(),
+})
 
 // Define types for balance queries
 export interface L2TokenBalanceData {
@@ -68,6 +72,8 @@ export const useL2TokenBalance = () => {
 
       console.log('Fetching L2 balances...')
 
+      console.time('l2TokenBalance')
+
       const [privateBalance, publicBalance] = await Promise.all([
         l2TokenContract.methods
           .balance_of_private(AztecAddress.fromString(aztecAddress))
@@ -88,6 +94,7 @@ export const useL2TokenBalance = () => {
 
       console.log('publicBalanceFormat: ', publicBalanceFormat)
       console.log('privateBalanceFormat: ', privateBalanceFormat)
+      console.timeEnd('l2TokenBalance')
 
       return {
         publicBalance: publicBalanceFormat,
@@ -95,7 +102,7 @@ export const useL2TokenBalance = () => {
       }
     } catch (error) {
       handleL2Error<L2TokenBalanceData>(error, 'BALANCE')
-      console.log("error ", error);
+      console.log('error ', error)
       throw error
     }
   }
@@ -209,12 +216,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       // Step 1: Setting up authorization for withdrawal
       setProgressStep(1, 'active')
       console.log('Setting up authorization for withdrawal...')
-      const isPrivate = true
-      const withAuthWitness = true
       const nonce = Fr.random()
 
       // Give approval to bridge to burn owner's funds:
-      const authwit = await aztecAccount.setPublicAuthWit(
+      const authwitRequests = await aztecAccount.setPublicAuthWit(
         {
           caller: l2BridgeContract.address,
           action: await l2TokenContract.methods
@@ -228,24 +233,24 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         true
       )
 
-      await authwit.send().wait({ timeout: 120000 })
+      await authwitRequests.send().wait({ timeout: 120000 })
       setProgressStep(1, 'completed')
 
       // Step 2: Preparing withdrawal message
       setProgressStep(2, 'active')
       console.log('Getting L2 bridge address...')
-      
-      // Get the L2 bridge address using the portal contract
-      const messageData = encodeFunctionData({
-        abi: TokenPortalAbi,
-        functionName: 'l2Bridge',
-        args: []
-      })
 
-      const l2BridgeAddress = await requestHumanWallet(SILK_METHOD.eth_call, [{
-        to: ADDRESS[11155111].L1.PORTAL_CONTRACT,
-        data: messageData
-      }, 'latest'])
+      // Get the L2 bridge address using the portal contract
+      // const messageData = encodeFunctionData({
+      //   abi: TokenPortalAbi,
+      //   functionName: 'l2Bridge',
+      //   args: []
+      // })
+      // const l2BridgeAddress = await requestHumanWallet(SILK_METHOD.eth_call, [{
+      //   to: ADDRESS[11155111].L1.PORTAL_CONTRACT,
+      //   data: messageData
+      // }, 'latest'])
+      const l2BridgeAddress = ADDRESS[1337].L2.TOKEN_BRIDGE_CONTRACT
 
       console.log('Retrieved L2 bridge address: ', l2BridgeAddress.toString())
       setProgressStep(2, 'completed')
@@ -254,17 +259,57 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       setProgressStep(3, 'active')
       console.log('Initiating exit to L1...')
 
+      // let authwitRequests: IntentAction[] | undefined = undefined
+      //   authwitRequests = [
+      //     {
+      //       caller: l2BridgeContract.address,
+      //       action: await l2TokenContract.methods
+      //         .burn_public(
+      //           AztecAddress.fromString(aztecAccount.address.toString()),
+      //           amount,
+      //           nonce
+      //         )
+      //         .request(),
+      //     },
+      //   ]
+      
+      // console.log('authwitRequests: ', authwitRequests)
+
+
       const l2TxReceipt = await l2BridgeContract.methods
         .exit_to_l1_public(
           EthAddress.fromString(l1Address),
           amount,
           EthAddress.ZERO,
-          nonce
+          nonce,
+          // { authWitnesses: authwitRequests }
         )
         .send()
         .wait({
           timeout: 200000,
         })
+
+      // const batchedTx = new BatchCall(aztecAccount, [
+      //   setPublicAuthWit,
+      //   exit_to_l1_public,
+      // ])
+      
+      // const batchedTxHash = await batchedTx.send().wait({
+      //   timeout: 200000,
+      // })
+
+
+      // const l2TxReceipt = await l2BridgeContract.methods
+      //   .exit_to_l1_public(
+      //     EthAddress.fromString(l1Address),
+      //     amount,
+      //     EthAddress.ZERO,
+      //     nonce
+      //   )
+      //   .send()
+      //   .wait({
+      //     timeout: 200000,
+      //   })
 
       // Store L2 to L1 message and transaction receipt in localStorage
       const withdrawalData = {
@@ -333,19 +378,34 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             false, // _withCaller
             BigInt(l2TxReceipt.blockNumber!),
             l2ToL1MessageIndex,
-            siblingPath
-          ]
+            siblingPath,
+          ],
         })
 
         // Send the withdrawal transaction
-        const txHash = await requestHumanWallet(SILK_METHOD.eth_sendTransaction, [{
-          from: l1Address,
-          to: ADDRESS[11155111].L1.PORTAL_CONTRACT,
-          data: withdrawData
-        }])
+        const txHash = await requestHumanWallet(
+          SILK_METHOD.eth_sendTransaction,
+          [
+            {
+              from: l1Address,
+              to: ADDRESS[11155111].L1.PORTAL_CONTRACT,
+              data: withdrawData,
+            },
+          ]
+        )
 
-        // Wait for transaction receipt
-        const receipt = await requestHumanWallet(SILK_METHOD.eth_getTransactionReceipt, [txHash])
+        // // Wait for transaction receipt
+        // const receipt = await requestHumanWallet(
+        //   SILK_METHOD.eth_getTransactionReceipt,
+        //   [txHash]
+        // )
+        // ISSUE: eth_getTransactionReceipt returns null if transaction hasn't been mined yet
+        // SOLUTION: Use viem's waitForTransactionReceipt which polls until transaction is confirmed
+        // Wait for approve transaction to be mined using viem polling
+        console.log('Waiting for approve transaction to be mined...')
+        const receipt = await publicClient.waitForTransactionReceipt({
+          hash: txHash,
+        })
 
         // Update withdrawal data with success
         const updatedWithdrawalData = {
@@ -410,6 +470,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
 
       return txHash
     } catch (error) {
+      console.log('🚀MMM - ~ mutationFn ~ error:', error)
+      const errorMessage =error instanceof Error ? error.message : 'Unknown error'
       // Log withdrawal failure with enhanced data
       logError('Withdrawal from L2 to L1 failed', {
         direction: 'L2_TO_L1',
@@ -420,11 +482,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         amount: amount.toString(),
         l1Address: l1Address,
         l2Address: aztecAddress?.toString(),
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       })
 
       // Show error notification
-      notify('error', 'Failed to withdraw tokens. Please try again.')
+      notify('error', `Failed to withdraw tokens. ${errorMessage}`)
       throw error
     }
   }
@@ -454,11 +516,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         onBridgeSuccess(txHash)
       }
     },
-    toastMessages: {
-      pending: 'Withdrawing tokens to L1...',
-      success: 'Tokens successfully withdrawn to L1!',
-      error: 'Failed to withdraw tokens',
-    },
+    // toastMessages: {
+    //   pending: 'Withdrawing tokens to L1...',
+    //   success: 'Tokens successfully withdrawn to L1!',
+    //   error: 'Failed to withdraw tokens',
+    // },
   })
 }
 

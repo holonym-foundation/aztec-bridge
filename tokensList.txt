@@ -2,7 +2,7 @@ L1 Token names and symbols
 1. USDC - USDC
 2. USDT - USDT 
 3. DAI - DAI
-4. HUMAN - HUMAN
+4. HUMAN - HUMN
 5. GOAT - GOAT
 6. WBTC - WBTC
 

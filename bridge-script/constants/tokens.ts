@@ -40,7 +40,7 @@ export const TOKEN_CONFIGS: TokenConfig[] = [
     symbol: 'HUMAN',
     decimals: 6,
     l1Name: 'HUMAN',
-    l1Symbol: 'HUMAN',
+    l1Symbol: 'HUMN',
     l2Name: 'Clean HUMAN',
     l2Symbol: 'cHUMN',
     logo: '/assets/svg/HUMAN.svg',

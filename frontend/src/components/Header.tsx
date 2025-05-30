@@ -333,7 +333,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
 
         <div className='flex items-center gap-4'>
           {/* Privacy Mode Toggle UI */}
-          <div className='flex px-[3px] py-[3px] pl-[8px] justify-center items-center gap-[8px] rounded-[8px] bg-white border border-[#D4D4D4] !z-[999999] relative privacy-mode-toggle hover:shadow-md transition-shadow duration-200'>
+          <div className='flex px-[3px] py-[3px] pl-[8px] justify-center items-center gap-[8px] rounded-[8px] bg-white border border-[#D4D4D4] z-10 relative privacy-mode-toggle hover:shadow-md transition-shadow duration-200'>
             <Image
               src='/assets/svg/human.aztec.svg'
               alt='Aztec'
@@ -344,17 +344,11 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
               Privacy Mode
             </span>
             <button
-              className={`flex w-[40px] h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none relative z-[9999999] ${
+              className={`flex w-[40px] h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none relative z-10 ${
                 isPrivacyModeEnabled
                   ? 'bg-[#3B3B3B] justify-end pl-[19px]'
                   : 'bg-[#D4D4D4] justify-start pr-[19px]'
               }`}
-              // data-tooltip-id='privacy-mode-tooltip'
-              // data-tooltip-content={
-              //   isPrivacyModeEnabled
-              //     ? 'Disable privacy mode'
-              //     : 'Enable privacy mode'
-              // }
               onClick={() => {
                 setPrivacyModeEnabled(!isPrivacyModeEnabled)
 
@@ -366,6 +360,9 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
                       heading: 'Private mode activated',
                     })
                   }, 1500)
+                } else {
+                  // Dismiss the privacy mode toast when turning off privacy mode
+                  notify.dismiss('privacy-mode-toastId')
                 }
               }}
               aria-pressed={isPrivacyModeEnabled}
@@ -481,7 +478,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
           )}
 
           {/* Privacy Mode Toggle UI (Mobile) */}
-          <div className='flex px-[3px] py-[3px] pl-[8px] w-[240px] justify-center items-center gap-[8px] rounded-[8px] bg-white border border-[#D4D4D4] !z-[999999] relative privacy-mode-toggle hover:shadow-md transition-shadow duration-200 max-w-[190px]'>
+          <div className='flex px-[3px] py-[3px] pl-[8px] w-[240px] justify-center items-center gap-[8px] rounded-[8px] bg-white border border-[#D4D4D4] z-10 relative privacy-mode-toggle hover:shadow-md transition-shadow duration-200 max-w-[190px]'>
             <Image
               src='/assets/svg/human.aztec.svg'
               alt='Aztec'
@@ -492,7 +489,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
               Privacy Mode
             </span>
             <button
-              className={`flex w-[40px] h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none relative z-[9999999] ${
+              className={`flex w-[40px] h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none relative z-10 ${
                 isPrivacyModeEnabled
                   ? 'bg-[#3B3B3B] justify-end pl-[19px]'
                   : 'bg-[#D4D4D4] justify-start pr-[19px]'
@@ -502,15 +499,15 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
 
                 if (!isPrivacyModeEnabled) {
                   setTimeout(() => {
-                    notify(
-                      'privacy-mode',
-                      {
-                        message:
-                          'Private balances and transactions are used instead of public',
-                        heading: 'Private mode activated',
-                      },
-                    )
+                    notify('privacy-mode', {
+                      message:
+                        'Private balances and transactions are used instead of public',
+                      heading: 'Private mode activated',
+                    })
                   }, 1500)
+                } else {
+                  // Dismiss the privacy mode toast when turning off privacy mode
+                  notify.dismiss('privacy-mode-toastId')
                 }
               }}
               aria-pressed={isPrivacyModeEnabled}

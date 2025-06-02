@@ -22,6 +22,10 @@ struct Authorization {
   uint256 amount; // The amount authorized to deposit or withdraw
   AuthorizationType authorizationType; // The type of authorization
 
+  // To prevent replaying of the authorization on different contracts or chains, we include the chainId and contract address in the authorization
+  address contractAddress;
+  uint256 chainId;
+
   uint8 v; // The v value of the signature
   bytes32 r; // The r value of the signature
   bytes32 s; // The s value of the signature
@@ -49,6 +53,8 @@ contract TokenPortal {
 
   // Authorizor can verify the user's proof of clean hands, personhood, and/or other attributes that can reduce the risk of fraud, and authorize the user to deposit or withdraw funds
   address authorizor;
+  uint256 chainId;
+
   // For checking the uniqueness of authorizationID, preventing double-spending
   mapping(bytes32 => bool) public authorizationIDUsed;
 
@@ -72,7 +78,7 @@ contract TokenPortal {
   }
   // docs:end:init
 
-  //Authorizations are of form (bytes32 authorizationID, address authorizedToTransact, uint256 expiration)
+  // NOTE: this function modifies state so that it cannot be called successfully twice for the same authorization, to prevent replay attacks
   function _verifyAuthorization(
       address caller, // The address trying to deposit or withdraw
       uint256 amount, // The amount authorized to deposit or withdraw
@@ -80,7 +86,7 @@ contract TokenPortal {
       Authorization memory authorization
   ) private returns (bool) {
     // Hash the authorization
-    bytes32 messageHash = keccak256(abi.encode(authorization));
+    bytes32 messageHash = keccak256(abi.encode(authorization.authorizationID, authorization.authorizedToTransact, authorization.expiration, authorization.amount, authorization.authorizationType, authorization.contract, authorization.chainId));
     // Convert the message hash to an Ethereum signed message hash
     bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
     // Recover the signer's address from the signature
@@ -88,6 +94,10 @@ contract TokenPortal {
     // Verify that the recovered signer is the authorizor
     require(recoveredSigner == authorizor, "Not signed by authorizor");
 
+
+    // Verify that the chainId and contract address are correct to prevent replay attackss
+    require(authorization.chainId == chainId, "Chain ID does not match");
+    require(authorization.contractAddress == address(this), "Contract address does not match");
 
     // Verify that the authorization type is correct
     require(authorization.authorizationType == authorizationType, "Authorization type does not match");

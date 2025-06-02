@@ -66,7 +66,7 @@ contract TokenPortal {
    * @param _l2Bridge - The L2 bridge address
    */
   // docs:start:init
-  function initialize(address _registry, address _underlying, bytes32 _l2Bridge) external {
+  constructor(address _registry, address _underlying, bytes32 _l2Bridge, address _authorizor) {
     registry = IRegistry(_registry);
     underlying = IERC20(_underlying);
     l2Bridge = _l2Bridge;
@@ -75,6 +75,9 @@ contract TokenPortal {
     outbox = rollup.getOutbox();
     inbox = rollup.getInbox();
     rollupVersion = rollup.getVersion();
+
+    authorizor = _authorizor;
+    chainId = block.chainid;
   }
   // docs:end:init
 
@@ -86,7 +89,7 @@ contract TokenPortal {
       Authorization memory authorization
   ) private returns (bool) {
     // Hash the authorization
-    bytes32 messageHash = keccak256(abi.encode(authorization.authorizationID, authorization.authorizedToTransact, authorization.expiration, authorization.amount, authorization.authorizationType, authorization.contract, authorization.chainId));
+    bytes32 messageHash = keccak256(abi.encode(authorization.authorizationID, authorization.authorizedToTransact, authorization.expiration, authorization.amount, authorization.authorizationType, authorization.contractAddress, authorization.chainId));
     // Convert the message hash to an Ethereum signed message hash
     bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
     // Recover the signer's address from the signature

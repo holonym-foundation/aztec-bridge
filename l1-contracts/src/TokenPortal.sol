@@ -13,6 +13,20 @@ import {DataStructures} from "@aztec/core/libraries/DataStructures.sol";
 import {Hash} from "@aztec/core/libraries/crypto/Hash.sol";
 // docs:end:content_hash_sol_import
 
+enum AuthorizationType { DEPOSIT, WITHDRAW }
+
+struct Authorization {
+  bytes32 authorizationID; // The unique identifier for the authorization
+  address authorizedToTransact; // The address authorized to deposit or withdraw
+  uint256 expiration; // The expiration of the authorization
+  uint256 amount; // The amount authorized to deposit or withdraw
+  AuthorizationType authorizationType; // The type of authorization
+
+  uint8 v; // The v value of the signature
+  bytes32 r; // The r value of the signature
+  bytes32 s; // The s value of the signature
+}
+
 contract TokenPortal {
   using SafeERC20 for IERC20;
 
@@ -33,6 +47,12 @@ contract TokenPortal {
   IInbox public inbox;
   uint256 public rollupVersion;
 
+  // Authorizor can verify the user's proof of clean hands, personhood, and/or other attributes that can reduce the risk of fraud, and authorize the user to deposit or withdraw funds
+  address authorizor;
+  // For checking the uniqueness of authorizationID, preventing double-spending
+  mapping(bytes32 => bool) public authorizationIDUsed;
+
+
   /**
    * @notice Initialize the portal
    * @param _registry - The registry address
@@ -52,6 +72,37 @@ contract TokenPortal {
   }
   // docs:end:init
 
+  //Authorizations are of form (bytes32 authorizationID, address authorizedToTransact, uint256 expiration)
+  function _verifyAuthorization(
+      address caller, // The address trying to deposit or withdraw
+      uint256 amount, // The amount authorized to deposit or withdraw
+      AuthorizationType authorizationType, // What type authorization is it? e.g. Deposit or Withdraw
+      Authorization memory authorization
+  ) private returns (bool) {
+    // Hash the authorization
+    bytes32 messageHash = keccak256(abi.encode(authorization));
+    // Convert the message hash to an Ethereum signed message hash
+    bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+    // Recover the signer's address from the signature
+    address recoveredSigner = ecrecover(ethSignedMessageHash, authorization.v, authorization.r, authorization.s);
+    // Verify that the recovered signer is the authorizor
+    require(recoveredSigner == authorizor, "Not signed by authorizor");
+
+
+    // Verify that the authorization type is correct
+    require(authorization.authorizationType == authorizationType, "Authorization type does not match");
+    // Verify that the amount is correct
+    require(authorization.amount == amount, "Amount does not match");
+    // Verify that the expiration is in the future
+    require(authorization.expiration > block.timestamp, "Authorization expired");
+    // Verify that the authorizedToTransact is the caller
+    require(authorization.authorizedToTransact == caller, "caller is not the address who was authorized to transact");
+    // Verify that the authorizationID is unique
+    require(authorizationIDUsed[authorization.authorizationID] == false, "Authorization ID already used");
+    authorizationIDUsed[authorization.authorizationID] = true;
+    return true;
+  }
+
   // docs:start:deposit_public
   /**
    * @notice Deposit funds into the portal and adds an L2 message which can only be consumed publicly on Aztec
@@ -60,11 +111,14 @@ contract TokenPortal {
    * @param _secretHash - The hash of the secret consumable message. The hash should be 254 bits (so it can fit in a Field element)
    * @return The key of the entry in the Inbox and its leaf index
    */
-  function depositToAztecPublic(bytes32 _to, uint256 _amount, bytes32 _secretHash)
+  function depositToAztecPublic(bytes32 _to, uint256 _amount, bytes32 _secretHash, Authorization memory authorization)
     external
     returns (bytes32, uint256)
   // docs:end:deposit_public
   {
+    // Verify the authorization
+    require(_verifyAuthorization(msg.sender, _amount, AuthorizationType.DEPOSIT, authorization), "Authorization failed");
+
     // Preamble
     DataStructures.L2Actor memory actor = DataStructures.L2Actor(l2Bridge, rollupVersion);
 
@@ -93,11 +147,14 @@ contract TokenPortal {
    * @param _secretHashForL2MessageConsumption - The hash of the secret consumable L1 to L2 message. The hash should be 254 bits (so it can fit in a Field element)
    * @return The key of the entry in the Inbox and its leaf index
    */
-  function depositToAztecPrivate(uint256 _amount, bytes32 _secretHashForL2MessageConsumption)
+  function depositToAztecPrivate(uint256 _amount, bytes32 _secretHashForL2MessageConsumption, Authorization memory authorization)
     external
     returns (bytes32, uint256)
   // docs:end:deposit_private
   {
+    // Verify the authorization
+    require(_verifyAuthorization(msg.sender, _amount, AuthorizationType.DEPOSIT, authorization), "Authorization failed");
+
     // Preamble
     DataStructures.L2Actor memory actor = DataStructures.L2Actor(l2Bridge, rollupVersion);
 
@@ -137,8 +194,13 @@ contract TokenPortal {
     bool _withCaller,
     uint256 _l2BlockNumber,
     uint256 _leafIndex,
-    bytes32[] calldata _path
+    bytes32[] calldata _path,
+    Authorization memory authorization
   ) external {
+
+    // Verify the authorization
+    require(_verifyAuthorization(msg.sender, _amount, AuthorizationType.WITHDRAW, authorization), "Authorization failed");
+
     // The purpose of including the function selector is to make the message unique to that specific call. Note that
     // it has nothing to do with calling the function.
     DataStructures.L2ToL1Msg memory message = DataStructures.L2ToL1Msg({

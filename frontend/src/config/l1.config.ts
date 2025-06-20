@@ -21,7 +21,7 @@ export const silkConfig: InitSilkOptions = {
     },
   },
   project: {
-    name: 'Human Wallet',
+    entryTitle: 'Welcome Human',
     logo: logo,
   },
   walletConnectProjectId:

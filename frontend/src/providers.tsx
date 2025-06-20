@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { type ReactNode, useEffect, useState } from 'react'
 import { ToastContainer } from 'react-toastify'
 import { useHumanWalletStore } from './stores/humanWalletStore'
+import { init as initDatadog } from '@/utils/datadog'
 
 function InitializeHumanWallet() {
   const { initializeHumanWallet } = useHumanWalletStore()
@@ -12,6 +13,15 @@ function InitializeHumanWallet() {
   useEffect(() => {
     initializeHumanWallet()
   }, [initializeHumanWallet])
+
+  return null
+}
+
+function InitializeDatadog() {
+  useEffect(() => {
+    // Initialize Datadog on client-side only
+    initDatadog()
+  }, [])
 
   return null
 }
@@ -54,6 +64,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <>
       <QueryClientProvider client={queryClient}>
         <InitializeHumanWallet />
+        <InitializeDatadog />
 
         {children}
         <ReactQueryDevtools initialIsOpen={false} />

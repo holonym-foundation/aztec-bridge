@@ -1,10 +1,7 @@
 import ClientLayout from '@/components/ClientLayout'
 import { Providers } from '@/providers'
-import { init as initDatadog } from '@/utils/datadog'
 import type { Metadata } from 'next'
 import './globals.css'
-
-initDatadog()
 
 export const metadata: Metadata = {
   title: 'Bridge to Aztec ',

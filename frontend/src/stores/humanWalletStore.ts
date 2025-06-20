@@ -88,7 +88,6 @@ export const humanWalletStore = create<HumanWalletState>((set, get) => ({
   login: async () => {
     try {
       const result = await window.silk.login()
-      console.log('🚀MMM - ~ login: ~ result:', result)
       const { getAccount, switchChain, getChainId } = get()
       const address = await getAccount()
       await switchChain(l1ChainId)
@@ -99,12 +98,10 @@ export const humanWalletStore = create<HumanWalletState>((set, get) => ({
         chainId,
         isConnected: !!address,
         walletName: result,
-      }
-      console.log('🚀MMM - ~ login: ~ state:', state)
+        }
 
       set(state)
     } catch (err) {
-      console.log('🚀MMM - ~ login: ~ err:', err)
       handleError(err, 'Failed to login', set)
     }
   },

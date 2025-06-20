@@ -325,7 +325,6 @@ export default function Home() {
           setShowPopupBlockedAlert(true)
         } else {
           console.log('Popups are allowed for this site')
-          logInfo('Popups are allowed', { blocked })
         }
       })
     }
@@ -409,10 +408,19 @@ export default function Home() {
           <div className='p-5'>
             <BridgeHeader
               onClick={async () => {
-                await disconnectMetaMask()
-                await disconnectAztec()
-                localStorage.clear()
-                window.location.reload()
+                console.log('testing')
+
+                // Add delay to ensure Datadog is initialized
+                setTimeout(() => {
+                  logInfo('log info testing ------------- aztec')
+                  logError('log error testing ------------- aztec')
+                  console.log('testing done')
+                }, 1000)
+
+                // await disconnectMetaMask()
+                // await disconnectAztec()
+                // localStorage.clear()
+                // window.location.reload()
 
 
                 // const fakePromise = new Promise((resolve, reject) => {

@@ -18,7 +18,6 @@ import LoadingToast from '@/components/toast/LoadingToast'
 import SuccessToast from '@/components/toast/SuccessToast'
 import WarningToast from '@/components/toast/WarningToast'
 import ErrorToast from '@/components/toast/ErrorToast'
-// import 'react-toastify/dist/ReactToastify.min.css' // we import it in _app.tsx
 
 /**
  * Toast System with Loading Spinner Support

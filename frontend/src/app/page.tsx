@@ -404,16 +404,16 @@ export default function Home() {
                 console.log('testing')
 
                 // Add delay to ensure Datadog is initialized
-                // setTimeout(() => {
-                //   logInfo('log info testing ------------- aztec')
-                //   logError('log error testing ------------- aztec')
-                //   console.log('testing done')
-                // }, 1000)
+                setTimeout(() => {
+                  logInfo('log info testing ------------- aztec')
+                  logError('log error testing ------------- aztec')
+                  console.log('testing done')
+                }, 1000)
 
-                await disconnectMetaMask()
-                await disconnectAztec()
-                localStorage.clear()
-                window.location.reload()
+                // await disconnectMetaMask()
+                // await disconnectAztec()
+                // localStorage.clear()
+                // window.location.reload()
 
 
                 // const fakePromise = new Promise((resolve, reject) => {

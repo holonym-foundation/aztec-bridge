@@ -223,6 +223,7 @@ export default function Home() {
     useL2WithdrawTokensToL1(handleBridgeSuccess)
 
   // Faucet operations
+  const useExternalFaucet = true // Set to true to redirect to Google Cloud faucet, false to use internal API
   const {
     mutate: requestFaucet,
     isPending: requestFaucetPending,
@@ -233,6 +234,12 @@ export default function Home() {
     hasGas,
     balancesLoaded,
   } = useL1Faucet()
+
+  // External faucet handler
+  const handleExternalFaucet = () => {
+    const googleFaucetUrl = 'https://cloud.google.com/application/web3/faucet/ethereum/sepolia'
+    window.open(googleFaucetUrl, '_blank')
+  }
 
   // Helper functions for bridge operations
   const getCurrentSection = () => (isFromSection ? 'from' : 'to')
@@ -522,6 +529,8 @@ export default function Home() {
                 bridgeTokensToL2={handleBridgeTokensToL2}
                 withdrawTokensToL1={handleWithdrawTokensToL1}
                 requestFaucet={requestFaucet}
+                useExternalFaucet={useExternalFaucet}
+                handleExternalFaucet={handleExternalFaucet}
                 // Loading states
                 isStateInitialized={balancesLoaded}
                 requestFaucetPending={requestFaucetPending}

@@ -49,6 +49,8 @@ function BridgeActionButton({
   bridgeTokensToL2,
   withdrawTokensToL1,
   requestFaucet,
+  useExternalFaucet = false,
+  handleExternalFaucet,
 
   // Loading states
   isStateInitialized = true,
@@ -94,6 +96,8 @@ function BridgeActionButton({
   bridgeTokensToL2: (amount: string) => void
   withdrawTokensToL1: (amount: string) => void
   requestFaucet: () => void
+  useExternalFaucet?: boolean
+  handleExternalFaucet?: () => void
 
   // Loading states
   isStateInitialized?: boolean
@@ -263,17 +267,24 @@ function BridgeActionButton({
 
     // Step 3: If faucet is needed (no gas or tokens), request it
     if (isStateInitialized && isEligibleForFaucet) {
-      setIsOperationPending(true)
-      try {
-        await requestFaucet()
-      } catch (error) {
-        // const errorMsg =
-        //   error instanceof Error ? error.message : 'Unknown error'
-        // notify('error', `Faucet request failed: ${errorMsg}`)
-      } finally {
-        setIsOperationPending(false)
+      if (useExternalFaucet && handleExternalFaucet) {
+        // Redirect to external faucet (Google Cloud)
+        handleExternalFaucet()
+        return
+      } else {
+        // Use internal faucet API
+        setIsOperationPending(true)
+        try {
+          await requestFaucet()
+        } catch (error) {
+          // const errorMsg =
+          //   error instanceof Error ? error.message : 'Unknown error'
+          // notify('error', `Faucet request failed: ${errorMsg}`)
+        } finally {
+          setIsOperationPending(false)
+        }
+        return
       }
-      return
     }
 
     // Step 4: Check if user has the required SBTs
@@ -332,8 +343,12 @@ function BridgeActionButton({
     if (!isAztecConnected) return 'Connect Aztec Wallet'
 
     // Priority 3: Faucet (gas and tokens)
-    if (needsGas || needsTokensOnly)
+    if (needsGas || needsTokensOnly) {
+      // if (useExternalFaucet) {
+      //   return needsTokensOnly ? 'Get Tokens (External)' : 'Get Testnet ETH (External)'
+      // }
       return needsTokensOnly ? 'Get Tokens' : 'Get Testnet ETH'
+    }
 
     // Priority 4: SBT requirements
     const requiredChain = getSBTChainForDirection(direction)

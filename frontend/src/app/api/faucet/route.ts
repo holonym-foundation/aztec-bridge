@@ -42,6 +42,12 @@ if (!privateKey.startsWith('0x')) {
 }
 
 export async function POST(request: NextRequest) {
+  // API is disabled
+  return NextResponse.json(
+    { error: 'Faucet API is currently disabled' },
+    { status: 503 }
+  )
+
   try {
     // Only accept POST requests
     if (request.method !== 'POST') {

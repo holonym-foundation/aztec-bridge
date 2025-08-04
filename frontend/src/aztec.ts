@@ -1,3 +1,5 @@
+'use client'
+
 import { AztecWalletSdk, obsidion } from '@nemi-fi/wallet-sdk'
 import { createAztecNodeClient, createPXEClient } from "@aztec/aztec.js";
 
@@ -8,13 +10,10 @@ export const aztecNode = createAztecNodeClient(NODE_URL);
 
 // const pxe = createPXEClient(NODE_URL);
 
-
-// Create the Aztec Wallet SDK instance without pino-based logging
+// Create the Aztec Wallet SDK instance
 export const sdk = new AztecWalletSdk({
   aztecNode: NODE_URL,
-  // connectors: [obsidion({ walletUrl: WALLET_URL })],
   connectors: [obsidion({})],
-  // Remove any logger config that might be using Pino
 })
 
 // Function to connect to the specified wallet type

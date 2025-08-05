@@ -630,6 +630,12 @@ async function main() {
       .simulate()
     logger.info(`New L2 balance of ${ownerAztecAddress} is ${newL2Balance}`)
 
+    // Wait 45 minutes for L2 to L1 message to be processed
+    logger.info('⏳ Waiting 45 minutes for L2 to L1 message to be processed before withdrawal...')
+    const delayMs = 45 * 60 * 1000 // 45 minutes in milliseconds
+    await new Promise(resolve => setTimeout(resolve, delayMs))
+    logger.info('✅ 45-minute delay completed, proceeding with withdrawal...')
+
     const [l2ToL1MessageIndex, siblingPath] =
       await pxe.getL2ToL1MembershipWitness(
         await pxe.getBlockNumber(),

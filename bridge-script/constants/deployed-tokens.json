@@ -1,27 +1,16 @@
 {
-  "deployedAt": "2025-08-04T14:32:06.973Z",
+  "deployedAt": "2025-08-05T12:44:29.709Z",
   "sponsoredFeeAddress": "0x19b5539ca1b104d4c3705de94e4555c9630def411f025e023a13189d0c56f8f2",
   "tokens": [
     {
       "symbol": "USDC",
       "decimals": 6,
       "logo": "/assets/svg/USDC.svg",
-      "l1TokenContract": "0x7d97a9ced1073df8cdd2c32e2144cb2adb73b883",
-      "l2TokenContract": "0x144af82e6d1a79435718b79750925d0ed5b569f119680c017e581955181397e1",
-      "l2BridgeContract": "0x170055c12213ed8d65f0bc2332d0af8f6343eabe9ea716179ed8098fea58ce0f",
-      "l1PortalContract": "0x48bc2b6450f4b71ba6bbd4ca75312cdf8ef75704",
-      "feeAssetHandler": "0x116f3a52eac202a4e87de3d4dbfd64b7fbded595",
-      "sponsoredFee": "0x19b5539ca1b104d4c3705de94e4555c9630def411f025e023a13189d0c56f8f2"
-    },
-    {
-      "symbol": "USDT",
-      "decimals": 6,
-      "logo": "/assets/svg/USDT.svg",
-      "l1TokenContract": "0x155ac7d149a52aa8242e5f5a6459a4b7aa288e73",
-      "l2TokenContract": "0x17d77ffeb768fbde2a5870181648ea9a279a72c1712bd847df8577a75f45d3f3",
-      "l2BridgeContract": "0x01ed3844ea93a139766a65c7289b2da2322d34b7e6fc95570a0918b7f36524f6",
-      "l1PortalContract": "0xf6d41318987531fa68f365dd4ccf32da8a823c3e",
-      "feeAssetHandler": "0xbc13e162da221510d8470707e27870e642173411",
+      "l1TokenContract": "0xb9651f097214dc40dc1fecbca6863a2f0d46a573",
+      "l2TokenContract": "0x1e6348061ace5d20467fd9345af2211edc3342b7c6efae215148d4315c181507",
+      "l2BridgeContract": "0x2dfe05059f139ba21694fbf7c1696f5b8a7f046a6dd45d60b4481bdf1c9585ab",
+      "l1PortalContract": "0x6f3ec949723e8e19563ce0e1eabcf0d847d97619",
+      "feeAssetHandler": "0xf83ce2aec94868ae1491c8dc5197a22eefd5cd3e",
       "sponsoredFee": "0x19b5539ca1b104d4c3705de94e4555c9630def411f025e023a13189d0c56f8f2"
     }
   ]

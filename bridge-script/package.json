@@ -8,7 +8,6 @@
   "scripts": {
     "start": "node --import tsx index.ts",
     "start-testnet": "node --import tsx index-testnet.ts",
-    "start-testnet-0.87.2": "node --import tsx index-testnet-0.87.2.ts",
     "test": "jest",
     "fees": "node --loader ts-node/esm scripts/fees.ts",
     "clean": "rm -rf ./src/artifacts ./target",

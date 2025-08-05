@@ -1,3 +1,17 @@
+/**
+ * Aztec Token Bridge Deployment Script
+ *
+ * Environment Variables:
+ * - USE_SEPOLIA: Set to 'true' to use Sepolia testnet, or 'false'/'unset' for local sandbox
+ * - L1_URL: L1 RPC URL (defaults to http://localhost:8545 for local)
+ * - PXE_URL: Aztec PXE URL (defaults to http://localhost:8081 for local)
+ * - MNEMONIC: Wallet mnemonic (defaults to test mnemonic for local)
+ *
+ * Examples:
+ * Local sandbox: npm run start
+ * Sepolia testnet: USE_SEPOLIA=true L1_URL=https://sepolia.infura.io/v3/YOUR_KEY MNEMONIC="your mnemonic" npm run start
+ */
+
 import { getInitialTestAccountsWallets } from '@aztec/accounts/testing'
 import {
   AztecAddress,
@@ -5,36 +19,45 @@ import {
   Fr,
   L1TokenManager,
   L1TokenPortalManager,
-  NoirCompiledContract,
+  Logger,
   createLogger,
   createPXEClient,
-  loadContractArtifact,
   readFieldCompressedString,
   waitForPXE,
 } from '@aztec/aztec.js'
-import { createL1Clients, deployL1Contract } from '@aztec/ethereum'
-import { deriveSigningKey } from '@aztec/stdlib/keys'
+import {
+  createExtendedL1Client,
+  deployL1Contract,
+  ExtendedViemWalletClient,
+} from '@aztec/ethereum'
 import {
   FeeAssetHandlerAbi,
   FeeAssetHandlerBytecode,
-  TestERC20Abi,
-  TestERC20Bytecode,
+  // TestERC20Abi,
+  // TestERC20Bytecode,
   TokenPortalAbi,
   TokenPortalBytecode,
 } from '@aztec/l1-artifacts'
-// import { TokenContract } from '@aztec/noir-contracts.js/Token'
+import { TokenContract } from '@aztec/noir-contracts.js/Token'
+// import { TokenContract } from '@defi-wonderland/aztec-standards/artifacts/Token.js'
 import { TokenBridgeContract } from '@aztec/noir-contracts.js/TokenBridge'
+
 import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee/testing'
 import 'dotenv/config'
-
+// @ts-ignore
 import PortalSBTJson from './constants/PortalSBT.json'
-import { TokenContract } from './constants/aztec/artifacts/Token.ts'
+// @ts-ignore
+import TestERC20Json from './constants/TestERC20.json'
+// import { TokenContract } from './constants/aztec/artifacts/Token.ts'
 
 // Fix the bytecode format
 const PortalSBTAbi = PortalSBTJson.abi
 const PortalSBTBytecode = PortalSBTJson.bytecode.object
 
-import { getContract, PublicClient, WalletClient } from 'viem'
+const TestERC20Abi = TestERC20Json.abi
+const TestERC20Bytecode = TestERC20Json.bytecode.object as `0x${string}`
+
+import { Chain, getContract, PublicClient, WalletClient } from 'viem'
 
 import {
   type ContractInstanceWithAddress,
@@ -43,88 +66,61 @@ import {
 } from '@aztec/aztec.js'
 import { SponsoredFPCContract } from '@aztec/noir-contracts.js/SponsoredFPC'
 import { getSchnorrAccount } from '@aztec/accounts/schnorr'
-import { sepolia } from 'viem/chains'
+import { sepolia, localhost } from 'viem/chains'
+import { deriveSigningKey } from '@aztec/stdlib/keys'
+import { setupPXE } from './utils/setup_pxe.js'
+import { deploySchnorrAccount } from './utils/deploy_account.js'
+import { getSponsoredFPCInstance } from './utils/sponsored_fpc.js'
+import { TOKEN_CONFIGS, TokenConfig } from './constants/tokens.js'
+import {
+  saveTokenToFile,
+  generateSimpleTypescriptFile,
+  loadExistingDeployments,
+  ensureDeploymentEnvironment,
+  DeployedContracts,
+} from './utils/save_contracts.js'
 
-const SPONSORED_FPC_SALT = new Fr(0)
+// const L1_URL = process.env.L1_URL || 'http://localhost:8545'
+const USE_SEPOLIA = process.env.USE_SEPOLIA === 'true'
 
-export const ADDRESS = {
-  11155111: {
-    // Sepolia
-    CHAIN_ID: 11155111,
-    CHAIN_NAME: 'Sepolia',
-    L1: {
-      PORTAL_SBT_CONTRACT: '0x983ad7bdc7701a77a6c22e2245d7eafe893b21fe',
-      TOKEN_CONTRACT: '0x24ca8bf6d17d0f6844eacee733fa183d343c1dc4',
-      FEE_ASSET_HANDLER_CONTRACT: '0x3e3b95db7788bddb59f2a43f0a1385f858f6a08e',
-      PORTAL_CONTRACT: '0x7e73a94be39327533faa90947cae5fc215349287',
-    },
-  },
-  1337: {
-    // Aztec Testnet
-    CHAIN_ID: 1337,
-    CHAIN_NAME: 'Aztec Testnet',
-    L2: {
-      TOKEN_CONTRACT:
-        '0x2ab7cf582347c8a2834e0faf98339372118275997e14c5a77054bb345362e878',
-      TOKEN_BRIDGE_CONTRACT:
-        '0x2d964ce22db58c33f6e3e29cd2c2550ca310610f4917955ecb59bc7b6f97d6a7',
-      SPONSORED_FEE_PAYMENT_CONTRACT:
-        '0x0b27e30667202907fc700d50e9bc816be42f8141fae8b9f2281873dbdb9fc2e5',
-    },
-  },
-  SECRET: '0x06abcfa657c7cb3fbd2adbbea36a25feebe95aede7beb83103f69a86412a7728',
-  SALT: '0x0c6f174d48f7d228f1b25c9abd30296bdfb21cb0554195840fb97236a407212c',
-} as const
-
-export async function getSponsoredFPCInstance(): Promise<ContractInstanceWithAddress> {
-  return await getContractInstanceFromDeployParams(
-    SponsoredFPCContract.artifact,
-    {
-      salt: SPONSORED_FPC_SALT,
-    }
-  )
-}
-
-export async function getSponsoredFPCAddress() {
-  return (await getSponsoredFPCInstance()).address
-}
-
-export async function getDeployedSponsoredFPCAddress(pxe: PXE) {
-  const fpc = await getSponsoredFPCAddress()
-  const contracts = await pxe.getContracts()
-  if (!contracts.find((c) => c.equals(fpc))) {
-    throw new Error('SponsoredFPC not deployed.')
+// For Sepolia, require real mnemonic. For local, default to test mnemonic
+let MNEMONIC: string
+let L1_URL: string
+let selectedChain: Chain
+let l1Client: ExtendedViemWalletClient
+if (USE_SEPOLIA) {
+  if (!process.env.MNEMONIC) {
+    throw new Error(
+      'MNEMONIC is required when using Sepolia testnet. Please set the MNEMONIC environment variable.'
+    )
   }
-  return fpc
+  MNEMONIC = process.env.MNEMONIC
+
+  if (!process.env.L1_URL) {
+    throw new Error(
+      'L1_URL is required when using Sepolia testnet. Please set the L1_URL environment variable.'
+    )
+  }
+  L1_URL = process.env.L1_URL
+  selectedChain = sepolia
+  l1Client = createExtendedL1Client(L1_URL.split(','), MNEMONIC, selectedChain)
+} else {
+  MNEMONIC = 'test test test test test test test test test test test junk'
+  L1_URL = 'http://localhost:8545'
+  selectedChain = localhost
+  l1Client = createExtendedL1Client(L1_URL.split(','), MNEMONIC)
 }
 
-const L1_URL = process.env.L1_URL
-
-if (!L1_URL) {
-  throw new Error('L1_URL is not set')
-}
-
-const L1_CHAIN_ID = 11155111
-const L2_CHAIN_ID = 1337
-
-const MNEMONIC = process.env.MNEMONIC
-
-if (!MNEMONIC) {
-  throw new Error('MNEMONIC is not set')
-}
-
-const { walletClient, publicClient } = createL1Clients(
-  L1_URL.split(','),
-  MNEMONIC,
-  // @ts-ignore
-  sepolia
-)
-const ownerEthAddress = walletClient.account.address
+const ownerEthAddress = l1Client.account.address
 
 const MINT_AMOUNT = BigInt(1e15)
 
 const setupSandbox = async () => {
-  const { PXE_URL = 'http://localhost:8081' } = process.env
+  // Default PXE URL: use 8081 for Sepolia (sandbox compatibility), 8080 for local
+  const defaultPxeUrl = USE_SEPOLIA
+    ? 'http://localhost:8081'
+    : 'http://localhost:8080'
+  const { PXE_URL = defaultPxeUrl } = process.env
   // eslint-disable-next-line @typescript-eslint/await-thenable
   const pxe = await createPXEClient(PXE_URL)
   await waitForPXE(pxe)
@@ -133,20 +129,22 @@ const setupSandbox = async () => {
 
 export const deployPortalSBT = async (): Promise<EthAddress> => {
   return await deployL1Contract(
-    walletClient,
-    publicClient,
+    l1Client,
     PortalSBTAbi,
-    PortalSBTBytecode,
+    PortalSBTBytecode as `0x${string}`,
     []
   ).then(({ address }) => address)
 }
 
-async function deployTestERC20(): Promise<EthAddress> {
-  const constructorArgs = ['Test USDC', 'USDC', walletClient.account.address]
+async function deployTestERC20(
+  name: string,
+  symbol: string,
+  decimals: number
+): Promise<EthAddress> {
+  const constructorArgs = [name, symbol, decimals, l1Client.account.address]
 
   return await deployL1Contract(
-    walletClient,
-    publicClient,
+    l1Client,
     TestERC20Abi,
     TestERC20Bytecode,
     constructorArgs
@@ -157,13 +155,12 @@ async function deployFeeAssetHandler(
   l1TokenContract: EthAddress
 ): Promise<EthAddress> {
   const constructorArgs = [
-    walletClient.account.address,
+    l1Client.account.address,
     l1TokenContract.toString(),
     MINT_AMOUNT,
   ]
   return await deployL1Contract(
-    walletClient,
-    publicClient,
+    l1Client,
     FeeAssetHandlerAbi,
     FeeAssetHandlerBytecode,
     constructorArgs
@@ -172,8 +169,7 @@ async function deployFeeAssetHandler(
 
 async function deployTokenPortal(): Promise<EthAddress> {
   return await deployL1Contract(
-    walletClient,
-    publicClient,
+    l1Client,
     TokenPortalAbi,
     TokenPortalBytecode,
     []
@@ -187,306 +183,470 @@ async function addMinter(
   const contract = getContract({
     address: l1TokenContract.toString(),
     abi: TestERC20Abi,
-    // @ts-ignore
-    client: walletClient,
+    client: l1Client,
   })
-  // @ts-ignore
-  await contract.write.addMinter([l1TokenHandler.toString()])
+  const tx = await contract.write.addMinter([l1TokenHandler.toString()])
+  await l1Client.waitForTransactionReceipt({ hash: tx, timeout: 120000 })
 }
 
-async function main() {
-  const logger = createLogger('aztec:')
+// *************************************
+// Generate unique salts for each token deployment
+function generateTokenSalts(symbol: string) {
+  // Use Fr.random() with a seed based on symbol for deterministic but unique salts
+  const timestamp = Date.now()
+  const symbolHash = symbol
+    .split('')
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0)
 
-  logger.info(`Owner Eth Address: ${ownerEthAddress}`)
+  return {
+    tokenSalt: new Fr(BigInt(timestamp + symbolHash)),
+    bridgeSalt: new Fr(BigInt(timestamp + symbolHash + 1000)),
+  }
+}
 
-  const pxe = await setupSandbox()
-
-  const l1ContractAddresses = (await pxe.getNodeInfo()).l1ContractAddresses
-  // logger.info('L1 Contract Addresses:')
-  // logger.info(`Registry Address: ${l1ContractAddresses.registryAddress}`)
-  // logger.info(`Inbox Address: ${l1ContractAddresses.inboxAddress}`)
-  // logger.info(`Outbox Address: ${l1ContractAddresses.outboxAddress}`)
-  // logger.info(`Rollup Address: ${l1ContractAddresses.rollupAddress}`)
-  // console.log(' ')
-
-  // logger.info('Deploying Portal SBT Contract')
-  // const portalSBT = await deployPortalSBT()
-  // logger.info(`Portal SBT Contract deployed at ${portalSBT.toString()}`)
-
-  // logger.info('Deploy L1 token contract & mint tokens')
-  // const l1TokenContract = await deployTestERC20()
-  const l1TokenContract = EthAddress.fromString(
-    ADDRESS[L1_CHAIN_ID].L1.TOKEN_CONTRACT
+export async function getL2TokenContractInstance(
+  deployerAddress: any,
+  ownerAztecAddress: AztecAddress,
+  tokenName: string,
+  tokenSymbol: string,
+  decimals: number,
+  salt: Fr
+): Promise<ContractInstanceWithAddress> {
+  return await getContractInstanceFromDeployParams(TokenContract.artifact, {
+    salt: salt,
+    deployer: deployerAddress,
+    constructorArgs: [ownerAztecAddress, tokenName, tokenSymbol, decimals],
+  })
+}
+export async function getL2BridgeContractInstance(
+  deployerAddress: any,
+  ownerAztecAddress: AztecAddress,
+  l2TokenContract: AztecAddress,
+  l1PortalContractAddress: EthAddress,
+  salt: Fr
+): Promise<ContractInstanceWithAddress> {
+  return await getContractInstanceFromDeployParams(
+    TokenBridgeContract.artifact,
+    {
+      salt: salt,
+      deployer: deployerAddress,
+      constructorArgs: [
+        ownerAztecAddress,
+        l2TokenContract,
+        l1PortalContractAddress,
+      ],
+    }
   )
-  logger.info(`L1 Token Contract deployed at ${l1TokenContract.toString()}`)
+}
 
-  // logger.info('Deploying Fee Asset Handler')
-  // const feeAssetHandler = await deployFeeAssetHandler(l1TokenContract)
-  const feeAssetHandler = EthAddress.fromString(
-    ADDRESS[L1_CHAIN_ID].L1.FEE_ASSET_HANDLER_CONTRACT
+async function mintL1Tokens(
+  l1TokenContract: EthAddress,
+  amount: bigint,
+  logger: Logger,
+  symbol: string
+) {
+  try {
+    logger.info(`Minting ${amount.toString()} ${symbol} tokens to owner`)
+    const contract = getContract({
+      address: l1TokenContract.toString(),
+      abi: TestERC20Abi,
+      client: l1Client,
+    })
+
+    const tx = await contract.write.mint([ownerEthAddress, amount])
+    logger.info(`Mint transaction sent: ${tx}`)
+    await l1Client.waitForTransactionReceipt({ hash: tx, timeout: 120000 })
+    logger.info(`✅ Successfully minted ${amount.toString()} ${symbol} tokens`)
+  } catch (error) {
+    logger.error(`❌ Failed to mint ${symbol} tokens: ${error}`)
+    throw error
+  }
+}
+
+async function deployCompleteTokenSetup(
+  tokenConfig: TokenConfig,
+  pxe: PXE,
+  ownerWallet: any,
+  ownerAztecAddress: AztecAddress,
+  l1ContractAddresses: any,
+  sponsoredPaymentMethod: any,
+  logger: Logger
+): Promise<DeployedContracts> {
+  logger.info(`\n=== Deploying ${tokenConfig.symbol} Token Setup ===`)
+
+  // Generate unique salts for this token
+  const { tokenSalt, bridgeSalt } = generateTokenSalts(tokenConfig.symbol)
+
+  // Deploy L1 token contract
+  logger.info(
+    `Deploying L1 ${tokenConfig.symbol} with decimals ${tokenConfig.decimals} token contract`
   )
-
-  logger.info(`Fee Asset Handler deployed at ${feeAssetHandler.toString()}`)
-  // logger.info('Adding Minter')
-  // await addMinter(l1TokenContract, feeAssetHandler)
-
-  const l1TokenManager = new L1TokenManager(
-    l1TokenContract,
-    feeAssetHandler,
-    publicClient,
-    walletClient,
-    logger
-  )
-
-  logger.info('Minting l1 tokens to the owner')
-  const mintAmount = await l1TokenManager.getMintAmount()
-  const minting = await l1TokenManager.mint(ownerEthAddress)
-
-  // logger.info('Deploying L1 Portal Contract')
-
-  // logger.info('Deploying L1 Portal Contract')
-  // const l1PortalContractAddress = await deployTokenPortal()
-  const l1PortalContractAddress = EthAddress.fromString(
-    ADDRESS[L1_CHAIN_ID].L1.PORTAL_CONTRACT
+  const l1TokenContract = await deployTestERC20(
+    tokenConfig.l1Name,
+    tokenConfig.l1Symbol,
+    tokenConfig.decimals
   )
   logger.info(
-    `L1 portal contract deployed at ${l1PortalContractAddress.toString()}`
+    `L1 ${
+      tokenConfig.symbol
+    } token contract deployed at ${l1TokenContract.toString()}`
   )
 
+  // Mint tokens to owner
+  const mintAmount = BigInt(1000000000000000000)
+  await mintL1Tokens(l1TokenContract, mintAmount, logger, tokenConfig.symbol)
+
+  // Deploy fee asset handler
+  logger.info(`Deploying fee asset handler for ${tokenConfig.symbol}`)
+  const feeAssetHandler = await deployFeeAssetHandler(l1TokenContract)
+  logger.info(
+    `Fee asset handler for ${
+      tokenConfig.symbol
+    } deployed at ${feeAssetHandler.toString()}`
+  )
+
+  // Add minter
+  await addMinter(l1TokenContract, feeAssetHandler)
+
+  // Deploy L1 portal contract
+  logger.info(`Deploying L1 portal contract for ${tokenConfig.symbol}`)
+  const l1PortalContractAddress = await deployTokenPortal()
+  logger.info(
+    `L1 portal contract for ${
+      tokenConfig.symbol
+    } deployed at ${l1PortalContractAddress.toString()}`
+  )
+
+  // Deploy L2 token contract
+  logger.info(`Deploying L2 ${tokenConfig.symbol} token contract`)
+  const l2TokenContract = await TokenContract.deploy(
+    ownerWallet,
+    ownerAztecAddress,
+    tokenConfig.l2Name,
+    tokenConfig.l2Symbol,
+    tokenConfig.decimals
+  )
+    .send({
+      contractAddressSalt: tokenSalt,
+      fee: { paymentMethod: sponsoredPaymentMethod },
+    })
+    .deployed({ timeout: 120000 })
+
+  logger.info(
+    `L2 ${tokenConfig.symbol} token contract deployed at ${l2TokenContract.address}`
+  )
+
+  // Deploy L2 bridge contract
+  logger.info(`Deploying L2 bridge contract for ${tokenConfig.symbol}`)
+  const l2BridgeContract = await TokenBridgeContract.deploy(
+    ownerWallet,
+    l2TokenContract.address,
+    l1PortalContractAddress
+  )
+    .send({
+      contractAddressSalt: bridgeSalt,
+      fee: { paymentMethod: sponsoredPaymentMethod },
+    })
+    .deployed({ timeout: 120000 })
+
+  logger.info(
+    `L2 ${tokenConfig.symbol} bridge contract deployed at ${l2BridgeContract.address}`
+  )
+
+  // Set Bridge as a minter
+  logger.info(`Setting bridge as minter for ${tokenConfig.symbol}`)
+  await l2TokenContract.methods
+    .set_minter(l2BridgeContract.address, true)
+    .send({ fee: { paymentMethod: sponsoredPaymentMethod } })
+    .wait({ timeout: 120000 })
+
+  // Initialize L1 portal contract
+  logger.info(`Initializing L1 portal contract for ${tokenConfig.symbol}`)
   const l1Portal = getContract({
     address: l1PortalContractAddress.toString(),
     abi: TokenPortalAbi,
-    // @ts-ignore
-    client: walletClient,
+    client: l1Client,
   })
 
-  console.log(' ')
-
-  logger.info('Generating random secret key and salt...')
-  // let secretKey = Fr.random()
-  // let salt = Fr.random()
-  let secretKey = Fr.fromString(ADDRESS.SECRET)
-  let salt = Fr.fromString(ADDRESS.SALT)
-  logger.info(`Secret key: ${secretKey}`)
-  logger.info(`Salt: ${salt}`)
-  let schnorrAccount = await getSchnorrAccount(
-    pxe,
-    secretKey,
-    deriveSigningKey(secretKey),
-    salt
+  const initTx = await l1Portal.write.initialize(
+    [
+      l1ContractAddresses.registryAddress.toString(),
+      l1TokenContract.toString(),
+      l2BridgeContract.address.toString(),
+    ],
+    {}
   )
-  logger.info(`Schnorr account deployed at: ${schnorrAccount.getAddress()}`)
+  
+  // Wait for the transaction to be confirmed
+  logger.info(`Waiting for L1 portal initialization transaction: ${initTx}`)
+  await l1Client.waitForTransactionReceipt({ hash: initTx, timeout: 120000 })
+  logger.info(`L1 portal contract for ${tokenConfig.symbol} initialized`)
 
-  let ownerWallet = await schnorrAccount.getWallet()
-  const ownerAztecAddress = ownerWallet.getAddress()
-  logger.info(`Schnorr account deployed at: ${ownerAztecAddress}`)
+  const deployedContract: DeployedContracts = {
+    symbol: tokenConfig.symbol,
+    decimals: tokenConfig.decimals,
+    logo: tokenConfig.logo,
+    l1TokenContract: l1TokenContract.toString(),
+    l2TokenContract: l2TokenContract.address.toString(),
+    l2BridgeContract: l2BridgeContract.address.toString(),
+    l1PortalContract: l1PortalContractAddress.toString(),
+    feeAssetHandler: feeAssetHandler.toString(),
+    sponsoredFee: '', // Will be set later
+  }
 
-  logger.info('Deploying sponsored FPC...')
-  const sponseredFPC = await getSponsoredFPCInstance()
+  return deployedContract
+}
+
+// *************************************
+
+async function main() {
+  let pxe: PXE
+  let logger: Logger
+
+  logger = createLogger('aztec:')
+  // pxe = await setupPXE();
+  pxe = await setupSandbox()
+
+  const l1ContractAddresses = (await pxe.getNodeInfo()).l1ContractAddresses
+  logger.info('L1 Contract Addresses:')
+  logger.info(`Registry Address: ${l1ContractAddresses.registryAddress}`)
+  logger.info(`Inbox Address: ${l1ContractAddresses.inboxAddress}`)
+  logger.info(`Outbox Address: ${l1ContractAddresses.outboxAddress}`)
+  logger.info(`Rollup Address: ${l1ContractAddresses.rollupAddress}`)
+
+  logger.info('\n💰 Wallet Information:')
+  logger.info(`L1 Wallet Address: ${ownerEthAddress}`)
+  logger.info(
+    `L1 Chain: ${l1Client.chain?.name || 'Unknown'} (ID: ${
+      l1Client.chain?.id || 'Unknown'
+    })`
+  )
+  logger.info(
+    `Using ${USE_SEPOLIA ? 'Sepolia testnet' : 'local sandbox'} environment`
+  )
+  logger.info(`L1 RPC URL: ${L1_URL}`)
+
+  const defaultPxeUrl = USE_SEPOLIA
+    ? 'http://localhost:8081'
+    : 'http://localhost:8080'
+  logger.info(`PXE URL: ${process.env.PXE_URL || defaultPxeUrl}`)
+
+  // Check L1 wallet balance
+  try {
+    const balance = await l1Client.getBalance({
+      address: ownerEthAddress as `0x${string}`,
+    })
+    const balanceInEth = Number(balance) / 1e18
+    logger.info(`L1 Wallet Balance: ${balanceInEth.toFixed(4)} ETH`)
+
+    if (balanceInEth < 0.01) {
+      logger.warn(
+        '⚠️  Low L1 wallet balance! You may need more ETH for gas fees.'
+      )
+    }
+  } catch (error) {
+    logger.warn(`Could not fetch L1 wallet balance: ${error}`)
+    throw error
+  }
+
+  logger.info(' ')
+  const sponsoredFPC = await getSponsoredFPCInstance()
   await pxe.registerContract({
-    instance: sponseredFPC,
+    instance: sponsoredFPC,
     artifact: SponsoredFPCContract.artifact,
   })
-  const sponseredFPCAddress = sponseredFPC.address
-  // const sponseredFPCAddress = AztecAddress.fromString(
-  //   '0x0b27e30667202907fc700d50e9bc816be42f8141fae8b9f2281873dbdb9fc2e5'
-  // )
-
-  const paymentMethod = new SponsoredFeePaymentMethod(sponseredFPCAddress)
-  logger.info('Sponsored FPC deployed and registered')
-  logger.info(`Sponsored FPC deployed at: ${sponseredFPCAddress}`)
-
-  logger.info('Deploying Schnorr Account with payment method')
-  // let tx = await schnorrAccount
-  //   .deploy({ fee: { paymentMethod } })
-  //   .wait({ timeout: 120000 })
-  logger.info(`Schnorr account deployed at: ${ownerWallet.getAddress()}`)
-
-  // logger.info('Deploying L2 Token Contract')
-
-  // const l2TokenContract = await TokenContract.deploy(
-  //   ownerWallet,
-  //   ownerAztecAddress,
-  //   'Clean USDC',
-  //   'USDC',
-  //   6
-  // )
-  //   .send({ fee: { paymentMethod } })
-  //   .deployed({ timeout: 120000 })
-
-  // const l2TokenContractAddress = l2TokenContract.address
-  const l2TokenContractAddress = AztecAddress.fromString(
-    ADDRESS[L2_CHAIN_ID].L2.TOKEN_CONTRACT
+  const sponsoredPaymentMethod = new SponsoredFeePaymentMethod(
+    sponsoredFPC.address
   )
-  const l2TokenContract = await TokenContract.at(
-    l2TokenContractAddress,
-    ownerWallet
-  )
+  let accountManager = await deploySchnorrAccount(pxe)
+  const ownerWallet = await accountManager.getWallet()
+  const ownerAztecAddress = accountManager.getAddress()
+  logger.info(`Owner Aztec Address: ${ownerAztecAddress}`)
 
-  logger.info(
-    `Clean USDC L2 token contract deployed at ${l2TokenContractAddress}`
-  )
+  // Ensure deployment environment is ready
+  logger.info('\n🔧 Setting up deployment environment...')
+  ensureDeploymentEnvironment()
 
-  console.time('get_l2_token_contract_details')
-  const [nameResponse, symbolResponse, decimals] = await Promise.all([
-    l2TokenContract.methods.public_get_name().simulate(),
-    l2TokenContract.methods.public_get_symbol().simulate(),
-    l2TokenContract.methods.public_get_decimals().simulate(),
-  ])
-  const name = readFieldCompressedString(nameResponse as any)
-  const symbol = readFieldCompressedString(symbolResponse as any)
+  // Check for existing deployments
+  logger.info('\n📋 Checking for existing deployments...')
+  const existingDeployments = loadExistingDeployments()
+  if (existingDeployments) {
+    logger.info(
+      `Found existing deployments with ${existingDeployments.tokens.length} tokens`
+    )
+    logger.info(
+      `Deployed tokens: ${existingDeployments.tokens
+        .map((t) => t.symbol)
+        .join(', ')}`
+    )
+  }
 
-  console.log('name ', name)
-  console.log('symbol ', symbol)
-  console.log('decimals ', decimals)
-  console.timeEnd('get_l2_token_contract_details')
+  // Deploy all tokens and their related contracts
+  logger.info('\n🚀 Starting deployment of all tokens...')
+  const deployedContracts: DeployedContracts[] = []
 
-  // logger.info('Deploying L2 Token Bridge Contract')
-  // const l2BridgeContract = await TokenBridgeContract.deploy(
-  //   ownerWallet,
-  //   l2TokenContractAddress,
-  //   l1PortalContractAddress
-  // )
-  //   .send({ fee: { paymentMethod } })
-  //   .deployed({ timeout: 120000 })
+  for (const tokenConfig of TOKEN_CONFIGS) {
+    // Check if token is already deployed
+    const existingToken = existingDeployments?.tokens.find(
+      (t) => t.symbol === tokenConfig.symbol
+    )
+    if (existingToken) {
+      logger.info(`⏭️  ${tokenConfig.symbol} already deployed, skipping...`)
+      deployedContracts.push(existingToken)
+      continue
+    }
 
-  const l2BridgeContractAddress = AztecAddress.fromString(
-    ADDRESS[L2_CHAIN_ID].L2.TOKEN_BRIDGE_CONTRACT
-  )
-  const l2BridgeContract = await TokenBridgeContract.at(
-    l2BridgeContractAddress,
-    ownerWallet
-  )
-  logger.info(
-    `L2 token bridge contract deployed at ${l2BridgeContract.address}`
-  )
+    try {
+      logger.info(`\n🔄 Deploying ${tokenConfig.symbol}...`)
+      const deployedContract = await deployCompleteTokenSetup(
+        tokenConfig,
+        pxe,
+        ownerWallet,
+        ownerAztecAddress,
+        l1ContractAddresses,
+        sponsoredPaymentMethod,
+        logger
+      )
+      deployedContract.sponsoredFee = sponsoredFPC.address.toString()
 
-  const [l2BridgeContractDetails] = await Promise.all([
-    l2BridgeContract.methods.get_config().simulate(),
-  ])
+      // Save immediately after successful deployment
+      saveTokenToFile(deployedContract, sponsoredFPC.address.toString())
+      deployedContracts.push(deployedContract)
+      logger.info(
+        `✅ Successfully deployed and saved ${tokenConfig.symbol} token setup`
+      )
+    } catch (error) {
+      logger.error(`❌ Failed to deploy ${tokenConfig.symbol}: ${error}`)
+      // Continue with other tokens even if one fails
+    }
+  }
 
-  console.log('l2BridgeContractDetails ', l2BridgeContractDetails)
+  // Generate final TypeScript file
+  logger.info('\n📝 Generating final TypeScript file...')
+  generateSimpleTypescriptFile()
+  logger.info('✅ All contract addresses saved and TypeScript file generated!')
 
-  // logger.info('Setting Bridge as a minter')
+  // Example: Test with the first deployed token (USDC)
+  if (deployedContracts.length > 0) {
+    const firstToken = deployedContracts[0]
+    logger.info(
+      `\n🧪 Testing bridge functionality with ${firstToken.symbol}...`
+    )
 
-  // await l2TokenContract.methods
-  //   .set_minter(l2BridgeContract.address, true)
-  //   .send({ fee: { paymentMethod } })
-  //   .wait({ timeout: 120000 })
+    const l1TokenContract = EthAddress.fromString(firstToken.l1TokenContract)
+    const feeAssetHandler = EthAddress.fromString(firstToken.feeAssetHandler)
+    const l1PortalContractAddress = EthAddress.fromString(
+      firstToken.l1PortalContract
+    )
 
-  // // Initialize L1 portal contract
-  // // @ts-ignore
-  // await l1Portal.write.initialize(
-  //   [
-  //     l1ContractAddresses.registryAddress.toString(),
-  //     l1TokenContract.toString(),
-  //     l2BridgeContract.address.toString(),
-  //   ],
-  //   {}
-  // )
+    const l1TokenManager = new L1TokenManager(
+      l1TokenContract,
+      feeAssetHandler,
+      l1Client,
+      logger
+    )
 
-  return
-  logger.info('L1 portal contract initialized')
+    const l1PortalManager = new L1TokenPortalManager(
+      l1PortalContractAddress,
+      l1TokenContract,
+      feeAssetHandler,
+      l1ContractAddresses.outboxAddress,
+      l1Client,
+      logger
+    )
 
-  const l1PortalManager = new L1TokenPortalManager(
-    l1PortalContractAddress,
-    l1TokenContract,
-    feeAssetHandler,
-    l1ContractAddresses.outboxAddress,
-    publicClient,
-    walletClient,
-    logger
-  )
-  logger.info('Bridge tokens publicly on L1')
-  const claim = await l1PortalManager.bridgeTokensPublic(
-    ownerAztecAddress,
-    MINT_AMOUNT,
-    true
-  )
+    // Get the deployed L2 contracts for testing
+    const l2TokenContract = await TokenContract.at(
+      AztecAddress.fromString(firstToken.l2TokenContract),
+      ownerWallet
+    )
+    const l2BridgeContract = await TokenBridgeContract.at(
+      AztecAddress.fromString(firstToken.l2BridgeContract),
+      ownerWallet
+    )
 
-  logger.info('Minting tokens to L2')
-  // Do 2 unrleated actions because
-  // https://github.com/AztecProtocol/aztec-packages/blob/7e9e2681e314145237f95f79ffdc95ad25a0e319/yarn-project/end-to-end/src/shared/cross_chain_test_harness.ts#L354-L355
-  await l2TokenContract.methods
-    .mint_to_public(ownerAztecAddress, 0n)
-    .send({ fee: { paymentMethod } })
-    .wait({ timeout: 120000 })
-  await l2TokenContract.methods
-    .mint_to_public(ownerAztecAddress, 0n)
-    .send({ fee: { paymentMethod } })
-    .wait({ timeout: 120000 })
-
-  logger.info('Claiming tokens publicly on L2')
-  await l2BridgeContract.methods
-    .claim_public(
+    logger.info('Bridge tokens publicly')
+    logger.info(`Step 1: Send tokens publicly on L1`)
+    const claim = await l1PortalManager.bridgeTokensPublic(
       ownerAztecAddress,
       MINT_AMOUNT,
-      claim.claimSecret,
-      claim.messageLeafIndex
+      true
     )
-    .send({ fee: { paymentMethod } })
-    .wait({ timeout: 120000 })
-  const balance = await l2TokenContract.methods
-    .balance_of_public(ownerAztecAddress)
-    .simulate()
-  logger.info(`Public L2 balance of ${ownerAztecAddress} is ${balance}`)
 
-  logger.info('Withdrawing funds from L2')
-  const withdrawAmount = 9n
-  const nonce = Fr.random()
-
-  // Give approval to bridge to burn owner's funds:
-  const authwit = await ownerWallet.setPublicAuthWit(
-    {
-      caller: l2BridgeContract.address,
-      action: l2TokenContract.methods.burn_public(
+    // Claim tokens publicly on L2
+    logger.info(`Step 2: Claim tokens publicly on L2`)
+    await l2BridgeContract.methods
+      .claim_public(
         ownerAztecAddress,
-        withdrawAmount,
-        nonce
-      ),
-    },
-    true
-  )
+        MINT_AMOUNT,
+        claim.claimSecret,
+        claim.messageLeafIndex
+      )
+      .send({ fee: { paymentMethod: sponsoredPaymentMethod } })
+      .wait({ timeout: 120000 })
+    const balance = await l2TokenContract.methods
+      .balance_of_public(ownerAztecAddress)
+      .simulate()
+    logger.info(`Public L2 balance of ${ownerAztecAddress} is ${balance}`)
 
-  await authwit.send({ fee: { paymentMethod } }).wait({ timeout: 120000 })
+    logger.info('Withdrawing funds from L2')
+    const withdrawAmount = 9n
+    const nonce = Fr.random()
 
-  const l2ToL1Message = await l1PortalManager.getL2ToL1MessageLeaf(
-    withdrawAmount,
-    EthAddress.fromString(ownerEthAddress),
-    l2BridgeContract.address,
-    EthAddress.ZERO
-  )
-  const l2TxReceipt = await l2BridgeContract.methods
-    .exit_to_l1_public(
-      EthAddress.fromString(ownerEthAddress),
+    // Give approval to bridge to burn owner's funds:
+    const authwit = await ownerWallet.setPublicAuthWit(
+      {
+        caller: l2BridgeContract.address,
+        action: l2TokenContract.methods.burn_public(
+          ownerAztecAddress,
+          withdrawAmount,
+          nonce
+        ),
+      },
+      true
+    )
+    await authwit
+      .send({ fee: { paymentMethod: sponsoredPaymentMethod } })
+      .wait({ timeout: 120000 })
+
+    const l2ToL1Message = await l1PortalManager.getL2ToL1MessageLeaf(
       withdrawAmount,
-      EthAddress.ZERO,
-      nonce
+      EthAddress.fromString(ownerEthAddress),
+      l2BridgeContract.address,
+      EthAddress.ZERO
     )
-    .send({ fee: { paymentMethod } })
-    .wait({ timeout: 120000 })
-  console.log('l2TxReceipt ', l2TxReceipt.txHash, l2TxReceipt.blockNumber)
-  console.log('l2TxReceipt ', l2TxReceipt)
+    const l2TxReceipt = await l2BridgeContract.methods
+      .exit_to_l1_public(
+        EthAddress.fromString(ownerEthAddress),
+        withdrawAmount,
+        EthAddress.ZERO,
+        nonce
+      )
+      .send({ fee: { paymentMethod: sponsoredPaymentMethod } })
+      .wait({ timeout: 120000 })
 
-  const newL2Balance = await l2TokenContract.methods
-    .balance_of_public(ownerAztecAddress)
-    .simulate()
-  logger.info(`New L2 balance of ${ownerAztecAddress} is ${newL2Balance}`)
+    const newL2Balance = await l2TokenContract.methods
+      .balance_of_public(ownerAztecAddress)
+      .simulate()
+    logger.info(`New L2 balance of ${ownerAztecAddress} is ${newL2Balance}`)
 
-  const [l2ToL1MessageIndex, siblingPath] =
-    await pxe.getL2ToL1MembershipWitness(
-      l2TxReceipt.blockNumber!,
-      l2ToL1Message
+    const [l2ToL1MessageIndex, siblingPath] =
+      await pxe.getL2ToL1MembershipWitness(
+        await pxe.getBlockNumber(),
+        l2ToL1Message
+      )
+    await l1PortalManager.withdrawFunds(
+      withdrawAmount,
+      EthAddress.fromString(ownerEthAddress),
+      BigInt(l2TxReceipt.blockNumber!),
+      l2ToL1MessageIndex,
+      siblingPath
     )
-  await l1PortalManager.withdrawFunds(
-    withdrawAmount,
-    EthAddress.fromString(ownerEthAddress),
-    BigInt(l2TxReceipt.blockNumber!),
-    l2ToL1MessageIndex,
-    siblingPath
-  )
-  const newL1Balance = await l1TokenManager.getL1TokenBalance(ownerEthAddress)
-  logger.info(`New L1 balance of ${ownerEthAddress} is ${newL1Balance}`)
+    const newL1Balance = await l1TokenManager.getL1TokenBalance(ownerEthAddress)
+    logger.info(`New L1 balance of ${ownerEthAddress} is ${newL1Balance}`)
+  } else {
+    logger.warn('No tokens were deployed successfully. Skipping bridge test.')
+  }
 }
 
 main()

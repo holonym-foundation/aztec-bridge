@@ -238,6 +238,16 @@ export default function Home() {
   // External faucet handler
   const handleExternalFaucet = () => {
     const googleFaucetUrl = 'https://cloud.google.com/application/web3/faucet/ethereum/sepolia'
+    
+    // Log faucet redirect to Google
+    logInfo('Faucet redirect to Google initiated', {
+      faucetProvider: 'Google Cloud',
+      faucetUrl: googleFaucetUrl,
+      redirectType: 'external',
+      userAction: 'faucet_redirect',
+      network: 'Ethereum Sepolia',
+    })
+    
     window.open(googleFaucetUrl, '_blank')
   }
 
@@ -306,6 +316,44 @@ export default function Home() {
       )
     }
   }
+
+  // Test function for adding token to wallet
+  // const testAddTokenToWallet = async () => {
+  //   try {
+  //     console.log('Testing add token to wallet...')
+      
+  //     if (!isAztecConnected) {
+  //       throw new Error('Aztec wallet not connected')
+  //     }
+      
+  //     // Import the SDK to access watchAssets
+  //     const { sdk } = await import('../aztec')
+      
+  //     // Test token data (using the L2 token contract address)
+  //     const testToken = {
+  //       type: "ARC20" as const,
+  //       options: {
+  //         chainId: "1337", // Aztec testnet chain ID
+  //         address: "0x011bbe04d65430ca1e05b8b7d092b9ede275b4380f34d4aea1e80ae750e645be",
+  //         name: "Test USDC",
+  //         symbol: "USDC",
+  //         decimals: 6,
+  //         image: "", // You can add a token image URL here if available
+  //       },
+  //     }
+      
+  //     console.log('Adding test token to wallet:', testToken)
+      
+  //     await sdk.watchAssets([testToken])
+      
+  //     console.log('Token successfully added to wallet')
+  //     notify('success', 'Test token added to wallet successfully!')
+      
+  //   } catch (error) {
+  //     console.error('Error testing add token to wallet:', error)
+  //     notify('error', `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  //   }
+  // }
 
   // Page visit tracking and component mount effects
   useEffect(() => {
@@ -551,6 +599,19 @@ export default function Home() {
                 l2NodeError={l2NodeIsReadyIsError && !l2NodeIsReadyLoading}
                 l2NodeIsReadyLoading={l2NodeIsReadyLoading}
               />
+              
+              {/* Test button for adding token to wallet */}
+              {/* {isAztecConnected && (
+                <div className="px-4 pb-4">
+                  <button
+                    onClick={testAddTokenToWallet}
+                    className="w-full bg-success-500 hover:bg-success-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Test Add Token to Wallet
+                  </button>
+                </div>
+              )} */}
+              
               <BridgeFooter />
             </div>
           </div>

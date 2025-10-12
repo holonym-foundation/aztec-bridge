@@ -4,7 +4,7 @@ import { sdk, connectWallet } from '../aztec'
 import { useWalletStore } from '@/stores/walletStore'
 import { useContractStore } from '@/stores/contractStore'
 import { showToast } from '@/hooks/useToast'
-import { logError } from '@/utils/datadog'
+import { logInfo, logError } from '@/utils/datadog'
 import { AztecWalletType } from '@/types/wallet'
 import { useHumanWalletStore } from '@/stores/humanWalletStore'
 import { sepolia } from 'wagmi/chains'
@@ -105,6 +105,13 @@ export function useWalletSync() {
   const connectAztecWallet = useCallback(
     async (type: AztecWalletType) => {
       try {
+        // Log wallet connection attempt
+        logInfo('Aztec wallet connection initiated', {
+          walletType: type,
+          walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+          connectionAttempt: true,
+        })
+
         const connectedAccount = await connectWallet(type)
 
         // Update wallet type
@@ -125,9 +132,24 @@ export function useWalletSync() {
         // Close wallet modal
         setShowWalletModal(false)
 
+        // Log successful wallet connection
+        logInfo('Aztec wallet connected successfully', {
+          walletType: type,
+          walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+          aztecAddress: connectedAccount?.address.toString(),
+          connectionSuccess: true,
+        })
+
         return connectedAccount
       } catch (error) {
-        logError('Failed to connect Aztec wallet', { error })
+        // Log wallet connection failure
+        logError('Failed to connect Aztec wallet', {
+          walletType: type,
+          walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+          connectionFailure: true,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        })
+        
         showToast(
           'error',
           `Failed to connect to ${type} wallet: ${

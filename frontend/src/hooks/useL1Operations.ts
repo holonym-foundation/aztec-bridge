@@ -301,13 +301,15 @@ export function useL1Faucet() {
       console.log('Requesting faucet funds...')
 
       // Log faucet request with enhanced data
-      logInfo('Faucet request initiated', {
+      logInfo('Internal faucet request initiated', {
         l1Address: l1Address,
         address: l1Address, // keep original property
         needsGas,
         needsTokens,
         network: 'Ethereum',
         token: 'USDC',
+        faucetProvider: 'Internal API',
+        faucetType: 'internal',
       })
 
       if (!l1Address) throw new Error('Wallet not connected')
@@ -437,13 +439,15 @@ export function useL1Faucet() {
       console.error('Faucet request failed:', error)
 
       // Log faucet failure with enhanced data
-      logError('Faucet request failed', {
+      logError('Internal faucet request failed', {
         l1Address: l1Address,
         address: l1Address, // keep original property
         needsGas,
         needsTokens,
         network: 'Ethereum',
         token: 'USDC',
+        faucetProvider: 'Internal API',
+        faucetType: 'internal',
         error: error instanceof Error ? error.message : 'Unknown error',
       })
 
@@ -458,13 +462,15 @@ export function useL1Faucet() {
         console.log('Faucet operations completed:', data)
 
         // Log faucet success with enhanced data
-        logInfo('Faucet request successful', {
+        logInfo('Internal faucet request successful', {
           l1Address: l1Address,
           address: l1Address, // keep original property
           needsGas,
           needsTokens,
           network: 'Ethereum',
           token: 'USDC',
+          faucetProvider: 'Internal API',
+          faucetType: 'internal',
           success: data?.success,
         })
 

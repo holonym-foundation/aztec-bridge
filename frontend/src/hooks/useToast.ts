@@ -384,7 +384,7 @@ export function useToastMutation<
         notify('success', successMsg, successOptions)
       }
       
-      mutationOptions.onSuccess?.(data, variables, context)
+      mutationOptions.onSuccess?.(data, variables, context, {} as any)
     },
     onError: (error, variables, context) => {
       // Handle error fallback
@@ -394,7 +394,7 @@ export function useToastMutation<
         notify('error', errorMsg, errorOptions)
       }
       
-      mutationOptions.onError?.(error, variables, context)
+      mutationOptions.onError?.(error, variables, context, {} as any)
     },
   })
 }

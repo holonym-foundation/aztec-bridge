@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: `Error processing transaction: ${
-            err instanceof Error ? err.message : String(err)
+            err instanceof Error ? (err as Error).message : 'Unknown error'
           }`,
         },
         { status: 500 }
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Faucet error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { error: error instanceof Error ? (error as Error).message : 'Unknown error' },
       { status: 500 }
     )
   }

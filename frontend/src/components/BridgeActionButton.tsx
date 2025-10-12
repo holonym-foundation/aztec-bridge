@@ -5,6 +5,7 @@ import { Oval } from 'react-loader-spinner'
 import { BridgeDirection } from '@/types/bridge'
 import { useToast } from '@/hooks/useToast'
 import { parseUnits } from 'viem'
+import { logInfo, logError } from '@/utils/datadog'
 import CongestionWarningModal from './model/CongestionWarningModal'
 import { useL2PendingTxCount } from '@/hooks/useL2Operations'
 
@@ -211,22 +212,44 @@ function BridgeActionButton({
 
   // Main action handler for the button click
   const handleButtonClick = async () => {
-    // Step 1: Connect MetaMask if not connected
+    // Step 1: Connect Ethereum wallet if not connected
     if (!isMetaMaskConnected) {
+      // Log Ethereum wallet connection attempt
+      logInfo('User attempting to connect Ethereum wallet from bridge button', {
+        walletType: 'Ethereum',
+        userAction: 'ethereum_wallet_connection_attempt',
+        triggerSource: 'bridge_action_button',
+      })
+      
       setIsConnecting(true)
       setIsOperationPending(true)
       try {
         await connectMetaMask()
+        
+        // Log successful Ethereum wallet connection
+        logInfo('Ethereum wallet connection successful from bridge button', {
+          walletType: 'Ethereum',
+          userAction: 'ethereum_wallet_connection_success',
+          triggerSource: 'bridge_action_button',
+        })
       } catch (error) {
         const errorMsg =
           error instanceof Error ? error.message : 'Unknown error'
 
+        // Log Ethereum wallet connection failure
+        logError('Ethereum wallet connection failed from bridge button', {
+          walletType: 'Ethereum',
+          userAction: 'ethereum_wallet_connection_failure',
+          triggerSource: 'bridge_action_button',
+          error: errorMsg,
+        })
+
         if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
-          notify('error', 'MetaMask connection was rejected')
+          notify('error', 'Ethereum wallet connection was rejected')
         } else if (errorMsg.includes('install')) {
-          notify('error', 'Please install MetaMask to continue')
+          notify('error', 'Please install Ethereum wallet to continue')
         } else {
-          notify('error', `Failed to connect MetaMask: ${errorMsg}`)
+          notify('error', `Failed to connect Ethereum wallet: ${errorMsg}`)
         }
       } finally {
         setIsConnecting(false)
@@ -237,13 +260,32 @@ function BridgeActionButton({
 
     // Step 2: Connect Aztec if not connected
     if (!isAztecConnected) {
+      // Log Aztec wallet connection attempt
+      logInfo('User attempting to connect Aztec wallet from bridge button', {
+        userAction: 'aztec_connection_attempt',
+        triggerSource: 'bridge_action_button',
+      })
+      
       setIsConnecting(true)
       setIsOperationPending(true)
       try {
         await connectAztec()
+        
+        // Log successful Aztec wallet connection
+        logInfo('Aztec wallet connection successful from bridge button', {
+          userAction: 'aztec_connection_success',
+          triggerSource: 'bridge_action_button',
+        })
       } catch (error) {
         const errorMsg =
           error instanceof Error ? error.message : 'Unknown error'
+
+        // Log Aztec wallet connection failure
+        logError('Aztec wallet connection failed from bridge button', {
+          userAction: 'aztec_connection_failure',
+          triggerSource: 'bridge_action_button',
+          error: errorMsg,
+        })
 
         if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
           notify('error', 'Aztec connection was rejected')

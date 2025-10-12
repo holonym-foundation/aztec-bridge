@@ -20,6 +20,7 @@ export function useWalletSync() {
     logout: wagmiDisconnect,
     switchChain,
     signMessage,
+    getCurrentLoginMethod,
   } = useHumanWalletStore()
 
   // Aztec hooks
@@ -49,6 +50,22 @@ export function useWalletSync() {
       chainId: chainId || null,
     })
   }, [metaMaskAddress, isMetaMaskConnected, chainId, setMetaMaskState])
+
+  // Log wallet connection method when wallet is already connected
+  useEffect(() => {
+    if (isMetaMaskConnected && walletName) {
+      // Log the connection method for already connected wallets
+      logInfo('Ethereum wallet already connected', {
+        walletType: 'Ethereum',
+        connectionMethod: walletName,
+        walletProvider: walletName,
+        address: metaMaskAddress || '',
+        chainId,
+        userAction: 'ethereum_wallet_already_connected',
+        loginMethod: walletName,
+      })
+    }
+  }, [isMetaMaskConnected, walletName, metaMaskAddress, chainId])
 
   // Sync Aztec state with store
   useEffect(() => {
@@ -93,13 +110,24 @@ export function useWalletSync() {
   const connectMetaMask = useCallback(async () => {
     try {
       await connect()
+      
+      // After successful connection, get the connection method
+      if (getCurrentLoginMethod) {
+        const loginMethod = await getCurrentLoginMethod()
+        logInfo('Ethereum wallet connection completed', {
+          walletType: 'Ethereum',
+          connectionMethod: loginMethod,
+          loginMethod: loginMethod,
+          userAction: 'ethereum_wallet_connection_completed',
+        })
+      }
     } catch (error) {
       console.log('🚀MMM - ~ connectMetaMask ~ error:', error)
-      logError('Failed to connect MetaMask', { error })
-      showToast('error', 'Failed to connect MetaMask wallet')
+      logError('Failed to connect Ethereum wallet', { error })
+      showToast('error', 'Failed to connect Ethereum wallet')
       throw error
     }
-  }, [connect])
+  }, [connect, getCurrentLoginMethod])
 
   // Connect Aztec Wallet
   const connectAztecWallet = useCallback(
@@ -167,8 +195,8 @@ export function useWalletSync() {
     try {
       await wagmiDisconnect()
     } catch (error) {
-      logError('Failed to disconnect MetaMask', { error })
-      showToast('error', 'Failed to disconnect MetaMask wallet')
+      logError('Failed to disconnect Ethereum wallet', { error })
+      showToast('error', 'Failed to disconnect Ethereum wallet')
     }
   }, [wagmiDisconnect])
 

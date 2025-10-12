@@ -1,5 +1,6 @@
 import { l1ChainId, silkConfig } from '@/config/l1.config'
 import { showToast } from '@/hooks/useToast'
+import { logInfo, logError } from '@/utils/datadog'
 import { initSilk, SILK_METHOD } from '@silk-wallet/silk-wallet-sdk'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
@@ -26,6 +27,7 @@ interface HumanWalletState {
   getChainId: () => Promise<number>
   signMessage: (message: string) => Promise<string>
   getAccount: () => Promise<string | null>
+  getCurrentLoginMethod: () => Promise<string | null>
 
   // Reset the store
   reset: () => void
@@ -93,6 +95,17 @@ export const humanWalletStore = create<HumanWalletState>((set, get) => ({
       await switchChain(l1ChainId)
       const chainId = await getChainId()
 
+      // Log the wallet connection method used
+      logInfo('Ethereum wallet connected successfully', {
+        walletType: 'Ethereum',
+        connectionMethod: result, // This will be 'waap', 'injected', or 'walletconnect'
+        walletProvider: result,
+        address: address || '',
+        chainId,
+        userAction: 'ethereum_wallet_connection_success',
+        loginMethod: result,
+      })
+
       const state = {
         address: address || '',
         chainId,
@@ -102,6 +115,12 @@ export const humanWalletStore = create<HumanWalletState>((set, get) => ({
 
       set(state)
     } catch (err) {
+      // Log login failure
+      logError('Ethereum wallet login failed', {
+        walletType: 'Ethereum',
+        userAction: 'ethereum_wallet_connection_failure',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      })
       handleError(err, 'Failed to login', set)
     }
   },
@@ -172,6 +191,32 @@ export const humanWalletStore = create<HumanWalletState>((set, get) => ({
     }
   },
 
+  getCurrentLoginMethod: async () => {
+    try {
+      if (typeof window !== 'undefined' && window.silk) {
+        const loginMethod = await window.silk.getLoginMethod()
+        
+        // Log the current login method
+        logInfo('Current Ethereum wallet connection method retrieved', {
+          walletType: 'Ethereum',
+          connectionMethod: loginMethod,
+          loginMethod: loginMethod,
+          userAction: 'get_current_connection_method',
+        })
+        
+        return loginMethod
+      }
+      return null
+    } catch (err) {
+      logError('Failed to get current connection method', {
+        walletType: 'Ethereum',
+        userAction: 'get_current_connection_method_failed',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      })
+      return null
+    }
+  },
+
   reset: () => set(initialState),
 }))
 
@@ -194,6 +239,7 @@ export const useHumanWalletStore = () =>
       getChainId: state.getChainId,
       signMessage: state.signMessage,
       getAccount: state.getAccount,
+      getCurrentLoginMethod: state.getCurrentLoginMethod,
       reset: state.reset,
     }))
   )

@@ -56,11 +56,33 @@ import { useRouter } from 'next/navigation'
 // Function to check if popups are blocked
 const isPopupBlocked = (): Promise<boolean> => {
   return new Promise((resolve) => {
+    // Log popup test initiation
+    logInfo('Popup blocking test initiated', {
+      testType: 'popup_detection',
+      userAgent: navigator.userAgent,
+      timestamp: Date.now(),
+    })
+    
     const popup = window.open('about:blank', '_blank', 'width=1,height=1')
     setTimeout(() => {
       if (!popup || popup.closed || popup.closed === undefined) {
+        // Log popup blocked
+        logInfo('Popups are blocked - user will see popup blocked alert', {
+          popupBlocked: true,
+          popupClosed: popup?.closed,
+          popupUndefined: popup === undefined,
+          userAgent: navigator.userAgent,
+          timestamp: Date.now(),
+        })
         resolve(true) // Popups are blocked
       } else {
+        // Log popup allowed
+        logInfo('Popups are allowed - user can proceed normally', {
+          popupBlocked: false,
+          popupClosed: popup.closed,
+          userAgent: navigator.userAgent,
+          timestamp: Date.now(),
+        })
         popup.close()
         resolve(false) // Popups are allowed
       }
@@ -300,14 +322,54 @@ export default function Home() {
   // Handle wallet selection
   const handleWalletSelect = async (type: AztecWalletType) => {
     try {
+      // Log wallet selection attempt
+      logInfo('User selected Aztec wallet type', {
+        walletType: type,
+        walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+        userAction: 'wallet_selection',
+        popupsBlocked: arePopupsBlocked,
+      })
+      
       if (type === 'azguard' && !window.azguard) {
+        // Log Azguard not installed
+        logInfo('Azguard wallet not installed - showing prompt', {
+          walletType: type,
+          azguardInstalled: false,
+          userAction: 'azguard_not_installed',
+        })
         setShowAzguardPrompt(true)
         setShowWalletModal(false)
         return
       }
+      
+      // Log wallet connection attempt
+      logInfo('Attempting to connect Aztec wallet', {
+        walletType: type,
+        walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+        userAction: 'wallet_connection_attempt',
+        popupsBlocked: arePopupsBlocked,
+      })
+      
       await connectAztecWallet(type)
       setShowWalletModal(false)
+      
+      // Log successful wallet connection
+      logInfo('Aztec wallet connection successful from UI', {
+        walletType: type,
+        walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+        userAction: 'wallet_connection_success',
+        popupsBlocked: arePopupsBlocked,
+      })
     } catch (error) {
+      // Log wallet connection failure
+      logError('Aztec wallet connection failed from UI', {
+        walletType: type,
+        walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+        userAction: 'wallet_connection_failure',
+        popupsBlocked: arePopupsBlocked,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+      
       notify(
         'error',
         `Failed to connect wallet: ${
@@ -358,7 +420,15 @@ export default function Home() {
   // Page visit tracking and component mount effects
   useEffect(() => {
     setMounted(true)
-
+    
+    // Log page visit/session start
+    logInfo('User session started - page loaded', {
+      sessionStart: true,
+      pageUrl: window.location.href,
+      userAgent: navigator.userAgent,
+      timestamp: Date.now(),
+      referrer: document.referrer,
+    })
   }, [])
 
   // Check if popups are blocked immediately after page load
@@ -369,10 +439,18 @@ export default function Home() {
         setArePopupsBlocked(blocked)
         if (blocked) {
           console.log('Popups are blocked for this site')
-          logInfo('Popups are blocked', { blocked })
+          logInfo('Popups are blocked - showing popup blocked alert to user', { 
+            blocked,
+            alertShown: true,
+            userAction: 'popup_blocked_alert_displayed',
+          })
           setShowPopupBlockedAlert(true)
         } else {
           console.log('Popups are allowed for this site')
+          logInfo('Popups are allowed - user can proceed with wallet connections', {
+            blocked: false,
+            userAction: 'popup_allowed_proceed',
+          })
         }
       })
     }
@@ -412,7 +490,17 @@ export default function Home() {
           <AzguardPrompt onClose={() => setShowAzguardPrompt(false)} />
         )}
         {showPopupBlockedAlert && (
-          <PopupBlockedAlert onClose={() => setShowPopupBlockedAlert(false)} />
+          <PopupBlockedAlert 
+            onClose={() => {
+              // Log when user closes popup blocked alert
+              logInfo('User closed popup blocked alert', {
+                userAction: 'popup_blocked_alert_closed',
+                alertClosed: true,
+                userGaveUp: true, // This might indicate user is giving up
+              })
+              setShowPopupBlockedAlert(false)
+            }} 
+          />
         )}
         {selectNetwork && (
           <NetworkModal

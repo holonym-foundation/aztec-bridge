@@ -1,12 +1,31 @@
 import StyledImage from '../StyledImage'
 import TextButton from '../TextButton'
+import { logInfo } from '@/utils/datadog'
 
 export default function PopupBlockedAlert({ onClose }: { onClose: () => void }) {
   const handleSupportClick = () => {
+    // Log support link click
+    logInfo('User clicked support link from popup blocked alert', {
+      action: 'support_link_click',
+      supportUrl: 'https://support.google.com/chrome/answer/95472?hl=en&co=GENIE.Platform%3DDesktop',
+      userAction: 'seeking_help',
+    })
+    
     window.open(
       'https://support.google.com/chrome/answer/95472?hl=en&co=GENIE.Platform%3DDesktop',
       '_blank'
     )
+  }
+
+  const handleRefreshClick = () => {
+    // Log page refresh from popup blocked alert
+    logInfo('User refreshed page from popup blocked alert', {
+      action: 'page_refresh',
+      userAction: 'attempting_fix',
+      refreshReason: 'popup_blocked_alert',
+    })
+    
+    window.location.reload()
   }
 
   return (
@@ -49,7 +68,7 @@ export default function PopupBlockedAlert({ onClose }: { onClose: () => void }) 
 
             <div className='mt-2 flex justify-center'>
               <TextButton
-                onClick={() => window.location.reload()}
+                onClick={handleRefreshClick}
               >
                 <StyledImage
                   src='/assets/svg/refresh.svg'

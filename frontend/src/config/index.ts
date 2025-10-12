@@ -12,9 +12,9 @@ export const ADDRESS = {
     CHAIN_NAME: 'Sepolia',
     L1: {
       PORTAL_SBT_CONTRACT: '0x983ad7bdc7701a77a6c22e2245d7eafe893b21fe',
-      TOKEN_CONTRACT: '0xb9651f097214dc40dc1fecbca6863a2f0d46a573',
-      FEE_ASSET_HANDLER_CONTRACT: '0xf83ce2aec94868ae1491c8dc5197a22eefd5cd3e',
-      PORTAL_CONTRACT: '0x6f3ec949723e8e19563ce0e1eabcf0d847d97619',
+      TOKEN_CONTRACT: '0x93527f0552bef5fafc340bceac6a5a37b6c34496',
+      FEE_ASSET_HANDLER_CONTRACT: '0x57860b112fc6890c4ddfeccb83714aa988dc382c',
+      PORTAL_CONTRACT: '0x069840ae19473e452792c8e17fee77d78a3fcecb',
     },
   },
   1337: {
@@ -22,9 +22,9 @@ export const ADDRESS = {
     CHAIN_ID: 1337,
     CHAIN_NAME: 'Aztec Testnet',
     L2: {
-      TOKEN_CONTRACT: '0x1e6348061ace5d20467fd9345af2211edc3342b7c6efae215148d4315c181507',
-      TOKEN_BRIDGE_CONTRACT: '0x2dfe05059f139ba21694fbf7c1696f5b8a7f046a6dd45d60b4481bdf1c9585ab',
-      SPONSORED_FEE_PAYMENT_CONTRACT: '0x19b5539ca1b104d4c3705de94e4555c9630def411f025e023a13189d0c56f8f2',
+      TOKEN_CONTRACT: '0x011bbe04d65430ca1e05b8b7d092b9ede275b4380f34d4aea1e80ae750e645be',
+      TOKEN_BRIDGE_CONTRACT: '0x0a8ba03e74bea383e790265f23d6b042435bf1f78038806f8e4319006815a1e2',
+      SPONSORED_FEE_PAYMENT_CONTRACT: '0x299f255076aa461e4e94a843f0275303470a6b8ebe7cb44a471c66711151e529',
     },
   },
 } as const
@@ -101,7 +101,7 @@ export const L1_TOKENS: Token[] = [
     title: 'USDC',
     symbol: 'USDC',
     decimals: 6,
-    address: '0xb9651f097214dc40dc1fecbca6863a2f0d46a573',
+    address: '0x93527f0552bef5fafc340bceac6a5a37b6c34496',
   },
   // {
   //   id: 2,
@@ -130,7 +130,7 @@ export const L2_TOKENS: Token[] = [
     title: 'Clean USDC',
     symbol: 'cUSDC',
     decimals: 6,
-    address: '0x1e6348061ace5d20467fd9345af2211edc3342b7c6efae215148d4315c181507',
+    address: '0x011bbe04d65430ca1e05b8b7d092b9ede275b4380f34d4aea1e80ae750e645be',
   },
   // {
   //   id: 2,

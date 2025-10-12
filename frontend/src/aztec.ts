@@ -8,7 +8,7 @@ const WALLET_URL = "https://app.obsidion.xyz"
 
 export const aztecNode = createAztecNodeClient(NODE_URL);
 
-// const pxe = createPXEClient(NODE_URL);
+export const pxe = createPXEClient(NODE_URL);
 
 // Create the Aztec Wallet SDK instance
 export const sdk = new AztecWalletSdk({

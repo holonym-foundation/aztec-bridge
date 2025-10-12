@@ -68,7 +68,7 @@ export default function ProgressPage() {
   //   // withdrawTokensToL1Error,
   // })
   // Add countdown timer with controls
-  const L1_TO_L2_TIME = 10 * 60 // 10 minutes
+  const L1_TO_L2_TIME = 15 * 60 // 15 minutes
   const L2_TO_L1_TIME = 50 * 60 // 50 minutes
   const [count, { startCountdown, stopCountdown, resetCountdown }] =
     useCountdown({

@@ -279,14 +279,16 @@ export function useL1Faucet() {
   const mintTokenAmount = 10
 
   // Helper function to check if user has gas
-  const hasGas = !!l1NativeBalance && Number(l1NativeBalance || 0) > mintNativeAmount
+  const hasGas =
+    !!l1NativeBalance && Number(l1NativeBalance || 0) > mintNativeAmount
 
   // Check balances - only if balance data is loaded
   const balancesLoaded = !l1BalanceLoading
   const needsGas =
     balancesLoaded &&
     (!l1NativeBalance || Number(l1NativeBalance || 0) <= mintNativeAmount)
-  const needsTokens = balancesLoaded && Number(l1Balance || 0) <= mintTokenAmount
+  const needsTokens =
+    balancesLoaded && Number(l1Balance || 0) <= mintTokenAmount
 
   // User is eligible for faucet if they need gas OR tokens
   // Check if user has gas but still needs tokens - they should be eligible for tokens only
@@ -580,20 +582,24 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
   const {
     metaMaskAddress: l1Address,
     isMetaMaskConnected,
+    aztecAccount,
     aztecAddress,
   } = useWalletStore()
+
   const queryClient = useQueryClient()
-  const { setProgressStep, setTransactionUrls, isPrivacyModeEnabled } = useBridgeStore()
+  const { setProgressStep, setTransactionUrls, isPrivacyModeEnabled } =
+    useBridgeStore()
   const notify = useToast()
 
-  const { l1ContractAddresses, l2BridgeContract } = useContractStore()
+  const { l1ContractAddresses, l2BridgeContract, l2TokenMetadata } = useContractStore()
 
   const mutationFn = async (amount: bigint): Promise<string | undefined> => {
     try {
-      if (!l1Address || !aztecAddress) {
+      if (!l1Address || !aztecAddress || !aztecAccount?.aztecNode) {
         console.log({
           l1Address,
           aztecAddress,
+          hasAztecNode: !!aztecAccount?.aztecNode,
         })
         throw new Error('Required accounts not connected')
       }
@@ -673,10 +679,16 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       // TODO: store these at this point in the local storage
 
       // Bridge tokens - use different function based on privacy mode
-      const functionName = isPrivacyModeEnabled ? 'depositToAztecPrivate' : 'depositToAztecPublic'
-      const args = isPrivacyModeEnabled 
-        ? [amount, claimSecretHash.toString()] as const
-        : [aztecAddress as `0x${string}`, amount, claimSecretHash.toString()] as const
+      const functionName = isPrivacyModeEnabled
+        ? 'depositToAztecPrivate'
+        : 'depositToAztecPublic'
+      const args = isPrivacyModeEnabled
+        ? ([amount, claimSecretHash.toString()] as const)
+        : ([
+            aztecAddress as `0x${string}`,
+            amount,
+            claimSecretHash.toString(),
+          ] as const)
 
       const bridgeData = encodeFunctionData({
         abi: TokenPortalAbi,
@@ -707,20 +719,25 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       setTransactionUrls(l1TxUrl, null)
 
       // Extract the event to get the message hash and leaf index - use different event based on privacy mode
-      const eventName = isPrivacyModeEnabled ? 'DepositToAztecPrivate' : 'DepositToAztecPublic'
-      
+      const eventName = isPrivacyModeEnabled
+        ? 'DepositToAztecPrivate'
+        : 'DepositToAztecPublic'
+
       // Create filter functions for cleaner code
-      const privateEventFilter = (log: any) => 
-        log.args.amount === amount && 
-        log.args.secretHashForL2MessageConsumption === claimSecretHash.toString()
-      
-      const publicEventFilter = (log: any) => 
-        log.args.secretHash === claimSecretHash.toString() && 
-        log.args.amount === amount && 
+      const privateEventFilter = (log: any) =>
+        log.args.amount === amount &&
+        log.args.secretHashForL2MessageConsumption ===
+          claimSecretHash.toString()
+
+      const publicEventFilter = (log: any) =>
+        log.args.secretHash === claimSecretHash.toString() &&
+        log.args.amount === amount &&
         log.args.to === aztecAddress
-      
-      const eventFilter = isPrivacyModeEnabled ? privateEventFilter : publicEventFilter
-      
+
+      const eventFilter = isPrivacyModeEnabled
+        ? privateEventFilter
+        : publicEventFilter
+
       const log = extractEvent(
         txReceipt.logs,
         l1PortalAddress,
@@ -758,12 +775,72 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       claims.push(claimData)
       localStorage.setItem('l1ToL2Claims', JSON.stringify(claims))
 
-      // Step 2: Waiting for Ethereum confirmation
+      // Step 2: Waiting for L1-to-L2 message to be available
       setProgressStep(1, 'completed')
       setProgressStep(2, 'active')
-      console.log('Waiting for Ethereum confirmation...')
-      await wait(120000) // 2 minutes
-      // await wait(180000) // 3 minutes
+      console.log('Waiting for L1-to-L2 message to be available...')
+
+      // Poll for L1-to-L2 message sync status every 2 minutes
+      let messageSynced = false
+      let attempts = 0
+      const maxAttempts = 10 // Maximum 20 minutes of waiting
+      const pollInterval = 120000 // 2 minutes in milliseconds
+
+      while (!messageSynced && attempts < maxAttempts) {
+        try {
+          console.log(`Checking L1-to-L2 message sync status (attempt ${attempts + 1}/${maxAttempts})...`, {
+            messageHash: messageHash.toString(),
+            messageLeafIndex: messageLeafIndex.toString(),
+          })
+
+          // Import Fr from @aztec/aztec.js to create the message hash
+          const { Fr } = await import('@aztec/aztec.js')
+          
+          // Create Fr from the message hash
+          const messageHashFr = Fr.fromString(messageHash.toString())
+          
+          // Check if the L1-to-L2 message is synced
+          messageSynced = await aztecAccount?.aztecNode.isL1ToL2MessageSynced(messageHashFr)
+          
+          if (messageSynced) {
+            console.log('L1-to-L2 message is ready for claiming')
+            break
+          } else {
+            console.log(`L1-to-L2 message not yet synced, waiting ${pollInterval / 1000} seconds before next check...`)
+            attempts++
+            
+            if (attempts < maxAttempts) {
+              await wait(pollInterval)
+            }
+          }
+        } catch (error) {
+          console.error(`Error checking L1-to-L2 message sync (attempt ${attempts + 1}):`, error)
+          attempts++
+          
+          if (attempts < maxAttempts) {
+            console.log(`Retrying in ${pollInterval / 1000} seconds...`)
+            await wait(pollInterval)
+          }
+        }
+      }
+
+      if (!messageSynced) {
+        const errorMessage = `L1-to-L2 message sync timeout after ${maxAttempts} attempts (${(maxAttempts * pollInterval) / 1000 / 60} minutes)`
+        console.error(errorMessage)
+        
+        logError('L1-to-L2 message sync timeout', {
+          messageHash: messageHash.toString(),
+          messageLeafIndex: messageLeafIndex.toString(),
+          attempts: maxAttempts,
+          totalWaitTime: (maxAttempts * pollInterval) / 1000 / 60,
+        })
+        
+        throw new Error(errorMessage)
+      }
+
+      // Wait for the final poll interval before claiming
+      console.log('Waiting for the final poll interval before claiming...')
+      await wait(pollInterval)
 
       // Step 3: Claiming tokens on Aztec Network
       setProgressStep(2, 'completed')
@@ -831,6 +908,48 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
 
         await wait(3000)
         setProgressStep(4, 'completed')
+
+        // Add token to wallet after successful bridge
+        try {
+          console.log('Adding bridged token to wallet...')
+          
+          // Use the L2 token metadata from the hook
+          
+          if (l2TokenMetadata) {
+            // Import the SDK to access watchAssets
+            const { sdk } = await import('../aztec')
+            
+            await sdk.watchAssets([
+              {
+                type: "ARC20",
+                options: {
+                  chainId: "1337", // Aztec testnet chain ID
+                  address: ADDRESS[1337].L2.TOKEN_CONTRACT,
+                  name: l2TokenMetadata.name,
+                  symbol: l2TokenMetadata.symbol,
+                  decimals: l2TokenMetadata.decimals,
+                  image: "", // You can add a token image URL here if available
+                },
+              },
+            ])
+            
+            console.log('Token successfully added to wallet')
+            logInfo('Token added to wallet after bridge', {
+              tokenAddress: ADDRESS[1337].L2.TOKEN_CONTRACT,
+              tokenName: l2TokenMetadata.name,
+              tokenSymbol: l2TokenMetadata.symbol,
+            })
+          } else {
+            console.warn('L2 token metadata not available for wallet addition')
+          }
+        } catch (error) {
+          console.error('Failed to add token to wallet:', error)
+          // Don't throw here as the bridge was successful
+          logError('Failed to add token to wallet after bridge', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            tokenAddress: ADDRESS[1337].L2.TOKEN_CONTRACT,
+          })
+        }
 
         return l2TxHash
       } catch (error) {

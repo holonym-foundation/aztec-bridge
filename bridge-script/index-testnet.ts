@@ -22,6 +22,7 @@ import {
   Logger,
   createLogger,
   createPXEClient,
+  getContractInstanceFromInstantiationParams,
   readFieldCompressedString,
   waitForPXE,
 } from '@aztec/aztec.js'
@@ -59,11 +60,7 @@ const TestERC20Bytecode = TestERC20Json.bytecode.object as `0x${string}`
 
 import { Chain, getContract, PublicClient, WalletClient } from 'viem'
 
-import {
-  type ContractInstanceWithAddress,
-  type PXE,
-  getContractInstanceFromDeployParams,
-} from '@aztec/aztec.js'
+import { type ContractInstanceWithAddress, type PXE } from '@aztec/aztec.js'
 import { SponsoredFPCContract } from '@aztec/noir-contracts.js/SponsoredFPC'
 import { getSchnorrAccount } from '@aztec/accounts/schnorr'
 import { sepolia, localhost } from 'viem/chains'
@@ -116,11 +113,7 @@ const ownerEthAddress = l1Client.account.address
 const MINT_AMOUNT = BigInt(1e15)
 
 const setupSandbox = async () => {
-  // Default PXE URL: use 8081 for Sepolia (sandbox compatibility), 8080 for local
-  const defaultPxeUrl = USE_SEPOLIA
-    ? 'http://localhost:8081'
-    : 'http://localhost:8080'
-  const { PXE_URL = defaultPxeUrl } = process.env
+  const { PXE_URL = 'http://localhost:8080' } = process.env
   // eslint-disable-next-line @typescript-eslint/await-thenable
   const pxe = await createPXEClient(PXE_URL)
   await waitForPXE(pxe)
@@ -212,11 +205,14 @@ export async function getL2TokenContractInstance(
   decimals: number,
   salt: Fr
 ): Promise<ContractInstanceWithAddress> {
-  return await getContractInstanceFromDeployParams(TokenContract.artifact, {
-    salt: salt,
-    deployer: deployerAddress,
-    constructorArgs: [ownerAztecAddress, tokenName, tokenSymbol, decimals],
-  })
+  return await getContractInstanceFromInstantiationParams(
+    TokenContract.artifact,
+    {
+      salt: salt,
+      deployer: deployerAddress,
+      constructorArgs: [ownerAztecAddress, tokenName, tokenSymbol, decimals],
+    }
+  )
 }
 export async function getL2BridgeContractInstance(
   deployerAddress: any,
@@ -225,7 +221,7 @@ export async function getL2BridgeContractInstance(
   l1PortalContractAddress: EthAddress,
   salt: Fr
 ): Promise<ContractInstanceWithAddress> {
-  return await getContractInstanceFromDeployParams(
+  return await getContractInstanceFromInstantiationParams(
     TokenBridgeContract.artifact,
     {
       salt: salt,
@@ -246,7 +242,7 @@ async function mintL1Tokens(
   symbol: string
 ) {
   try {
-    logger.info(`Minting ${amount.toString()} ${symbol} tokens to owner`)
+    logger.info(`🪙 Minting ${amount.toString()} ${symbol} tokens to owner`)
     const contract = getContract({
       address: l1TokenContract.toString(),
       abi: TestERC20Abi,
@@ -254,7 +250,7 @@ async function mintL1Tokens(
     })
 
     const tx = await contract.write.mint([ownerEthAddress, amount])
-    logger.info(`Mint transaction sent: ${tx}`)
+    logger.info(`📤 Mint transaction sent: ${tx}`)
     await l1Client.waitForTransactionReceipt({ hash: tx, timeout: 120000 })
     logger.info(`✅ Successfully minted ${amount.toString()} ${symbol} tokens`)
   } catch (error) {
@@ -279,7 +275,7 @@ async function deployCompleteTokenSetup(
 
   // Deploy L1 token contract
   logger.info(
-    `Deploying L1 ${tokenConfig.symbol} with decimals ${tokenConfig.decimals} token contract`
+    `🏗️  Deploying L1 ${tokenConfig.symbol} with decimals ${tokenConfig.decimals} token contract`
   )
   const l1TokenContract = await deployTestERC20(
     tokenConfig.l1Name,
@@ -287,7 +283,7 @@ async function deployCompleteTokenSetup(
     tokenConfig.decimals
   )
   logger.info(
-    `L1 ${
+    `✅ L1 ${
       tokenConfig.symbol
     } token contract deployed at ${l1TokenContract.toString()}`
   )
@@ -297,28 +293,29 @@ async function deployCompleteTokenSetup(
   await mintL1Tokens(l1TokenContract, mintAmount, logger, tokenConfig.symbol)
 
   // Deploy fee asset handler
-  logger.info(`Deploying fee asset handler for ${tokenConfig.symbol}`)
+  logger.info(`🔧 Deploying fee asset handler for ${tokenConfig.symbol}`)
   const feeAssetHandler = await deployFeeAssetHandler(l1TokenContract)
   logger.info(
-    `Fee asset handler for ${
+    `✅ Fee asset handler for ${
       tokenConfig.symbol
     } deployed at ${feeAssetHandler.toString()}`
   )
 
   // Add minter
+  logger.info(`🔑 Adding minter for ${tokenConfig.symbol}`)
   await addMinter(l1TokenContract, feeAssetHandler)
 
   // Deploy L1 portal contract
-  logger.info(`Deploying L1 portal contract for ${tokenConfig.symbol}`)
+  logger.info(`🌉 Deploying L1 portal contract for ${tokenConfig.symbol}`)
   const l1PortalContractAddress = await deployTokenPortal()
   logger.info(
-    `L1 portal contract for ${
+    `✅ L1 portal contract for ${
       tokenConfig.symbol
     } deployed at ${l1PortalContractAddress.toString()}`
   )
 
   // Deploy L2 token contract
-  logger.info(`Deploying L2 ${tokenConfig.symbol} token contract`)
+  logger.info(`🏗️  Deploying L2 ${tokenConfig.symbol} token contract`)
   const l2TokenContract = await TokenContract.deploy(
     ownerWallet,
     ownerAztecAddress,
@@ -327,41 +324,57 @@ async function deployCompleteTokenSetup(
     tokenConfig.decimals
   )
     .send({
+      from: ownerAztecAddress,
       contractAddressSalt: tokenSalt,
       fee: { paymentMethod: sponsoredPaymentMethod },
     })
     .deployed({ timeout: 120000 })
 
   logger.info(
-    `L2 ${tokenConfig.symbol} token contract deployed at ${l2TokenContract.address}`
+    `✅ L2 ${tokenConfig.symbol} token contract deployed at ${l2TokenContract.address}`
   )
 
   // Deploy L2 bridge contract
-  logger.info(`Deploying L2 bridge contract for ${tokenConfig.symbol}`)
+  logger.info(`🌉 Deploying L2 bridge contract for ${tokenConfig.symbol}`)
   const l2BridgeContract = await TokenBridgeContract.deploy(
     ownerWallet,
     l2TokenContract.address,
     l1PortalContractAddress
   )
     .send({
+      from: ownerAztecAddress,
       contractAddressSalt: bridgeSalt,
       fee: { paymentMethod: sponsoredPaymentMethod },
     })
     .deployed({ timeout: 120000 })
 
   logger.info(
-    `L2 ${tokenConfig.symbol} bridge contract deployed at ${l2BridgeContract.address}`
+    `✅ L2 ${tokenConfig.symbol} bridge contract deployed at ${l2BridgeContract.address}`
   )
 
+  // Register L2 contracts with PXE
+  logger.info(`📝 Registering L2 contracts with PXE for ${tokenConfig.symbol}`)
+  await pxe.registerContract({
+    instance: l2TokenContract.instance,
+    artifact: TokenContract.artifact,
+  })
+  await pxe.registerContract({
+    instance: l2BridgeContract.instance,
+    artifact: TokenBridgeContract.artifact,
+  })
+
   // Set Bridge as a minter
-  logger.info(`Setting bridge as minter for ${tokenConfig.symbol}`)
+  logger.info(`🔑 Setting bridge as minter for ${tokenConfig.symbol}`)
   await l2TokenContract.methods
     .set_minter(l2BridgeContract.address, true)
-    .send({ fee: { paymentMethod: sponsoredPaymentMethod } })
+    .send({
+      from: ownerAztecAddress,
+      fee: { paymentMethod: sponsoredPaymentMethod },
+    })
     .wait({ timeout: 120000 })
 
   // Initialize L1 portal contract
-  logger.info(`Initializing L1 portal contract for ${tokenConfig.symbol}`)
+  logger.info(`🔧 Initializing L1 portal contract for ${tokenConfig.symbol}`)
   const l1Portal = getContract({
     address: l1PortalContractAddress.toString(),
     abi: TokenPortalAbi,
@@ -376,11 +389,11 @@ async function deployCompleteTokenSetup(
     ],
     {}
   )
-  
   // Wait for the transaction to be confirmed
-  logger.info(`Waiting for L1 portal initialization transaction: ${initTx}`)
+  logger.info(`⏳ Waiting for L1 portal initialization transaction: ${initTx}`)
   await l1Client.waitForTransactionReceipt({ hash: initTx, timeout: 120000 })
-  logger.info(`L1 portal contract for ${tokenConfig.symbol} initialized`)
+
+  logger.info(`✅ L1 portal contract for ${tokenConfig.symbol} initialized`)
 
   const deployedContract: DeployedContracts = {
     symbol: tokenConfig.symbol,
@@ -408,28 +421,28 @@ async function main() {
   pxe = await setupSandbox()
 
   const l1ContractAddresses = (await pxe.getNodeInfo()).l1ContractAddresses
-  logger.info('L1 Contract Addresses:')
-  logger.info(`Registry Address: ${l1ContractAddresses.registryAddress}`)
-  logger.info(`Inbox Address: ${l1ContractAddresses.inboxAddress}`)
-  logger.info(`Outbox Address: ${l1ContractAddresses.outboxAddress}`)
-  logger.info(`Rollup Address: ${l1ContractAddresses.rollupAddress}`)
+  logger.info('📋 L1 Contract Addresses:')
+  logger.info(`📝 Registry Address: ${l1ContractAddresses.registryAddress}`)
+  logger.info(`📥 Inbox Address: ${l1ContractAddresses.inboxAddress}`)
+  logger.info(`📤 Outbox Address: ${l1ContractAddresses.outboxAddress}`)
+  logger.info(`🔄 Rollup Address: ${l1ContractAddresses.rollupAddress}`)
 
   logger.info('\n💰 Wallet Information:')
-  logger.info(`L1 Wallet Address: ${ownerEthAddress}`)
+  logger.info(`👛 L1 Wallet Address: ${ownerEthAddress}`)
   logger.info(
-    `L1 Chain: ${l1Client.chain?.name || 'Unknown'} (ID: ${
+    `⛓️  L1 Chain: ${l1Client.chain?.name || 'Unknown'} (ID: ${
       l1Client.chain?.id || 'Unknown'
     })`
   )
   logger.info(
-    `Using ${USE_SEPOLIA ? 'Sepolia testnet' : 'local sandbox'} environment`
+    `🌐 Using ${USE_SEPOLIA ? 'Sepolia testnet' : 'local sandbox'} environment`
   )
-  logger.info(`L1 RPC URL: ${L1_URL}`)
+  logger.info(`🔗 L1 RPC URL: ${L1_URL}`)
 
   const defaultPxeUrl = USE_SEPOLIA
     ? 'http://localhost:8081'
     : 'http://localhost:8080'
-  logger.info(`PXE URL: ${process.env.PXE_URL || defaultPxeUrl}`)
+  logger.info(`🌐 PXE URL: ${process.env.PXE_URL || defaultPxeUrl}`)
 
   // Check L1 wallet balance
   try {
@@ -437,7 +450,7 @@ async function main() {
       address: ownerEthAddress as `0x${string}`,
     })
     const balanceInEth = Number(balance) / 1e18
-    logger.info(`L1 Wallet Balance: ${balanceInEth.toFixed(4)} ETH`)
+    logger.info(`💰 L1 Wallet Balance: ${balanceInEth.toFixed(4)} ETH`)
 
     if (balanceInEth < 0.01) {
       logger.warn(
@@ -445,11 +458,12 @@ async function main() {
       )
     }
   } catch (error) {
-    logger.warn(`Could not fetch L1 wallet balance: ${error}`)
+    logger.warn(`❌ Could not fetch L1 wallet balance: ${error}`)
     throw error
   }
 
   logger.info(' ')
+  logger.info('🔧 Setting up sponsored fee payment contract...')
   const sponsoredFPC = await getSponsoredFPCInstance()
   await pxe.registerContract({
     instance: sponsoredFPC,
@@ -458,10 +472,13 @@ async function main() {
   const sponsoredPaymentMethod = new SponsoredFeePaymentMethod(
     sponsoredFPC.address
   )
+  logger.info('✅ Sponsored fee payment method configured')
+  
+  logger.info('👤 Deploying Schnorr account...')
   let accountManager = await deploySchnorrAccount(pxe)
   const ownerWallet = await accountManager.getWallet()
   const ownerAztecAddress = accountManager.getAddress()
-  logger.info(`Owner Aztec Address: ${ownerAztecAddress}`)
+  logger.info(`📍 Owner Aztec Address: ${ownerAztecAddress}`)
 
   // Ensure deployment environment is ready
   logger.info('\n🔧 Setting up deployment environment...')
@@ -472,10 +489,10 @@ async function main() {
   const existingDeployments = loadExistingDeployments()
   if (existingDeployments) {
     logger.info(
-      `Found existing deployments with ${existingDeployments.tokens.length} tokens`
+      `✅ Found existing deployments with ${existingDeployments.tokens.length} tokens`
     )
     logger.info(
-      `Deployed tokens: ${existingDeployments.tokens
+      `🪙 Deployed tokens: ${existingDeployments.tokens
         .map((t) => t.symbol)
         .join(', ')}`
     )
@@ -565,8 +582,26 @@ async function main() {
       ownerWallet
     )
 
-    logger.info('Bridge tokens publicly')
-    logger.info(`Step 1: Send tokens publicly on L1`)
+    // Register the contracts with PXE for testing
+    logger.info('📝 Registering L2 contracts with PXE for testing...')
+    try {
+      await pxe.registerContract({
+        instance: l2TokenContract.instance,
+        artifact: TokenContract.artifact,
+      })
+      await pxe.registerContract({
+        instance: l2BridgeContract.instance,
+        artifact: TokenBridgeContract.artifact,
+      })
+      logger.info('✅ L2 contracts registered with PXE')
+    } catch (error) {
+      logger.warn(
+        `⚠️  Contract registration warning (may already be registered): ${error}`
+      )
+    }
+
+    logger.info('🌉 Bridge tokens publicly')
+    logger.info(`📤 Step 1: Send tokens publicly on L1`)
     const claim = await l1PortalManager.bridgeTokensPublic(
       ownerAztecAddress,
       MINT_AMOUNT,
@@ -574,7 +609,13 @@ async function main() {
     )
 
     // Claim tokens publicly on L2
-    logger.info(`Step 2: Claim tokens publicly on L2`)
+    logger.info(`📥 Step 2: Claim tokens publicly on L2`)
+    logger.info(`📋 Claim parameters:`)
+    logger.info(`  - 👤 ownerAztecAddress: ${ownerAztecAddress}`)
+    logger.info(`  - 💰 MINT_AMOUNT: ${MINT_AMOUNT}`)
+    logger.info(`  - 🔐 claimSecret: ${claim.claimSecret}`)
+    logger.info(`  - 📍 messageLeafIndex: ${claim.messageLeafIndex}`)
+
     await l2BridgeContract.methods
       .claim_public(
         ownerAztecAddress,
@@ -582,14 +623,17 @@ async function main() {
         claim.claimSecret,
         claim.messageLeafIndex
       )
-      .send({ fee: { paymentMethod: sponsoredPaymentMethod } })
+      .send({
+        from: ownerAztecAddress,
+        fee: { paymentMethod: sponsoredPaymentMethod },
+      })
       .wait({ timeout: 120000 })
     const balance = await l2TokenContract.methods
       .balance_of_public(ownerAztecAddress)
-      .simulate()
-    logger.info(`Public L2 balance of ${ownerAztecAddress} is ${balance}`)
+      .simulate({ from: ownerAztecAddress })
+    logger.info(`💰 Public L2 balance of ${ownerAztecAddress} is ${balance}`)
 
-    logger.info('Withdrawing funds from L2')
+    logger.info('💸 Withdrawing funds from L2')
     const withdrawAmount = 9n
     const nonce = Fr.random()
 
@@ -606,7 +650,10 @@ async function main() {
       true
     )
     await authwit
-      .send({ fee: { paymentMethod: sponsoredPaymentMethod } })
+      .send({
+        from: ownerAztecAddress,
+        fee: { paymentMethod: sponsoredPaymentMethod },
+      })
       .wait({ timeout: 120000 })
 
     const l2ToL1Message = await l1PortalManager.getL2ToL1MessageLeaf(
@@ -622,18 +669,23 @@ async function main() {
         EthAddress.ZERO,
         nonce
       )
-      .send({ fee: { paymentMethod: sponsoredPaymentMethod } })
+      .send({
+        from: ownerAztecAddress,
+        fee: { paymentMethod: sponsoredPaymentMethod },
+      })
       .wait({ timeout: 120000 })
 
     const newL2Balance = await l2TokenContract.methods
       .balance_of_public(ownerAztecAddress)
-      .simulate()
-    logger.info(`New L2 balance of ${ownerAztecAddress} is ${newL2Balance}`)
+      .simulate({ from: ownerAztecAddress })
+    logger.info(`💰 New L2 balance of ${ownerAztecAddress} is ${newL2Balance}`)
 
     // Wait 45 minutes for L2 to L1 message to be processed
-    logger.info('⏳ Waiting 45 minutes for L2 to L1 message to be processed before withdrawal...')
+    logger.info(
+      '⏳ Waiting 45 minutes for L2 to L1 message to be processed before withdrawal...'
+    )
     const delayMs = 45 * 60 * 1000 // 45 minutes in milliseconds
-    await new Promise(resolve => setTimeout(resolve, delayMs))
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
     logger.info('✅ 45-minute delay completed, proceeding with withdrawal...')
 
     const [l2ToL1MessageIndex, siblingPath] =
@@ -649,9 +701,9 @@ async function main() {
       siblingPath
     )
     const newL1Balance = await l1TokenManager.getL1TokenBalance(ownerEthAddress)
-    logger.info(`New L1 balance of ${ownerEthAddress} is ${newL1Balance}`)
+    logger.info(`💰 New L1 balance of ${ownerEthAddress} is ${newL1Balance}`)
   } else {
-    logger.warn('No tokens were deployed successfully. Skipping bridge test.')
+    logger.warn('⚠️  No tokens were deployed successfully. Skipping bridge test.')
   }
 }
 

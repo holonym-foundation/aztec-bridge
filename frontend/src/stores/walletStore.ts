@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
-import { AztecWalletType } from '@/types/wallet'
+import { AztecLoginMethod } from '@/types/wallet'
 import { sdk, connectWallet } from '../aztec'
 import { AzguardClient } from '@azguardwallet/client'
 import { useAccount as useAztecAccount } from '@nemi-fi/wallet-sdk/react'
@@ -23,7 +23,7 @@ interface WalletState {
   showAzguardPrompt: boolean
 
   // Aztec Wallet State
-  aztecWalletType: AztecWalletType | null
+  aztecWalletType: AztecLoginMethod | null
   aztecAddress: string | null
   aztecAccount: any | null
   isAztecConnected: boolean
@@ -31,18 +31,18 @@ interface WalletState {
   aztecError: Error | null
   azguardClient: AzguardClient | null
 
-  // MetaMask State
-  metaMaskAddress: `0x${string}` | null
-  isMetaMaskConnected: boolean
-  metaMaskChainId: number | null
-  metaMaskError: Error | null
+  // WaaP wallet State
+  waapAddress: `0x${string}` | null
+  isWaapConnected: boolean
+  waapChainId: number | null
+  waapError: Error | null
 
   // UI Actions
   setShowWalletModal: (show: boolean) => void
   setShowAzguardPrompt: (show: boolean) => void
 
   // Aztec Actions
-  setAztecWalletType: (type: AztecWalletType | null) => void
+  setAztecWalletType: (type: AztecLoginMethod | null) => void
   setAztecState: (state: {
     address: string | null
     account: any | null
@@ -52,24 +52,24 @@ interface WalletState {
   disconnectAztecWallet: () => Promise<void>
   executeAztecTransaction: (actions: any[]) => Promise<string>
 
-  // MetaMask Actions
-  setMetaMaskState: (state: {
+  // WaaP wallet Actions
+  setWaapState: (state: {
     address: string | null
     isConnected: boolean
     chainId: number | null
     error?: Error | null
   }) => void
-  switchMetaMaskChain: (chainId: number) => Promise<void>
+  switchWaapChain: (chainId: number) => Promise<void>
 
   // Reset
   reset: () => void
 }
 
 // Helper function to get initial wallet type from localStorage
-const getInitialWalletType = (): AztecWalletType | null => {
+const getInitialWalletType = (): AztecLoginMethod | null => {
   if (typeof window === 'undefined') return null
   const stored = localStorage.getItem(AZTEC_WALLET_KEY)
-  return stored ? (stored as AztecWalletType) : null
+  return stored ? (stored as AztecLoginMethod) : null
 }
 
 const initialState = {
@@ -82,10 +82,10 @@ const initialState = {
   isAztecConnecting: false,
   aztecError: null,
   azguardClient: null,
-  metaMaskAddress: null,
-  isMetaMaskConnected: false,
-  metaMaskChainId: null,
-  metaMaskError: null,
+  waapAddress: null,
+  isWaapConnected: false,
+  waapChainId: null,
+  waapError: null,
 }
 
 const walletStore = create<WalletState>((set, get) => ({
@@ -109,7 +109,7 @@ const walletStore = create<WalletState>((set, get) => ({
     // Get wallet type from localStorage if not already set
     const storedWalletType = localStorage.getItem(
       AZTEC_WALLET_KEY
-    ) as AztecWalletType | null
+    ) as AztecLoginMethod | null
 
     set({
       aztecAddress: state.address,
@@ -160,16 +160,16 @@ const walletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  // MetaMask Actions
-  setMetaMaskState: (state) =>
+  // WaaP wallet Actions
+  setWaapState: (state) =>
     set({
-      metaMaskAddress: state.address as `0x${string}`,
-      isMetaMaskConnected: state.isConnected,
-      metaMaskChainId: state.chainId,
-      metaMaskError: state.error || null,
+      waapAddress: state.address as `0x${string}`,
+      isWaapConnected: state.isConnected,
+      waapChainId: state.chainId,
+      waapError: state.error || null,
     }),
 
-  switchMetaMaskChain: async (chainId: number) => {
+  switchWaapChain: async (chainId: number) => {
     try {
       if (chainId !== sepolia.id) {
         showToast('info', `Switching to Sepolia network`)
@@ -177,7 +177,7 @@ const walletStore = create<WalletState>((set, get) => ({
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
-      set({ metaMaskError: error })
+      set({ waapError: error })
       showToast('error', `Failed to switch network: ${error.message}`)
     }
   },
@@ -205,11 +205,11 @@ export const useWalletStore = () =>
       aztecError: state.aztecError,
       azguardClient: state.azguardClient,
 
-      // MetaMask State
-      metaMaskAddress: state.metaMaskAddress,
-      isMetaMaskConnected: state.isMetaMaskConnected,
-      metaMaskChainId: state.metaMaskChainId,
-      metaMaskError: state.metaMaskError,
+      // WaaP wallet State
+      waapAddress: state.waapAddress,
+      isWaapConnected: state.isWaapConnected,
+      waapChainId: state.waapChainId,
+      waapError: state.waapError,
 
       // UI Actions
       setShowWalletModal: state.setShowWalletModal,
@@ -221,9 +221,9 @@ export const useWalletStore = () =>
       disconnectAztecWallet: state.disconnectAztecWallet,
       executeAztecTransaction: state.executeAztecTransaction,
 
-      // MetaMask Actions
-      setMetaMaskState: state.setMetaMaskState,
-      switchMetaMaskChain: state.switchMetaMaskChain,
+      // WaaP wallet Actions
+      setWaapState: state.setWaapState,
+      switchWaapChain: state.switchWaapChain,
 
       // Reset
       reset: state.reset,

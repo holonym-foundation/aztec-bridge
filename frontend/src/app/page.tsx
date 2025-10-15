@@ -45,10 +45,12 @@ import { L1_NETWORKS, L2_NETWORKS, L1_TOKENS, L2_TOKENS, ADDRESS } from '@/confi
 import MetaMaskPrompt from '@/components/model/MetaMaskPrompt'
 import BalanceCard from '@/components/BalanceCard'
 import { logInfo, logError } from '@/utils/datadog'
+import { WalletType } from '@/types/wallet'
 import PopupBlockedAlert from '@/components/model/PopupBlockedAlert'
 import WalletSelectionModal from '@/components/model/WalletSelectionModal'
-import { AztecWalletType } from '@/types/wallet'
+import { AztecLoginMethod } from '@/types/wallet'
 import AzguardPrompt from '@/components/model/AzguardPrompt'
+import WalletDebugInfo from '@/components/WalletDebugInfo'
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useRouter } from 'next/navigation'
@@ -136,14 +138,18 @@ export default function Home() {
 
   // Get wallet state from useWalletSync
   const {
-    isMetaMaskConnected,
+    isWaapConnected,
     isAztecConnected,
-    connectMetaMask,
+    connectWaapWallet,
     connectAztecWallet,
-    disconnectMetaMask,
+    disconnectWaapWallet,
     disconnectAztec,
     executeAztecTransaction,
     azguardClient,
+    loginMethod,
+    walletIcon,
+    walletProvider,
+    getWalletProvider,
   } = useWalletSync()
 
   // Get UI state from walletStore
@@ -153,7 +159,7 @@ export default function Home() {
     setShowWalletModal,
     setShowAzguardPrompt,
     aztecAddress,
-    metaMaskAddress,
+    waapAddress,
   } = useWalletStore()
 
   // Success callbacks
@@ -320,12 +326,12 @@ export default function Home() {
   }
 
   // Handle wallet selection
-  const handleWalletSelect = async (type: AztecWalletType) => {
+  const handleWalletSelect = async (type: AztecLoginMethod) => {
     try {
       // Log wallet selection attempt
       logInfo('User selected Aztec wallet type', {
-        walletType: type,
-        walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+        walletType: WalletType.AZTEC,
+        loginMethod: type,
         userAction: 'wallet_selection',
         popupsBlocked: arePopupsBlocked,
       })
@@ -333,7 +339,8 @@ export default function Home() {
       if (type === 'azguard' && !window.azguard) {
         // Log Azguard not installed
         logInfo('Azguard wallet not installed - showing prompt', {
-          walletType: type,
+          walletType: WalletType.AZTEC,
+          loginMethod: type,
           azguardInstalled: false,
           userAction: 'azguard_not_installed',
         })
@@ -344,8 +351,8 @@ export default function Home() {
       
       // Log wallet connection attempt
       logInfo('Attempting to connect Aztec wallet', {
-        walletType: type,
-        walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+        walletType: WalletType.AZTEC,
+        loginMethod: type,
         userAction: 'wallet_connection_attempt',
         popupsBlocked: arePopupsBlocked,
       })
@@ -355,16 +362,16 @@ export default function Home() {
       
       // Log successful wallet connection
       logInfo('Aztec wallet connection successful from UI', {
-        walletType: type,
-        walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+        walletType: WalletType.AZTEC,
+        loginMethod: type,
         userAction: 'wallet_connection_success',
         popupsBlocked: arePopupsBlocked,
       })
     } catch (error) {
       // Log wallet connection failure
       logError('Aztec wallet connection failed from UI', {
-        walletType: type,
-        walletProvider: type === 'azguard' ? 'Azguard' : 'Obsidion',
+        walletType: WalletType.AZTEC,
+        loginMethod: type,
         userAction: 'wallet_connection_failure',
         popupsBlocked: arePopupsBlocked,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -446,7 +453,7 @@ export default function Home() {
           })
           setShowPopupBlockedAlert(true)
         } else {
-          console.log('Popups are allowed for this site')
+          // console.log('Popups are allowed for this site')
           logInfo('Popups are allowed - user can proceed with wallet connections', {
             blocked: false,
             userAction: 'popup_allowed_proceed',
@@ -522,7 +529,7 @@ export default function Home() {
         )}
         {showSBTModal && (
           <SBT
-            address={metaMaskAddress || ''}
+            address={waapAddress || ''}
             buttonText={`Get SBT on ${currentSBTChain}`}
             chain={currentSBTChain}
             onMint={handleSBTMinted}
@@ -553,7 +560,7 @@ export default function Home() {
                 //   console.log('testing done')
                 // }, 1000)
 
-                await disconnectMetaMask()
+                await disconnectWaapWallet()
                 await disconnectAztec()
                 localStorage.clear()
                 window.location.reload()
@@ -645,11 +652,14 @@ export default function Home() {
           <div className='self-end'>
             <div className='rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[16px] pt-[16px] pr-[10px] pb-0 pl-[10px] w-full'>
               <BridgeActionButton
-                // isDisabled={isMetaMaskConnected && isAztecConnected && isL2BalanceError}
-                // isDisabled={isMetaMaskConnected && isAztecConnected && true}
+                // isDisabled={isWaapConnected && isAztecConnected && isL2BalanceError}
+                // isDisabled={isWaapConnected && isAztecConnected && true}
                 // Connection states
-                isMetaMaskConnected={isMetaMaskConnected}
-                connectMetaMask={connectMetaMask}
+                isWaapConnected={isWaapConnected}
+                connectWaapWallet={connectWaapWallet}
+                getWalletProvider={getWalletProvider}
+                loginMethod={loginMethod}
+                walletProvider={walletProvider}
                 isAztecConnected={isAztecConnected}
                 connectAztec={() => setShowWalletModal(true)}
                 inputRef={inputRef}
@@ -704,6 +714,9 @@ export default function Home() {
             </div>
           </div>
         </div>
+        
+        {/* Debug component - remove in production */}
+        {/* <WalletDebugInfo /> */}
       </RootStyle>
     </>
   )

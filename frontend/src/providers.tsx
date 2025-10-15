@@ -4,15 +4,20 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { type ReactNode, useEffect, useState } from 'react'
 import { ToastContainer } from 'react-toastify'
-import { useHumanWalletStore } from './stores/humanWalletStore'
+import { useWaapWalletStore } from './stores/waapWalletStore'
 import { init as initDatadog } from '@/utils/datadog'
 
-function InitializeHumanWallet() {
-  const { initializeHumanWallet } = useHumanWalletStore()
+function InitializeWaapWallet() {
+  const { initializeWaapWallet } = useWaapWalletStore()
+  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
-    initializeHumanWallet()
-  }, [initializeHumanWallet])
+    if (!isInitialized) {
+      console.log('🔧 Initializing WaaP wallet...')
+      initializeWaapWallet()
+      setIsInitialized(true)
+    }
+  }, [initializeWaapWallet, isInitialized])
 
   return null
 }
@@ -63,7 +68,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <>
       <QueryClientProvider client={queryClient}>
-        <InitializeHumanWallet />
+        <InitializeWaapWallet />
         <InitializeDatadog />
 
         {children}

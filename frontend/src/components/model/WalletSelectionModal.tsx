@@ -1,11 +1,11 @@
-import { AztecWalletType } from '@/types/wallet'
+import { AztecLoginMethod } from '@/types/wallet'
 import { AnimatePresence, motion } from 'framer-motion'
 import StyledImage from '../StyledImage'
 
 interface WalletSelectionModalProps {
   isOpen: boolean
   onClose: () => void
-  onSelect: (type: AztecWalletType) => void
+  onSelect: (type: AztecLoginMethod) => void
 }
 
 export default function WalletSelectionModal({

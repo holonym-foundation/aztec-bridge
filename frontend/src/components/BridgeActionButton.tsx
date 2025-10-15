@@ -5,7 +5,6 @@ import { Oval } from 'react-loader-spinner'
 import { BridgeDirection } from '@/types/bridge'
 import { useToast } from '@/hooks/useToast'
 import { parseUnits } from 'viem'
-import { logInfo, logError } from '@/utils/datadog'
 import CongestionWarningModal from './model/CongestionWarningModal'
 import { useL2PendingTxCount } from '@/hooks/useL2Operations'
 
@@ -30,8 +29,11 @@ function LoadingContent({ label }: { label: string }) {
 function BridgeActionButton({
   isDisabled = false,
   // Connection states
-  isMetaMaskConnected,
-  connectMetaMask,
+  isWaapConnected,
+  connectWaapWallet,
+  getWalletProvider,
+  loginMethod,
+  walletProvider,
   isAztecConnected,
   connectAztec,
   inputRef,
@@ -77,8 +79,11 @@ function BridgeActionButton({
 }: {
   isDisabled?: boolean
   // Connection states
-  isMetaMaskConnected: boolean
-  connectMetaMask: () => void
+  isWaapConnected: boolean
+  connectWaapWallet: () => void
+  getWalletProvider: () => string | null
+  loginMethod: string | null
+  walletProvider: string | null
   isAztecConnected: boolean
   connectAztec: () => void
   inputRef: React.RefObject<HTMLInputElement | null>
@@ -212,45 +217,14 @@ function BridgeActionButton({
 
   // Main action handler for the button click
   const handleButtonClick = async () => {
-    // Step 1: Connect Ethereum wallet if not connected
-    if (!isMetaMaskConnected) {
-      // Log Ethereum wallet connection attempt
-      logInfo('User attempting to connect Ethereum wallet from bridge button', {
-        walletType: 'Ethereum',
-        userAction: 'ethereum_wallet_connection_attempt',
-        triggerSource: 'bridge_action_button',
-      })
-      
+    // Step 1: Connect WaaP wallet if not connected
+    if (!isWaapConnected) {
       setIsConnecting(true)
       setIsOperationPending(true)
       try {
-        await connectMetaMask()
-        
-        // Log successful Ethereum wallet connection
-        logInfo('Ethereum wallet connection successful from bridge button', {
-          walletType: 'Ethereum',
-          userAction: 'ethereum_wallet_connection_success',
-          triggerSource: 'bridge_action_button',
-        })
+        await connectWaapWallet()
       } catch (error) {
-        const errorMsg =
-          error instanceof Error ? error.message : 'Unknown error'
-
-        // Log Ethereum wallet connection failure
-        logError('Ethereum wallet connection failed from bridge button', {
-          walletType: 'Ethereum',
-          userAction: 'ethereum_wallet_connection_failure',
-          triggerSource: 'bridge_action_button',
-          error: errorMsg,
-        })
-
-        if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
-          notify('error', 'Ethereum wallet connection was rejected')
-        } else if (errorMsg.includes('install')) {
-          notify('error', 'Please install Ethereum wallet to continue')
-        } else {
-          notify('error', `Failed to connect Ethereum wallet: ${errorMsg}`)
-        }
+        // Error handling is done in useWalletSync
       } finally {
         setIsConnecting(false)
         setIsOperationPending(false)
@@ -260,46 +234,12 @@ function BridgeActionButton({
 
     // Step 2: Connect Aztec if not connected
     if (!isAztecConnected) {
-      // Log Aztec wallet connection attempt
-      logInfo('User attempting to connect Aztec wallet from bridge button', {
-        userAction: 'aztec_connection_attempt',
-        triggerSource: 'bridge_action_button',
-      })
-      
       setIsConnecting(true)
       setIsOperationPending(true)
       try {
         await connectAztec()
-        
-        // Log successful Aztec wallet connection
-        logInfo('Aztec wallet connection successful from bridge button', {
-          userAction: 'aztec_connection_success',
-          triggerSource: 'bridge_action_button',
-        })
       } catch (error) {
-        const errorMsg =
-          error instanceof Error ? error.message : 'Unknown error'
-
-        // Log Aztec wallet connection failure
-        logError('Aztec wallet connection failed from bridge button', {
-          userAction: 'aztec_connection_failure',
-          triggerSource: 'bridge_action_button',
-          error: errorMsg,
-        })
-
-        if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
-          notify('error', 'Aztec connection was rejected')
-        } else if (
-          errorMsg.includes('not found') ||
-          errorMsg.includes('install')
-        ) {
-          notify(
-            'error',
-            'Please install the Aztec wallet extension to continue'
-          )
-        } else {
-          notify('error', `Failed to connect Aztec: ${errorMsg}`)
-        }
+        // Error handling is done in useWalletSync
       } finally {
         setIsConnecting(false)
         setIsOperationPending(false)
@@ -309,12 +249,12 @@ function BridgeActionButton({
 
     // Step 3: If faucet is needed (no gas or tokens), request it
     if (isStateInitialized && isEligibleForFaucet) {
-      if (useExternalFaucet && handleExternalFaucet) {
-        // Redirect to external faucet (Google Cloud)
+      if (useExternalFaucet && handleExternalFaucet && needsGas && !needsTokensOnly) {
+        // Redirect to external faucet (Google Cloud) for ETH only (when user needs gas but not tokens)
         handleExternalFaucet()
         return
       } else {
-        // Use internal faucet API
+        // Use internal faucet API for tokens (and ETH if not using external)
         setIsOperationPending(true)
         try {
           await requestFaucet()
@@ -373,7 +313,7 @@ function BridgeActionButton({
 
     // Priority 1: Show loading states for balance fetching
     if (
-      isMetaMaskConnected &&
+      isWaapConnected &&
       isAztecConnected &&
       (!isStateInitialized || l1BalanceLoading)
     ) {
@@ -381,7 +321,7 @@ function BridgeActionButton({
     }
 
     // Priority 2: Connection states
-    if (!isMetaMaskConnected) return 'Connect Ethereum Wallet'
+    if (!isWaapConnected) return 'Connect Ethereum Wallet'
     if (!isAztecConnected) return 'Connect Aztec Wallet'
 
     // Priority 3: Faucet (gas and tokens)
@@ -409,7 +349,7 @@ function BridgeActionButton({
     l2NodeIsReadyLoading ||
     l2NodeError ||
     // Disable during loading states
-    (isMetaMaskConnected &&
+    (isWaapConnected &&
       isAztecConnected &&
       (!isStateInitialized || l1BalanceLoading)) ||
     isConnecting ||
@@ -429,7 +369,7 @@ function BridgeActionButton({
   // console.log({
   //   l2NodeIsReadyLoading,
   //   l2NodeError,
-  //   third:(isMetaMaskConnected &&
+  //   third:(isWaapConnected &&
   //     isAztecConnected &&
   //     (!isStateInitialized || l1BalanceLoading)),
   //     isConnecting,

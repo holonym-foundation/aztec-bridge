@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { sdk, connectWallet } from '../aztec'
 import { useAccount as useAztecAccount } from '@nemi-fi/wallet-sdk/react'
 import { useContractStore } from '../stores/contractStore'
-import { AztecWalletType } from '@/types/wallet'
+import { AztecLoginMethod } from '@/types/wallet'
 import { AzguardClient } from '@azguardwallet/client'
 import { useWalletStore } from '@/stores/walletStore'
 // import {
@@ -36,7 +36,7 @@ export function useAztecWallet() {
     }
   }, [account, setL2Contracts, resetContracts])
 
-  const connect = async (type: AztecWalletType) => {
+  const connect = async (type: AztecLoginMethod) => {
     setIsConnecting(true)
     setError(null)
     setAztecWalletType(type)

@@ -27,7 +27,7 @@ import { sepolia } from 'viem/chains'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { useToast, useToastMutation, useToastQuery } from './useToast'
 import { extractEvent } from '@aztec/ethereum'
-import { requestHumanWallet } from '@/stores/humanWalletStore'
+import { requestWaapWallet } from '@/stores/waapWalletStore'
 import { SILK_METHOD } from '@silk-wallet/silk-wallet-sdk'
 import {
   I_UserTokenBalance,
@@ -49,7 +49,7 @@ const publicClient = createPublicClient({
 })
 
 export function useL1NativeBalance() {
-  const { metaMaskAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address } = useWalletStore()
 
   const queryKey = ['l1NativeBalance', l1Address]
   const queryFn = async () => {
@@ -71,7 +71,7 @@ export function useL1NativeBalance() {
       console.log('error ', error)
     }
 
-    // const balance = await requestHumanWallet(SILK_METHOD.eth_getBalance, [
+    // const balance = await requestWaapWallet(SILK_METHOD.eth_getBalance, [
     //   l1Address,
     //   'latest',
     // ])
@@ -95,7 +95,7 @@ export function useL1NativeBalance() {
 // -----------------------------------
 
 export function useL1TokenBalance() {
-  const { metaMaskAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address } = useWalletStore()
 
   const queryKey = ['l1TokenBalance', l1Address]
   const queryFn = async () => {
@@ -107,7 +107,7 @@ export function useL1TokenBalance() {
       args: [l1Address],
     })
 
-    const balance = await requestHumanWallet(SILK_METHOD.eth_call, [
+    const balance = await requestWaapWallet(SILK_METHOD.eth_call, [
       {
         to: ADDRESS[11155111].L1.TOKEN_CONTRACT,
         data,
@@ -135,7 +135,7 @@ export function useL1TokenBalance() {
  * Hook to get token balances for an address across multiple chains
  */
 export function useL1TokenBalances() {
-  const { metaMaskAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address } = useWalletStore()
   const notify = useToast()
 
   const queryKey = ['l1TokenBalances', l1Address]
@@ -217,7 +217,7 @@ export function useL1TokenBalances() {
  * Hook to get NFTs for an address across multiple chains
  */
 export function useL1NFTs() {
-  const { metaMaskAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address } = useWalletStore()
 
   const queryKey = ['l1NFTs', l1Address]
   const queryFn = async () => {
@@ -250,7 +250,7 @@ export function useL1NFTs() {
 // -----------------------------------
 
 export function useL1Faucet() {
-  const { metaMaskAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address } = useWalletStore()
   const queryClient = useQueryClient()
 
   // L1 (Ethereum) balances and operations
@@ -326,69 +326,31 @@ export function useL1Faucet() {
 
       let result: any = { gasProvided: false, tokensMinted: false }
 
-      // Step 1: If needed, get ETH for gas
-      if (needsGas) {
+      // Step 1: If needed, get ETH for gas (only if not using external faucet)
+      if (needsGas && !needsTokensOnly) {
         try {
-          // notify('info', 'Getting ETH...')
-          // Request gas from faucet
-          const response = await fetch('/api/faucet', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ address: l1Address }),
-          })
-
-          if (!response.ok) {
-            const errorData = await response.json()
-            throw new Error(
-              errorData.error || 'Failed to request ETH from faucet'
-            )
-          }
-
-          const gasResult = await response.json()
-          result.gasProvided = true
-          result.gasHash = gasResult.txHash
-          console.log('Gas provided successfully:', gasResult)
-          result = { ...result, ...gasResult }
-
-          // Wait for the gas transaction to be processed
-          // console.log('Waiting for gas transaction to be confirmed...')
-          // await wait(30000) // 30 seconds
-
-          // Refresh balances to reflect new gas balance
-          await refetchL1Balance()
-
-          // Create an Etherscan URL for the transaction
-          const etherscanUrl = `https://sepolia.etherscan.io/tx/${gasResult.txHash}`
-          console.log('View transaction on Ethereum:', etherscanUrl)
-
-          // Using the toast library directly for more control
-          notify('info', `ETH received! Click to view on Ethereum`, {
-            onClick: () => {
-              window.open(etherscanUrl, '_blank')
-            },
-            closeOnClick: false,
-            style: { cursor: 'pointer' },
-          })
-
-          // await wait(30000) // 30 seconds
+          // Check if we should use external faucet for ETH
+          // For now, we'll skip internal ETH faucet since it's disabled
+          console.log('ETH needed but internal faucet is disabled. User should get ETH from external source.')
+          result.gasProvided = false // Mark as not provided by internal API
         } catch (error) {
           console.log('Error requesting gas:', error)
-          throw error
+          // Don't throw error here, continue to token minting
+          result.gasProvided = false
         }
       }
 
       // Step 2: If needed, mint tokens
-      if (needsTokens || (needsGas && result.gasProvided)) {
-        // Even if user didn't need tokens initially, if we provided gas, check if they need tokens now
+      if (needsTokens) {
+        // Always try to mint tokens if user needs them
         console.log('Checking if tokens need to be minted...')
 
         const currentNativeBalance =
           result?.balances?.recipient?.after || l1NativeBalance
 
-        // const hasEnoughGas = Number(currentNativeBalance) >= mintNativeAmount
-        const hasEnoughGas = true
+        // If user only needs tokens (has gas), proceed directly
+        // If user needs both gas and tokens, check if they have enough gas
+        const hasEnoughGas = needsTokensOnly || Number(currentNativeBalance || 0) >= mintNativeAmount
 
         if (hasEnoughGas) {
           console.log('User has gas. Requesting tokens from API...')
@@ -503,7 +465,7 @@ export function useL1Faucet() {
 
 // -----------------------------------
 export function useL1MintTokens() {
-  const { metaMaskAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address } = useWalletStore()
   const queryClient = useQueryClient()
   const { data: nativeBalance } = useL1NativeBalance()
   const { data: tokenBalance } = useL1TokenBalance()
@@ -539,7 +501,7 @@ export function useL1MintTokens() {
     })
 
     // Send the transaction
-    const txHash = await requestHumanWallet(SILK_METHOD.eth_sendTransaction, [
+    const txHash = await requestWaapWallet(SILK_METHOD.eth_sendTransaction, [
       {
         from: l1Address,
         to: ADDRESS[11155111].L1.TOKEN_CONTRACT,
@@ -549,7 +511,7 @@ export function useL1MintTokens() {
     console.log('Mint transaction sent, hash:', txHash)
 
     // Wait for confirmation
-    const receipt = await requestHumanWallet(
+    const receipt = await requestWaapWallet(
       SILK_METHOD.eth_getTransactionReceipt,
       [txHash]
     )
@@ -586,8 +548,8 @@ export function useL1MintTokens() {
 
 export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
   const {
-    metaMaskAddress: l1Address,
-    isMetaMaskConnected,
+    waapAddress: l1Address,
+    isWaapConnected,
     aztecAccount,
     aztecAddress,
   } = useWalletStore()
@@ -645,7 +607,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         args: [l1Address as `0x${string}`, l1PortalAddress],
       })
 
-      const allowance = await requestHumanWallet(SILK_METHOD.eth_call, [
+      const allowance = await requestWaapWallet(SILK_METHOD.eth_call, [
         {
           to: l1TokenAddress,
           data: allowanceData,
@@ -660,7 +622,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           args: [l1PortalAddress, amount],
         })
 
-        const approveTxHash = await requestHumanWallet(
+        const approveTxHash = await requestWaapWallet(
           SILK_METHOD.eth_sendTransaction,
           [
             {
@@ -671,7 +633,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           ]
         )
 
-        // OLD CODE: const approveReceipt = await requestHumanWallet(SILK_METHOD.eth_getTransactionReceipt, [approveTxHash])
+        // OLD CODE: const approveReceipt = await requestWaapWallet(SILK_METHOD.eth_getTransactionReceipt, [approveTxHash])
         // ISSUE: eth_getTransactionReceipt returns null if transaction hasn't been mined yet
         // SOLUTION: Use viem's waitForTransactionReceipt which polls until transaction is confirmed
         // Wait for approve transaction to be mined using viem polling
@@ -702,7 +664,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         args,
       })
 
-      const txHash = await requestHumanWallet(SILK_METHOD.eth_sendTransaction, [
+      const txHash = await requestWaapWallet(SILK_METHOD.eth_sendTransaction, [
         {
           from: l1Address as `0x${string}`,
           to: l1PortalAddress,
@@ -710,7 +672,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         },
       ])
 
-      // OLD CODE: const txReceipt = await requestHumanWallet(SILK_METHOD.eth_getTransactionReceipt, [txHash])
+      // OLD CODE: const txReceipt = await requestWaapWallet(SILK_METHOD.eth_getTransactionReceipt, [txHash])
       // ISSUE: eth_getTransactionReceipt returns null if transaction hasn't been mined yet
       // SOLUTION: Use viem's waitForTransactionReceipt which polls until transaction is confirmed
       // Wait for bridge transaction to be mined using viem polling
@@ -1058,7 +1020,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
  * Hook to check if an address has a soulbound token on L1
  */
 export function useL1HasSoulboundToken() {
-  const { metaMaskAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address } = useWalletStore()
   const notify = useToast()
 
   const queryKey = ['l1HasSoulboundToken', l1Address]
@@ -1072,7 +1034,7 @@ export function useL1HasSoulboundToken() {
         args: [l1Address],
       })
 
-      const hasSBT = await requestHumanWallet(SILK_METHOD.eth_call, [
+      const hasSBT = await requestWaapWallet(SILK_METHOD.eth_call, [
         {
           to: ADDRESS[11155111].L1.PORTAL_SBT_CONTRACT,
           data,
@@ -1111,7 +1073,7 @@ export function useL1HasSoulboundToken() {
  * Hook to mint a soulbound token on L1
  */
 export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
-  const { metaMaskAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address } = useWalletStore()
 
   const notify = useToast()
 
@@ -1129,7 +1091,7 @@ export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
       })
 
       // Send the transaction
-      const txHash = await requestHumanWallet(SILK_METHOD.eth_sendTransaction, [
+      const txHash = await requestWaapWallet(SILK_METHOD.eth_sendTransaction, [
         {
           from: l1Address,
           to: ADDRESS[11155111].L1.PORTAL_SBT_CONTRACT,
@@ -1138,7 +1100,7 @@ export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
       ])
 
       // Wait for confirmation
-      const receipt = await requestHumanWallet(
+      const receipt = await requestWaapWallet(
         SILK_METHOD.eth_getTransactionReceipt,
         [txHash]
       )

@@ -7,6 +7,7 @@ import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
 import { useL1TokenBalances } from '@/hooks/useL1Operations'
 import { wait } from '@/utils'
+import { WalletType } from '@/types/wallet'
 import Image from 'next/image'
 import Link from 'next/link'
 import React, { useEffect, useRef, useState } from 'react'
@@ -21,7 +22,7 @@ type WalletDisplayProps = {
   balance?: string
   onClick?: () => void
   onDisconnect?: () => void
-  walletType: 'humanWallet' | 'aztec'
+  walletType: WalletType
 }
 
 const WalletDisplay: React.FC<WalletDisplayProps> = ({
@@ -109,7 +110,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
                 )}`
               : ''}
           </span>
-          {balance && walletType === 'humanWallet' && (
+          {balance && walletType === WalletType.WAAP && (
             <span className='text-xs text-gray-500'>
               {balance} ETH
             </span>
@@ -132,7 +133,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
             <span>{copied ? 'Copied!' : 'Copy Address'}</span>
           </div>
 
-          {window?.silk?.isSilk && walletType === 'humanWallet' && (
+          {walletType === WalletType.WAAP && (
             <div
               className='flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer relative transition-colors duration-150 hover:bg-latest-grey-300'
               onClick={handleOpenWallet}>
@@ -209,13 +210,16 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
   // Get wallet state from useWalletSync
   const {
-    metaMaskAddress,
-    isMetaMaskConnected,
-    connectMetaMask,
-    disconnectMetaMask,
+    waapAddress,
+    isWaapConnected,
+    connectWaapWallet,
+    disconnectWaapWallet,
     aztecAddress,
     isAztecConnected,
     disconnectAztec,
+    loginMethod,
+    walletProvider,
+    walletIcon,
   } = useWalletSync()
 
   // Get wallet store actions
@@ -233,6 +237,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
   )
   const l1NativeBalance = sepoliaNativeTokens?.balance_formatted?.toString()
 
+
   // Mobile menu state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -245,9 +250,9 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
     setMounted(true)
   }, [])
 
-  // Auto-connect to Aztec when MetaMask is connected
+  // Auto-connect to Aztec when WaaP wallet is connected
   useEffect(() => {
-    if (isMetaMaskConnected && !isAztecConnected && walletButtonPressed) {
+    if (isWaapConnected && !isAztecConnected && walletButtonPressed) {
       // Add a slight delay to avoid UI issues
       const timer = setTimeout(() => {
         setShowWalletModal(true)
@@ -258,7 +263,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
       return () => clearTimeout(timer)
     }
   }, [
-    isMetaMaskConnected,
+    isWaapConnected,
     isAztecConnected,
     walletButtonPressed,
     setShowWalletModal,
@@ -269,7 +274,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
     // Set the button pressed flag
     setWalletButtonPressed(true)
     try {
-      await connectMetaMask()
+      await connectWaapWallet()
       // Aztec connection will be handled by the useEffect above
     } catch (error) {
       console.error('Failed to connect wallet:', error)
@@ -280,7 +285,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
   }
 
   // Check if any wallet is connected
-  const isAnyWalletConnected = isMetaMaskConnected || isAztecConnected
+  const isAnyWalletConnected = isWaapConnected || isAztecConnected
 
   // Toggle mobile menu
   const toggleMobileMenu = () => {
@@ -385,13 +390,13 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
           ) : (
             <>
               <WalletDisplay
-                address={metaMaskAddress}
-                isConnected={isMetaMaskConnected}
-                walletIcon='/assets/svg/silk-logo.svg'
+                address={waapAddress}
+                isConnected={isWaapConnected}
+                walletIcon={walletIcon || '/assets/wallets/wally-dark.svg'}
                 networkIcon='/assets/svg/network-logo.svg'
                 balance={l1NativeBalance}
-                onDisconnect={disconnectMetaMask}
-                walletType='humanWallet'
+                onDisconnect={disconnectWaapWallet}
+                walletType={WalletType.WAAP}
               />
 
               <WalletDisplay
@@ -400,7 +405,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
                 walletIcon='/assets/svg/aztec-wallet-logo.svg'
                 // networkIcon='/assets/svg/network-logo.svg'
                 onDisconnect={disconnectAztec}
-                walletType='aztec'
+                walletType={WalletType.AZTEC}
               />
             </>
           )}
@@ -530,13 +535,13 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
             ) : (
               <>
                 <WalletDisplay
-                  address={metaMaskAddress}
-                  isConnected={isMetaMaskConnected}
-                  walletIcon='/assets/svg/meta-mask-wallet-logo.svg'
+                  address={waapAddress}
+                  isConnected={isWaapConnected}
+                  walletIcon={walletIcon || '/assets/wallets/wally-dark.svg'}
                   // networkIcon='/assets/svg/network-logo.svg'
                   balance={l1NativeBalance}
-                  onDisconnect={disconnectMetaMask}
-                  walletType='humanWallet'
+                  onDisconnect={disconnectWaapWallet}
+                  walletType={WalletType.WAAP}
                 />
 
                 <WalletDisplay
@@ -545,7 +550,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
                   walletIcon='/assets/svg/aztec-wallet-logo.svg'
                   // networkIcon='/assets/svg/network-logo.svg'
                   onDisconnect={disconnectAztec}
-                  walletType='aztec'
+                  walletType={WalletType.AZTEC}
                 />
               </>
             )}

@@ -13,7 +13,7 @@ import { useToast, useToastMutation } from './useToast'
 import { wait } from '@/utils'
 import { useL2ErrorHandler } from '@/utils/l2ErrorHandler'
 import { useMutation } from '@tanstack/react-query'
-import { requestHumanWallet } from '@/stores/humanWalletStore'
+import { requestWaapWallet } from '@/stores/waapWalletStore'
 import { SILK_METHOD } from '@silk-wallet/silk-wallet-sdk'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { TokenPortalAbi } from '@aztec/l1-artifacts'
@@ -70,7 +70,7 @@ export const useL2TokenBalance = () => {
         throw new Error('L2 token metadata not found')
       }
 
-      console.log('Fetching L2 balances...')
+      // console.log('Fetching L2 balances...')
 
       console.time('l2TokenBalance')
 
@@ -179,7 +179,7 @@ export function useL2TokenInfo() {
 // -----------------------------------
 
 export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
-  const { metaMaskAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address } = useWalletStore()
   const { aztecAddress, aztecAccount } = useWalletStore()
   const queryClient = useQueryClient()
   const notify = useToast()
@@ -246,7 +246,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       //   functionName: 'l2Bridge',
       //   args: []
       // })
-      // const l2BridgeAddress = await requestHumanWallet(SILK_METHOD.eth_call, [{
+      // const l2BridgeAddress = await requestWaapWallet(SILK_METHOD.eth_call, [{
       //   to: ADDRESS[11155111].L1.PORTAL_CONTRACT,
       //   data: messageData
       // }, 'latest'])
@@ -383,7 +383,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         })
 
         // Send the withdrawal transaction
-        const txHash = await requestHumanWallet(
+        const txHash = await requestWaapWallet(
           SILK_METHOD.eth_sendTransaction,
           [
             {
@@ -395,7 +395,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         )
 
         // // Wait for transaction receipt
-        // const receipt = await requestHumanWallet(
+        // const receipt = await requestWaapWallet(
         //   SILK_METHOD.eth_getTransactionReceipt,
         //   [txHash]
         // )

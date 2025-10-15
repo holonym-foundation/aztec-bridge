@@ -2,7 +2,6 @@ Steps:
 
 zsh -i <(curl -s https://install.aztec.network)
 
-
 cd aztec-contracts/token_bridge
 aztec-nargo compile
 aztec codegen target -o src/artifacts
@@ -29,3 +28,8 @@ VERSION=1.0.0-staging.2 aztec start --sandbox
 
 VERSION=1.0.0-staging.2 aztec start --port 8081 --pxe --pxe.nodeUrl=$BOOTNODE --pxe.proverEnabled true --l1-chain-id $L1_CHAIN_ID
 
+
+aztec start --port 8080 --pxe --pxe.nodeUrl=https://aztec-testnet-fullnode.zkv.xyz --pxe.proverEnabled true --l1-chain-id 11155111
+
+
+aztec start --port 8080 --pxe --pxe.nodeUrl=$BOOTNODE --pxe.proverEnabled true --l1-chain-id $L1_CHAIN_ID --rollup-version 1714840162

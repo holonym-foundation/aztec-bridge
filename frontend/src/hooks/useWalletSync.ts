@@ -25,6 +25,7 @@ export function useWalletSync() {
     getLoginMethod,
     getWalletProvider,
     getWalletIcon,
+    refreshWalletInfo,
   } = useWaapWalletStore()
 
   // Aztec hooks
@@ -35,7 +36,7 @@ export function useWalletSync() {
   // Get store actions
   const {
     setWaapState,
-    setAztecWalletType,
+    setAztecLoginMethod,
     setAztecState,
     disconnectAztecWallet,
     executeAztecTransaction,
@@ -55,14 +56,14 @@ export function useWalletSync() {
     })
   }, [waapAddress, isWaapConnected, chainId, setWaapState])
 
-  // Retrieve login method when wallet is already connected (e.g., on page reload)
+  // Retrieve all wallet info when wallet is already connected (e.g., on page reload)
   useEffect(() => {
-    if (isWaapConnected && !loginMethod && getLoginMethod) {
-      console.log('🔄 Wallet connected but loginMethod is null, retrieving login method...')
-      // Get the login method for already connected wallets
-      getLoginMethod()
+    if (isWaapConnected && !loginMethod && refreshWalletInfo) {
+      console.log('🔄 Wallet connected but info is missing, refreshing all wallet info...')
+      // Get all wallet info (login method, provider, and icon) for already connected wallets
+      refreshWalletInfo()
     }
-  }, [isWaapConnected, loginMethod, getLoginMethod])
+  }, [isWaapConnected, loginMethod, refreshWalletInfo])
 
   // Log wallet connection method when wallet is already connected
   useEffect(() => {
@@ -111,6 +112,10 @@ export function useWalletSync() {
           // Log network switch attempt
           logInfo('Network switch initiated', {
             walletType: WalletType.WAAP,
+            loginMethod: loginMethod,
+            walletProvider: walletProvider,
+            address: waapAddress || '',
+            chainId: chainId,
             fromChainId: chainId,
             toChainId: sepolia.id,
             userAction: 'network_switch_attempt',
@@ -121,6 +126,10 @@ export function useWalletSync() {
           // Log successful network switch
           logInfo('Network switch successful', {
             walletType: WalletType.WAAP,
+            loginMethod: loginMethod,
+            walletProvider: walletProvider,
+            address: waapAddress || '',
+            chainId: sepolia.id,
             fromChainId: chainId,
             toChainId: sepolia.id,
             userAction: 'network_switch_success',
@@ -128,6 +137,10 @@ export function useWalletSync() {
         } catch (error) {
           logError('Failed to switch network', { 
             walletType: WalletType.WAAP,
+            loginMethod: loginMethod,
+            walletProvider: walletProvider,
+            address: waapAddress || '',
+            chainId: chainId,
             fromChainId: chainId,
             toChainId: sepolia.id,
             userAction: 'network_switch_failure',
@@ -153,15 +166,27 @@ export function useWalletSync() {
           walletType: WalletType.WAAP,
           loginMethod: loginMethod,
           walletProvider: walletProvider,
+          address: waapAddress || '',
+          chainId,
           userAction: 'waap_wallet_connection_completed',
         })
       }
     } catch (error) {
       console.log('🚀MMM - ~ connectWaapWallet ~ error:', error)
-      logError('Failed to connect WaaP wallet', { error })
-      if (typeof error === 'string') {
-        showToast('error', error)
-      }
+      logError('Failed to connect WaaP wallet', {
+        walletType: WalletType.WAAP,
+        loginMethod: loginMethod,
+        walletProvider: walletProvider,
+        address: waapAddress || '',
+        chainId,
+        userAction: 'waap_wallet_connection_failure',
+        error
+      })
+      
+      // Show toast for both string and Error objects
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      showToast('error', errorMessage)
+      
       throw error
     }
   }, [connect, getLoginMethod])
@@ -174,13 +199,15 @@ export function useWalletSync() {
         logInfo('Aztec wallet connection initiated', {
           walletType: WalletType.AZTEC,
           loginMethod: type,
-          connectionAttempt: true,
+          address: '',
+          chainId: null,
+          userAction: 'aztec_wallet_connection_attempt',
         })
 
         const connectedAccount = await connectWallet(type)
 
         // Update wallet type
-        setAztecWalletType(type)
+        setAztecLoginMethod(type)
 
         // Update Aztec state
         setAztecState({
@@ -201,8 +228,9 @@ export function useWalletSync() {
         logInfo('Aztec wallet connected successfully', {
           walletType: WalletType.AZTEC,
           loginMethod: type,
-          aztecAddress: connectedAccount?.address.toString(),
-          connectionSuccess: true,
+          address: connectedAccount?.address.toString() || '',
+          chainId: null,
+          userAction: 'aztec_wallet_connection_success',
         })
 
         return connectedAccount
@@ -211,7 +239,9 @@ export function useWalletSync() {
         logError('Failed to connect Aztec wallet', {
           walletType: WalletType.AZTEC,
           loginMethod: type,
-          connectionFailure: true,
+          address: '',
+          chainId: null,
+          userAction: 'aztec_wallet_connection_failure',
           error: error instanceof Error ? error.message : 'Unknown error',
         })
         
@@ -224,7 +254,7 @@ export function useWalletSync() {
         throw error
       }
     },
-    [setAztecWalletType, setAztecState, setL2Contracts, setShowWalletModal]
+    [setAztecLoginMethod, setAztecState, setL2Contracts, setShowWalletModal]
   )
 
   // Disconnect WaaP wallet
@@ -236,6 +266,7 @@ export function useWalletSync() {
         loginMethod: loginMethod,
         walletProvider: walletProvider,
         address: waapAddress || '',
+        chainId,
         userAction: 'waap_wallet_disconnection_attempt',
       })
       
@@ -246,6 +277,8 @@ export function useWalletSync() {
         walletType: WalletType.WAAP,
         loginMethod: loginMethod,
         walletProvider: walletProvider,
+        address: waapAddress || '',
+        chainId,
         userAction: 'waap_wallet_disconnection_success',
       })
     } catch (error) {
@@ -253,6 +286,8 @@ export function useWalletSync() {
         walletType: WalletType.WAAP,
         loginMethod: loginMethod,
         walletProvider: walletProvider,
+        address: waapAddress || '',
+        chainId,
         userAction: 'waap_wallet_disconnection_failure',
         error 
       })
@@ -266,7 +301,10 @@ export function useWalletSync() {
       // Log disconnection attempt
       logInfo('Aztec wallet disconnection initiated', {
         walletType: WalletType.AZTEC,
-        aztecAddress: aztecAddress || '',
+        loginMethod: null,
+        walletProvider: null,
+        address: aztecAddress || '',
+        chainId: null,
         userAction: 'aztec_wallet_disconnection_attempt',
       })
       
@@ -275,12 +313,19 @@ export function useWalletSync() {
       // Log successful disconnection
       logInfo('Aztec wallet disconnected successfully', {
         walletType: WalletType.AZTEC,
+        loginMethod: null,
+        walletProvider: null,
+        address: aztecAddress || '',
+        chainId: null,
         userAction: 'aztec_wallet_disconnection_success',
       })
     } catch (error) {
       logError('Failed to disconnect Aztec wallet', { 
         walletType: WalletType.AZTEC,
-        aztecAddress: aztecAddress || '',
+        loginMethod: null,
+        walletProvider: null,
+        address: aztecAddress || '',
+        chainId: null,
         userAction: 'aztec_wallet_disconnection_failure',
         error 
       })
@@ -291,6 +336,7 @@ export function useWalletSync() {
   return {
     // WaaP wallet
     waapAddress,
+    chainId,
     isWaapConnected,
     connectWaapWallet,
     disconnectWaapWallet,

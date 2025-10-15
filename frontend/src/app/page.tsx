@@ -60,9 +60,15 @@ const isPopupBlocked = (): Promise<boolean> => {
   return new Promise((resolve) => {
     // Log popup test initiation
     logInfo('Popup blocking test initiated', {
+      walletType: null,
+      loginMethod: null,
+      walletProvider: null,
+      address: '',
+      chainId: null,
       testType: 'popup_detection',
       userAgent: navigator.userAgent,
       timestamp: Date.now(),
+      userAction: 'popup_detection_test',
     })
     
     const popup = window.open('about:blank', '_blank', 'width=1,height=1')
@@ -70,20 +76,32 @@ const isPopupBlocked = (): Promise<boolean> => {
       if (!popup || popup.closed || popup.closed === undefined) {
         // Log popup blocked
         logInfo('Popups are blocked - user will see popup blocked alert', {
+          walletType: null,
+          loginMethod: null,
+          walletProvider: null,
+          address: '',
+          chainId: null,
           popupBlocked: true,
           popupClosed: popup?.closed,
           popupUndefined: popup === undefined,
           userAgent: navigator.userAgent,
           timestamp: Date.now(),
+          userAction: 'popup_blocked_detected',
         })
         resolve(true) // Popups are blocked
       } else {
         // Log popup allowed
         logInfo('Popups are allowed - user can proceed normally', {
+          walletType: null,
+          loginMethod: null,
+          walletProvider: null,
+          address: '',
+          chainId: null,
           popupBlocked: false,
           popupClosed: popup.closed,
           userAgent: navigator.userAgent,
           timestamp: Date.now(),
+          userAction: 'popup_allowed_detected',
         })
         popup.close()
         resolve(false) // Popups are allowed
@@ -151,6 +169,12 @@ export default function Home() {
     walletProvider,
     getWalletProvider,
   } = useWalletSync()
+
+  console.log({
+    loginMethod,
+    walletIcon,
+    walletProvider,
+  })
 
   // Get UI state from walletStore
   const {
@@ -269,6 +293,11 @@ export default function Home() {
     
     // Log faucet redirect to Google
     logInfo('Faucet redirect to Google initiated', {
+      walletType: WalletType.WAAP,
+      loginMethod: loginMethod,
+      walletProvider: walletProvider,
+      address: '',
+      chainId: null,
       faucetProvider: 'Google Cloud',
       faucetUrl: googleFaucetUrl,
       redirectType: 'external',
@@ -332,6 +361,9 @@ export default function Home() {
       logInfo('User selected Aztec wallet type', {
         walletType: WalletType.AZTEC,
         loginMethod: type,
+        walletProvider: null,
+        address: '',
+        chainId: null,
         userAction: 'wallet_selection',
         popupsBlocked: arePopupsBlocked,
       })
@@ -341,6 +373,9 @@ export default function Home() {
         logInfo('Azguard wallet not installed - showing prompt', {
           walletType: WalletType.AZTEC,
           loginMethod: type,
+          walletProvider: null,
+          address: '',
+          chainId: null,
           azguardInstalled: false,
           userAction: 'azguard_not_installed',
         })
@@ -353,6 +388,9 @@ export default function Home() {
       logInfo('Attempting to connect Aztec wallet', {
         walletType: WalletType.AZTEC,
         loginMethod: type,
+        walletProvider: null,
+        address: '',
+        chainId: null,
         userAction: 'wallet_connection_attempt',
         popupsBlocked: arePopupsBlocked,
       })
@@ -364,6 +402,9 @@ export default function Home() {
       logInfo('Aztec wallet connection successful from UI', {
         walletType: WalletType.AZTEC,
         loginMethod: type,
+        walletProvider: null,
+        address: '',
+        chainId: null,
         userAction: 'wallet_connection_success',
         popupsBlocked: arePopupsBlocked,
       })
@@ -372,6 +413,9 @@ export default function Home() {
       logError('Aztec wallet connection failed from UI', {
         walletType: WalletType.AZTEC,
         loginMethod: type,
+        walletProvider: null,
+        address: '',
+        chainId: null,
         userAction: 'wallet_connection_failure',
         popupsBlocked: arePopupsBlocked,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -430,11 +474,17 @@ export default function Home() {
     
     // Log page visit/session start
     logInfo('User session started - page loaded', {
+      walletType: null,
+      loginMethod: null,
+      walletProvider: null,
+      address: '',
+      chainId: null,
       sessionStart: true,
       pageUrl: window.location.href,
       userAgent: navigator.userAgent,
       timestamp: Date.now(),
       referrer: document.referrer,
+      userAction: 'session_start',
     })
   }, [])
 
@@ -447,6 +497,11 @@ export default function Home() {
         if (blocked) {
           console.log('Popups are blocked for this site')
           logInfo('Popups are blocked - showing popup blocked alert to user', { 
+            walletType: null,
+            loginMethod: null,
+            walletProvider: null,
+            address: '',
+            chainId: null,
             blocked,
             alertShown: true,
             userAction: 'popup_blocked_alert_displayed',
@@ -455,6 +510,11 @@ export default function Home() {
         } else {
           // console.log('Popups are allowed for this site')
           logInfo('Popups are allowed - user can proceed with wallet connections', {
+            walletType: null,
+            loginMethod: null,
+            walletProvider: null,
+            address: '',
+            chainId: null,
             blocked: false,
             userAction: 'popup_allowed_proceed',
           })
@@ -501,6 +561,11 @@ export default function Home() {
             onClose={() => {
               // Log when user closes popup blocked alert
               logInfo('User closed popup blocked alert', {
+                walletType: null,
+                loginMethod: null,
+                walletProvider: null,
+                address: '',
+                chainId: null,
                 userAction: 'popup_blocked_alert_closed',
                 alertClosed: true,
                 userGaveUp: true, // This might indicate user is giving up

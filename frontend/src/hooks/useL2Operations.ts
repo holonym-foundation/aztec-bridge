@@ -3,6 +3,7 @@ import { useBridgeStore } from '@/stores/bridgeStore'
 import { useContractStore } from '@/stores/contractStore'
 import { useWalletStore } from '@/stores/walletStore'
 import { logError, logInfo } from '@/utils/datadog'
+import { WalletType } from '@/types/wallet'
 import { logger } from '@/utils/logger'
 import { AztecAddress, EthAddress, Fr, IntentAction } from '@aztec/aztec.js'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -14,6 +15,7 @@ import { wait } from '@/utils'
 import { useL2ErrorHandler } from '@/utils/l2ErrorHandler'
 import { useMutation } from '@tanstack/react-query'
 import { requestWaapWallet } from '@/stores/waapWalletStore'
+import { useWalletSync } from './useWalletSync'
 import { SILK_METHOD } from '@silk-wallet/silk-wallet-sdk'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { TokenPortalAbi } from '@aztec/l1-artifacts'
@@ -180,10 +182,13 @@ export function useL2TokenInfo() {
 
 export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
   const { waapAddress: l1Address } = useWalletStore()
-  const { aztecAddress, aztecAccount } = useWalletStore()
+  const { aztecAddress, aztecAccount, aztecLoginMethod } = useWalletStore()
   const queryClient = useQueryClient()
   const notify = useToast()
   const { setProgressStep, setTransactionUrls } = useBridgeStore()
+
+  // Get wallet information from useWalletSync
+  const { loginMethod, walletProvider, chainId } = useWalletSync()
 
   const { l1ContractAddresses, l2TokenContract, l2BridgeContract } =
     useContractStore()
@@ -201,8 +206,20 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         throw new Error('L2 token contract not connected')
       }
 
+      // Wallet information is already available from useWalletSync hook
+      
       // Log withdrawal initiation with enhanced data
       logInfo('Withdrawal from L2 to L1 initiated', {
+        // WaaP (L1) wallet information
+        walletType: WalletType.WAAP,
+        loginMethod: loginMethod,
+        walletProvider: walletProvider,
+        address: l1Address || '',
+        chainId: chainId,
+        // Aztec (L2) wallet information
+        aztecLoginMethod: aztecLoginMethod,
+        aztecAddress: aztecAddress || '',
+        // Withdrawal operation details
         direction: 'L2_TO_L1',
         fromNetwork: 'Aztec',
         toNetwork: 'Ethereum',
@@ -211,6 +228,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         amount: amount.toString(),
         l1Address: l1Address,
         l2Address: aztecAddress,
+        userAction: 'withdrawal_l2_to_l1_initiated',
       })
 
       // Step 1: Setting up authorization for withdrawal
@@ -451,8 +469,20 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       // Set transaction URLs in the store
       setTransactionUrls(null, aztecscanUrl)
 
+        // Wallet information is already available from useWalletSync hook
+      
       // Log successful withdrawal with enhanced data
       logInfo('Withdrawal from L2 to L1 completed', {
+        // WaaP (L1) wallet information
+        walletType: WalletType.WAAP,
+        loginMethod: loginMethod,
+        walletProvider: walletProvider,
+        address: l1Address || '',
+        chainId: chainId,
+        // Aztec (L2) wallet information
+        aztecLoginMethod: aztecLoginMethod,
+        aztecAddress: aztecAddress || '',
+        // Withdrawal operation details
         direction: 'L2_TO_L1',
         fromNetwork: 'Aztec',
         toNetwork: 'Ethereum',
@@ -463,6 +493,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         l2Address: aztecAddress?.toString(),
         txHash: txHash,
         aztecscanUrl,
+        userAction: 'withdrawal_l2_to_l1_completed',
       })
 
       await wait(3000)
@@ -472,8 +503,20 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
     } catch (error) {
       console.log('🚀MMM - ~ mutationFn ~ error:', error)
       const errorMessage =error instanceof Error ? error.message : 'Unknown error'
+        // Wallet information is already available from useWalletSync hook
+      
       // Log withdrawal failure with enhanced data
       logError('Withdrawal from L2 to L1 failed', {
+        // WaaP (L1) wallet information
+        walletType: WalletType.WAAP,
+        loginMethod: loginMethod,
+        walletProvider: walletProvider,
+        address: l1Address || '',
+        chainId: chainId,
+        // Aztec (L2) wallet information
+        aztecLoginMethod: aztecLoginMethod,
+        aztecAddress: aztecAddress || '',
+        // Withdrawal operation details
         direction: 'L2_TO_L1',
         fromNetwork: 'Aztec',
         toNetwork: 'Ethereum',
@@ -483,6 +526,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         l1Address: l1Address,
         l2Address: aztecAddress?.toString(),
         error: errorMessage,
+        userAction: 'withdrawal_l2_to_l1_failed',
       })
 
       // Show error notification
@@ -500,8 +544,20 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         queryKey: ['l2TokenBalance', aztecAddress],
       })
 
+      // Wallet information is already available from useWalletSync hook
+      
       // Log successful withdrawal completion with enhanced data
       logInfo('Withdrawal from L2 to L1 callback', {
+        // WaaP (L1) wallet information
+        walletType: WalletType.WAAP,
+        loginMethod: loginMethod,
+        walletProvider: walletProvider,
+        address: l1Address || '',
+        chainId: chainId,
+        // Aztec (L2) wallet information
+        aztecLoginMethod: aztecLoginMethod,
+        aztecAddress: aztecAddress || '',
+        // Withdrawal operation details
         direction: 'L2_TO_L1',
         fromNetwork: 'Aztec',
         toNetwork: 'Ethereum',
@@ -509,6 +565,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         toToken: 'USDC',
         l1Address: l1Address,
         l2Address: aztecAddress?.toString(),
+        userAction: 'withdrawal_l2_to_l1_callback',
         txHash: typeof txHash === 'string' ? txHash : 'completed',
       })
 

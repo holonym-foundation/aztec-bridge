@@ -329,7 +329,7 @@ function BridgeActionButton({
       // if (useExternalFaucet) {
       //   return needsTokensOnly ? 'Get Tokens (External)' : 'Get Testnet ETH (External)'
       // }
-      return needsTokensOnly ? 'Get Tokens' : 'Get Testnet ETH'
+      return needsTokensOnly ? 'Click to Get Tokens' : 'Click to Get Testnet ETH'
     }
 
     // Priority 4: SBT requirements

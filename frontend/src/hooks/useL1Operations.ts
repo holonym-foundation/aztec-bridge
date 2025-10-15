@@ -4,6 +4,7 @@ import { useWalletStore } from '@/stores/walletStore'
 import { truncateDecimals, wait } from '@/utils'
 import axios from 'axios'
 import { logError, logInfo } from '@/utils/datadog'
+import { WalletType } from '@/types/wallet'
 import {
   AztecAddress,
   EthAddress,
@@ -28,6 +29,7 @@ import PortalSBTJson from '../constants/PortalSBT.json'
 import { useToast, useToastMutation, useToastQuery } from './useToast'
 import { extractEvent } from '@aztec/ethereum'
 import { requestWaapWallet } from '@/stores/waapWalletStore'
+import { useWalletSync } from './useWalletSync'
 import { SILK_METHOD } from '@silk-wallet/silk-wallet-sdk'
 import {
   I_UserTokenBalance,
@@ -253,6 +255,9 @@ export function useL1Faucet() {
   const { waapAddress: l1Address } = useWalletStore()
   const queryClient = useQueryClient()
 
+  // Get wallet information from useWalletSync
+  const { loginMethod, walletProvider, chainId } = useWalletSync()
+
   // L1 (Ethereum) balances and operations
   const {
     data: l1TokenBalances = [],
@@ -300,16 +305,23 @@ export function useL1Faucet() {
     try {
       console.log('Requesting faucet funds...')
 
+      // Wallet information is already available from useWalletSync hook
+
       // Log faucet request with enhanced data
       logInfo('Internal faucet request initiated', {
+        walletType: WalletType.WAAP,
+        loginMethod: loginMethod,
+        walletProvider: walletProvider,
+        address: l1Address || '',
+        chainId: chainId,
         l1Address: l1Address,
-        address: l1Address, // keep original property
         needsGas,
         needsTokens,
         network: 'Ethereum',
         token: 'USDC',
         faucetProvider: 'Internal API',
         faucetType: 'internal',
+        userAction: 'faucet_request_initiated',
       })
 
       if (!l1Address) throw new Error('Wallet not connected')
@@ -324,7 +336,7 @@ export function useL1Faucet() {
         needsTokensOnly,
       })
 
-      let result: any = { gasProvided: false, tokensMinted: false }
+      const result: any = { gasProvided: false, tokensMinted: false }
 
       // Step 1: If needed, get ETH for gas (only if not using external faucet)
       if (needsGas && !needsTokensOnly) {
@@ -400,16 +412,23 @@ export function useL1Faucet() {
     } catch (error) {
       console.error('Faucet request failed:', error)
 
+      // Wallet information is already available from useWalletSync hook
+
       // Log faucet failure with enhanced data
       logError('Internal faucet request failed', {
+        walletType: WalletType.WAAP,
+        loginMethod: loginMethod,
+        walletProvider: walletProvider,
+        address: l1Address || '',
+        chainId: chainId,
         l1Address: l1Address,
-        address: l1Address, // keep original property
         needsGas,
         needsTokens,
         network: 'Ethereum',
         token: 'USDC',
         faucetProvider: 'Internal API',
         faucetType: 'internal',
+        userAction: 'faucet_request_failed',
         error: error instanceof Error ? error.message : 'Unknown error',
       })
 
@@ -423,16 +442,23 @@ export function useL1Faucet() {
       onSuccess: (data) => {
         console.log('Faucet operations completed:', data)
 
+        // Wallet information is already available from useWalletSync hook
+
         // Log faucet success with enhanced data
         logInfo('Internal faucet request successful', {
+          walletType: WalletType.WAAP,
+          loginMethod: loginMethod,
+          walletProvider: walletProvider,
+          address: l1Address || '',
+          chainId: chainId,
           l1Address: l1Address,
-          address: l1Address, // keep original property
           needsGas,
           needsTokens,
           network: 'Ethereum',
           token: 'USDC',
           faucetProvider: 'Internal API',
           faucetType: 'internal',
+          userAction: 'faucet_request_successful',
           success: data?.success,
         })
 
@@ -552,7 +578,11 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
     isWaapConnected,
     aztecAccount,
     aztecAddress,
+    aztecLoginMethod,
   } = useWalletStore()
+
+  // Get wallet information from useWalletSync
+  const { loginMethod, walletProvider, chainId } = useWalletSync()
 
   const queryClient = useQueryClient()
   const { setProgressStep, setTransactionUrls, isPrivacyModeEnabled } =
@@ -586,7 +616,20 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
 
       setProgressStep(1, 'active')
       console.log('Initiating bridge tokens to L2...')
+      
+      // Wallet information is already available from useWalletSync hook
+      
       logInfo('Bridge from L1 to L2 initiated', {
+        // WaaP (L1) wallet information
+        walletType: WalletType.WAAP,
+        loginMethod: loginMethod,
+        walletProvider: walletProvider,
+        address: l1Address || '',
+        chainId: chainId,
+        // Aztec (L2) wallet information
+        aztecLoginMethod: aztecLoginMethod,
+        aztecAddress: aztecAddress || '',
+        // Bridge operation details
         direction: 'L1_TO_L2',
         fromNetwork: 'Ethereum',
         toNetwork: 'Aztec',
@@ -595,6 +638,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         amount: amount.toString(),
         l1Address: l1Address,
         l2Address: aztecAddress,
+        userAction: 'bridge_l1_to_l2_initiated',
       })
 
       const l1TokenAddress = ADDRESS[11155111].L1.TOKEN_CONTRACT
@@ -796,11 +840,24 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         const errorMessage = `L1-to-L2 message sync timeout after ${maxAttempts} attempts (${(maxAttempts * pollInterval) / 1000 / 60} minutes)`
         console.error(errorMessage)
         
+        // Wallet information is already available from useWalletSync hook
+        
         logError('L1-to-L2 message sync timeout', {
+          // WaaP (L1) wallet information
+          walletType: WalletType.WAAP,
+          loginMethod: loginMethod,
+          walletProvider: walletProvider,
+          address: l1Address || '',
+          chainId: chainId,
+          // Aztec (L2) wallet information
+          aztecLoginMethod: aztecLoginMethod,
+          aztecAddress: aztecAddress || '',
+          // Error details
           messageHash: messageHash.toString(),
           messageLeafIndex: messageLeafIndex.toString(),
           attempts: maxAttempts,
           totalWaitTime: (maxAttempts * pollInterval) / 1000 / 60,
+          userAction: 'bridge_l1_to_l2_sync_timeout',
         })
         
         throw new Error(errorMessage)
@@ -861,7 +918,19 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         setProgressStep(3, 'completed')
         setProgressStep(4, 'active')
 
+        // Wallet information is already available from useWalletSync hook
+        
         logInfo('Bridge from L1 to L2 completed', {
+          // WaaP (L1) wallet information
+          walletType: WalletType.WAAP,
+          loginMethod: loginMethod,
+          walletProvider: walletProvider,
+          address: l1Address || '',
+          chainId: chainId,
+          // Aztec (L2) wallet information
+          aztecLoginMethod: aztecLoginMethod,
+          aztecAddress: aztecAddress || '',
+          // Bridge operation details
           direction: 'L1_TO_L2',
           fromNetwork: 'Ethereum',
           toNetwork: 'Aztec',
@@ -872,6 +941,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           l2Address: aztecAddress?.toString(),
           txHash: l2TxHash,
           aztecscanUrl: l2TxUrl,
+          userAction: 'bridge_l1_to_l2_completed',
         })
 
         await wait(3000)
@@ -902,10 +972,19 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             ])
             
             console.log('Token successfully added to wallet')
+            
+            // Wallet information is already available from useWalletSync hook
+            
             logInfo('Token added to wallet after bridge', {
+              walletType: WalletType.WAAP,
+              loginMethod: loginMethod,
+              walletProvider: walletProvider,
+              address: l1Address || '',
+              chainId: chainId,
               tokenAddress: ADDRESS[1337].L2.TOKEN_CONTRACT,
               tokenName: l2TokenMetadata.name,
               tokenSymbol: l2TokenMetadata.symbol,
+              userAction: 'token_added_to_wallet',
             })
           } else {
             console.warn('L2 token metadata not available for wallet addition')
@@ -913,9 +992,17 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         } catch (error) {
           console.error('Failed to add token to wallet:', error)
           // Don't throw here as the bridge was successful
+          // Wallet information is already available from useWalletSync hook
+          
           logError('Failed to add token to wallet after bridge', {
+            walletType: WalletType.WAAP,
+            loginMethod: loginMethod,
+            walletProvider: walletProvider,
+            address: l1Address || '',
+            chainId: chainId,
             error: error instanceof Error ? error.message : 'Unknown error',
             tokenAddress: ADDRESS[1337].L2.TOKEN_CONTRACT,
+            userAction: 'token_add_to_wallet_failed',
           })
         }
 
@@ -944,7 +1031,19 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           }
         )
 
+        // Wallet information is already available from useWalletSync hook
+        
         logError('Bridge from L1 to L2 failed due to network congestion', {
+          // WaaP (L1) wallet information
+          walletType: WalletType.WAAP,
+          loginMethod: loginMethod,
+          walletProvider: walletProvider,
+          address: l1Address || '',
+          chainId: chainId,
+          // Aztec (L2) wallet information
+          aztecLoginMethod: aztecLoginMethod,
+          aztecAddress: aztecAddress || '',
+          // Bridge operation details
           direction: 'L1_TO_L2',
           fromNetwork: 'Ethereum',
           toNetwork: 'Aztec',
@@ -955,6 +1054,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           l2Address: aztecAddress?.toString(),
           error: 'Network congestion caused transaction to be dropped',
           errorType: 'congestion',
+          userAction: 'bridge_l1_to_l2_congestion_error',
         })
 
         throw new Error(
@@ -966,7 +1066,19 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page '
         )
 
+        // Wallet information is already available from useWalletSync hook
+        
         logError('Bridge from L1 to L2 failed with contract error', {
+          // WaaP (L1) wallet information
+          walletType: WalletType.WAAP,
+          loginMethod: loginMethod,
+          walletProvider: walletProvider,
+          address: l1Address || '',
+          chainId: chainId,
+          // Aztec (L2) wallet information
+          aztecLoginMethod: aztecLoginMethod,
+          aztecAddress: aztecAddress || '',
+          // Bridge operation details
           direction: 'L1_TO_L2',
           fromNetwork: 'Ethereum',
           toNetwork: 'Aztec',
@@ -978,12 +1090,25 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           error:
             'Contract reverted with signature 0xfb8f41b2. Recommend reload.',
           errorSignature: '0xfb8f41b2',
+          userAction: 'bridge_l1_to_l2_contract_error',
         })
       } else {
         // For any other errors, show a generic error message
         notify('error', `Bridge transaction failed: ${errorMessage}`)
 
+        // Wallet information is already available from useWalletSync hook
+        
         logError('Bridge from L1 to L2 failed', {
+          // WaaP (L1) wallet information
+          walletType: WalletType.WAAP,
+          loginMethod: loginMethod,
+          walletProvider: walletProvider,
+          address: l1Address || '',
+          chainId: chainId,
+          // Aztec (L2) wallet information
+          aztecLoginMethod: aztecLoginMethod,
+          aztecAddress: aztecAddress || '',
+          // Bridge operation details
           direction: 'L1_TO_L2',
           fromNetwork: 'Ethereum',
           toNetwork: 'Aztec',
@@ -993,6 +1118,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
           l1Address: l1Address,
           l2Address: aztecAddress?.toString(),
           error: error instanceof Error ? error.message : 'Unknown error',
+          userAction: 'bridge_l1_to_l2_failed',
         })
 
         throw error

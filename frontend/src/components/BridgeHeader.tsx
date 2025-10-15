@@ -16,13 +16,13 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick }) => {
   } = useBridgeStore()
 
   const {
-    isMetaMaskConnected,
+    isWaapConnected,
     isAztecConnected
   } = useWalletStore()
 
   // Update step statuses based on wallet connections
   React.useEffect(() => {
-    if (isMetaMaskConnected) {
+    if (isWaapConnected) {
       setHeaderStep(1, 'completed')
     } else {
       setHeaderStep(1, 'pending')
@@ -33,7 +33,7 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick }) => {
     } else {
       setHeaderStep(2, 'pending')
     }
-  }, [isMetaMaskConnected, isAztecConnected, setHeaderStep])
+  }, [isWaapConnected, isAztecConnected, setHeaderStep])
 
   const steps = getHeaderSteps()
 

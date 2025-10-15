@@ -7,7 +7,7 @@ import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
 import { useL1TokenBalances } from '@/hooks/useL1Operations'
 import { wait } from '@/utils'
-import { WalletType } from '@/types/wallet'
+import { LOGIN_METHODS, WalletType } from '@/types/wallet'
 import Image from 'next/image'
 import Link from 'next/link'
 import React, { useEffect, useRef, useState } from 'react'
@@ -23,6 +23,7 @@ type WalletDisplayProps = {
   onClick?: () => void
   onDisconnect?: () => void
   walletType: WalletType
+  loginMethod?: string | null
 }
 
 const WalletDisplay: React.FC<WalletDisplayProps> = ({
@@ -34,6 +35,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
   onClick,
   onDisconnect,
   walletType,
+  loginMethod,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -133,7 +135,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
             <span>{copied ? 'Copied!' : 'Copy Address'}</span>
           </div>
 
-          {walletType === WalletType.WAAP && (
+          {loginMethod === LOGIN_METHODS.WAAP && (
             <div
               className='flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer relative transition-colors duration-150 hover:bg-latest-grey-300'
               onClick={handleOpenWallet}>
@@ -397,6 +399,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
                 balance={l1NativeBalance}
                 onDisconnect={disconnectWaapWallet}
                 walletType={WalletType.WAAP}
+                loginMethod={loginMethod}
               />
 
               <WalletDisplay
@@ -542,6 +545,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, privacyMode }) => {
                   balance={l1NativeBalance}
                   onDisconnect={disconnectWaapWallet}
                   walletType={WalletType.WAAP}
+                  loginMethod={loginMethod}
                 />
 
                 <WalletDisplay

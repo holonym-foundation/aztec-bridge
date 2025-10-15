@@ -3,6 +3,15 @@ import { initSilk, SILK_METHOD } from '@silk-wallet/silk-wallet-sdk'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { WalletType, WaapLoginMethod, LOGIN_METHODS } from '@/types/wallet'
+import {
+  discoveredProviders,
+  detectWalletByProvider,
+  getEIP6963Provider,
+  getEIP6963WalletIcon,
+  getFallbackWalletIcon,
+  getWalletProviderName,
+  handleWaapError,
+} from '@/stores/waapWalletHelpers'
 
 // Add type declarations
 declare global {
@@ -11,184 +20,7 @@ declare global {
   }
 }
 
-// EIP-6963 types
-interface EIP6963ProviderInfo {
-  uuid: string
-  name: string
-  icon: string
-  rdns: string
-}
 
-interface EIP6963ProviderDetail {
-  info: EIP6963ProviderInfo
-  provider: any
-}
-
-// EIP-6963 provider discovery
-let discoveredProviders: EIP6963ProviderDetail[] = []
-
-// Listen for EIP-6963 provider announcements
-if (typeof window !== 'undefined') {
-  window.addEventListener('eip6963:announceProvider', (event: any) => {
-    discoveredProviders.push(event.detail)
-    // console.log('🔍 EIP-6963: Wallet announced:', {
-    //   name: event.detail.info.name,
-    //   rdns: event.detail.info.rdns,
-    //   uuid: event.detail.info.uuid,
-    //   icon: event.detail.info.icon,
-    //   provider: event.detail.provider
-    // })
-    // console.log('📊 Total discovered providers:', discoveredProviders.length)
-  })
-
-  // Request providers to announce themselves (with delay to handle conflicts)
-  setTimeout(() => {
-    window.dispatchEvent(new Event('eip6963:requestProvider'))
-  }, 1000)
-  
-  // Also send immediately in case some wallets are ready
-  window.dispatchEvent(new Event('eip6963:requestProvider'))
-  
-  // Log initial state
-  // console.log('🔍 Initial window.ethereum state:', {
-  //   exists: !!window.ethereum,
-  //   isArray: Array.isArray(window.ethereum),
-  //   isMetaMask: window.ethereum?.isMetaMask,
-  //   isRabby: window.ethereum?.isRabby,
-  //   isBraveWallet: window.ethereum?.isBraveWallet,
-  //   isCoinbaseWallet: window.ethereum?.isCoinbaseWallet,
-  //   selectedAddress: window.ethereum?.selectedAddress,
-  //   providers: window.ethereum?.providers
-  // })
-  
-  // // Log the error we're seeing
-  // console.log('⚠️ Multiple wallet conflict detected! This is why we need EIP-6963!')
-  // console.log('🔍 Current window.ethereum is likely controlled by:', 
-  //   window.ethereum?.isRabby ? 'Rabby' : 
-  //   window.ethereum?.isMetaMask ? 'MetaMask' : 
-  //   window.ethereum?.isBraveWallet ? 'Brave Wallet' : 
-  //   'Unknown wallet'
-  // )
-}
-
-// Helper function to detect wallet by provider properties
-const detectWalletByProvider = (provider: any): string => {
-  if (!provider) return 'Injected Wallet'
-
-  // Check for MetaMask (most common)
-  if (provider.isMetaMask && !provider.isBraveWallet && !provider.isRabby) {
-    return 'MetaMask'
-  }
-
-  // Check for Coinbase Wallet
-  if (provider.isCoinbaseWallet) {
-    return 'Coinbase Wallet'
-  }
-
-  // Check for Rabby (can override MetaMask)
-  if (provider.isRabby) {
-    return 'Rabby'
-  }
-
-  // Check for Brave Wallet (can override MetaMask)
-  if (provider.isBraveWallet) {
-    return 'Brave Wallet'
-  }
-
-  // Check for Trust Wallet
-  if (provider.isTrust) {
-    return 'Trust Wallet'
-  }
-
-  // Check for Opera Wallet
-  if (provider.isOpera) {
-    return 'Opera Wallet'
-  }
-
-  // Check for Rainbow Wallet
-  if (provider.isRainbow) {
-    return 'Rainbow Wallet'
-  }
-
-  // Check for Phantom (if it has Ethereum support)
-  if (provider.isPhantom) {
-    return 'Phantom'
-  }
-
-  // Check for other common wallets
-  if (provider.isFrame) {
-    return 'Frame'
-  }
-
-  if (provider.isTally) {
-    return 'Tally'
-  }
-
-  if (provider.isTokenPocket) {
-    return 'TokenPocket'
-  }
-
-  // Check for wallet name in provider info
-  if (provider.providerInfo?.name) {
-    return provider.providerInfo.name
-  }
-
-  return 'Injected Wallet'
-}
-
-// Helper function to get provider via EIP-6963
-const getEIP6963Provider = (address: string): string | null => {
-  if (!address || discoveredProviders.length === 0) {
-    console.log('⚠️ EIP-6963: No address or no providers found')
-    return null
-  }
-
-  // Log all discovered providers
-  // discoveredProviders.forEach(({ info, provider }, index) => {
-  //   console.log(`🔍 EIP-6963 Provider ${index + 1}:`, {
-  //     name: info.name,
-  //     rdns: info.rdns,
-  //     selectedAddress: provider.selectedAddress,
-  //     isConnected: provider.isConnected,
-  //     matches: provider.selectedAddress === address
-  //   })
-  // })
-
-  // Find provider that has the connected address
-  for (const { info, provider } of discoveredProviders) {
-    if (provider.selectedAddress === address) {
-      return info.name
-    }
-  }
-
-  // If no exact match, return the first available provider
-  if (discoveredProviders.length > 0) {
-    return discoveredProviders[0].info.name
-  }
-
-  return null
-}
-
-// Helper function to get wallet icon via EIP-6963
-const getEIP6963WalletIcon = (address: string): string | null => {
-  if (!address || discoveredProviders.length === 0) {
-    return null
-  }
-
-  // Find provider that has the connected address
-  for (const { info, provider } of discoveredProviders) {
-    if (provider.selectedAddress === address) {
-      return info.icon
-    }
-  }
-
-  // If no exact match, return the first available provider's icon
-  if (discoveredProviders.length > 0) {
-    return discoveredProviders[0].info.icon
-  }
-
-  return null
-}
 
 interface WaapWalletState {
   address: string
@@ -212,6 +44,7 @@ interface WaapWalletState {
   getWalletProvider: () => string | null
   getWalletIcon: () => string | null
   getAllAvailableWallets: () => string[]
+  refreshWalletInfo: () => Promise<void>
 
   // Reset the store
   reset: () => void
@@ -228,29 +61,6 @@ const initialState = {
   isInitialized: false,
 }
 
-// Utility functions for common operations
-const handleError = (err: unknown, message: string, set: any) => {
-  // console.error(message, err)
-  const error = err instanceof Error ? err : new Error(String(err))
-  set({ error })
-  throw error
-}
-
-// Utility function to determine wallet provider based on login method
-export const getWalletProviderName = (loginMethod: WaapLoginMethod | null, injectedProvider: string | null): string => {
-  if (!loginMethod) return 'Unknown'
-  
-  switch (loginMethod) {
-    case LOGIN_METHODS.WAAP:
-      return 'Wallet as a Protocol'
-    case LOGIN_METHODS.WALLETCONNECT:
-      return 'WalletConnect'
-    case LOGIN_METHODS.INJECTED:
-      return injectedProvider || 'Injected Wallet'
-    default:
-      return 'Unknown'
-  }
-}
 
 export const requestWaapWallet = async (
   method: SILK_METHOD,
@@ -265,7 +75,7 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
 
   initializeWaapWallet: () => {
     const { isInitialized } = get()
-    
+
     if (isInitialized) {
       // console.log('⚠️ WaaP wallet already initialized, skipping...')
       return
@@ -278,7 +88,10 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
 
       // Try to get initial account, but don't fail if it's not available
       getAccount().catch((err) => {
-        console.log('⚠️ Initial account check failed (this is normal if wallet is not connected):', err)
+        console.log(
+          '⚠️ Initial account check failed (this is normal if wallet is not connected):',
+          err
+        )
         // Don't throw here - this is expected when wallet is not connected
       })
 
@@ -289,7 +102,7 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
       window.silk.on('accountsChanged', async (accounts: string[]) => {
         const isConnected = accounts.length > 0
         set({ address: accounts[0], isConnected })
-        
+
         // If wallet is connected, retrieve the login method
         if (isConnected) {
           const { getLoginMethod } = get()
@@ -307,34 +120,38 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
       // Mark as initialized
       set({ isInitialized: true })
     } catch (err) {
-      handleError(err, 'Failed to initialize Ethereum wallet', set)
+      handleWaapError(err, 'Failed to initialize Ethereum wallet', set)
     }
   },
 
   login: async () => {
     try {
-      const result = await window.silk.login() as WaapLoginMethod
+      const result = (await window.silk.login()) as WaapLoginMethod
       console.log('🚀MMM - ~ waapWalletStore.ts:317 ~ result:', result)
-      
+
       // Check if login method is 'injected' but no wallet extension is available
       if (result === LOGIN_METHODS.INJECTED && !window.ethereum) {
-        throw new Error('No Ethereum wallet extension detected. Please install MetaMask or another Ethereum wallet.')
+        throw new Error(
+          'No Ethereum wallet extension detected. Please install MetaMask or another Ethereum wallet.'
+        )
       }
-      
+
       // For injected wallets, force account selection if multiple wallets are available
       if (result === LOGIN_METHODS.INJECTED && window.ethereum) {
         // Check if we have multiple wallets via EIP-6963
         const hasMultipleWallets = discoveredProviders.length > 1
-        
+
         // Also check for multiple wallets via window.ethereum.providers
-        const hasMultipleProviders = Array.isArray(window.ethereum.providers) && window.ethereum.providers.length > 1
-        
+        const hasMultipleProviders =
+          Array.isArray(window.ethereum.providers) &&
+          window.ethereum.providers.length > 1
+
         if (hasMultipleWallets || hasMultipleProviders) {
           try {
             // Force account selection popup
-            await window.ethereum.request({ 
-              method: 'wallet_requestPermissions', 
-              params: [{ eth_accounts: {} }] 
+            await window.ethereum.request({
+              method: 'wallet_requestPermissions',
+              params: [{ eth_accounts: {} }],
             })
           } catch (permissionError) {
             // Some wallets might not support wallet_requestPermissions
@@ -342,7 +159,7 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
           }
         }
       }
-      
+
       const { getAccount, switchChain, getChainId } = get()
       const address = await getAccount()
       await switchChain(l1ChainId)
@@ -351,7 +168,7 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
       // Determine wallet provider based on login method
       const detectedProvider = get().getWalletProvider()
       const walletProvider = getWalletProviderName(result, detectedProvider)
-      
+
       // Get wallet icon from EIP-6963 if available
       const walletIcon = getEIP6963WalletIcon(address || '')
 
@@ -369,15 +186,30 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
     } catch (err: any) {
       // Provide more specific error messages based on the error type
       const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-      
+
       if (errorMessage.includes('No Ethereum wallet extension detected')) {
-        handleError(err, 'No Ethereum wallet extension found. Please install MetaMask or another Ethereum wallet to continue.', set)
-      } else if (errorMessage.includes('rejected') || errorMessage.includes('denied')) {
-        handleError(err, 'Ethereum wallet connection was rejected by user.', set)
+        handleWaapError(
+          err,
+          'No Ethereum wallet extension found. Please install MetaMask or another Ethereum wallet to continue.',
+          set
+        )
+      } else if (
+        errorMessage.includes('rejected') ||
+        errorMessage.includes('denied')
+      ) {
+        handleWaapError(
+          err,
+          'Ethereum wallet connection was rejected by user.',
+          set
+        )
       } else if (errorMessage.includes('install')) {
-        handleError(err, 'Please install an Ethereum wallet extension to continue.', set)
+        handleWaapError(
+          err,
+          'Please install an Ethereum wallet extension to continue.',
+          set
+        )
       } else {
-        handleError(err, 'Failed to connect Ethereum wallet', set)
+        handleWaapError(err, 'Failed to connect Ethereum wallet', set)
       }
     }
   },
@@ -387,19 +219,48 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
       await window.silk.logout()
       set(initialState)
     } catch (err) {
-      handleError(err, 'Failed to disconnect Ethereum wallet', set)
+      handleWaapError(err, 'Failed to disconnect Ethereum wallet', set)
     }
   },
 
   switchChain: async (chainId: number) => {
+    const chainIdHex = `0x${chainId.toString(16)}`
+    
     try {
-      const chainIdHex = `0x${chainId.toString(16)}`
       await requestWaapWallet(SILK_METHOD.wallet_switchEthereumChain, [
         { chainId: chainIdHex },
       ])
       set({ chainId })
-    } catch (err) {
-      handleError(err, 'Failed to switch chain', set)
+    } catch (err: any) {
+      // Handle specific chain switching errors
+      if (err?.code === 4902 || err?.code === -32603 || 
+          (err?.message && err.message.includes('Unrecognized chain ID'))) {
+        // Chain not added to wallet, try to add it
+        try {
+          await requestWaapWallet(SILK_METHOD.wallet_addEthereumChain, [
+            {
+              chainId: chainIdHex,
+              chainName: chainId === 11155111 ? 'Sepolia' : `Chain ${chainId}`,
+              nativeCurrency: {
+                name: 'ETH',
+                symbol: 'ETH',
+                decimals: 18,
+              },
+              rpcUrls: chainId === 11155111 ? [process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL || 'https://sepolia.infura.io/'] : [],
+              blockExplorerUrls: chainId === 11155111 ? ['https://sepolia.etherscan.io'] : [],
+            },
+          ])
+          set({ chainId })
+        } catch (addErr) {
+          handleWaapError(addErr, 'Failed to add and switch to chain', set)
+        }
+      } else if (err?.code === 4001) {
+        // User rejected the request
+        console.log('User rejected chain switch request')
+        // Don't throw error for user rejection, just log it
+      } else {
+        handleWaapError(err, 'Failed to switch chain', set)
+      }
     }
   },
 
@@ -410,7 +271,7 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
       set({ chainId: chainIdNumber })
       return chainIdNumber
     } catch (err) {
-      return handleError(err, 'Failed to get chain ID', set)
+      return handleWaapError(err, 'Failed to get chain ID', set)
     }
   },
 
@@ -431,7 +292,9 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
 
       // Handle specific error cases gracefully
       if (err?.code === -32001) {
-        console.log('⚠️ getAccount: Wallet is already processing a connection request')
+        console.log(
+          '⚠️ getAccount: Wallet is already processing a connection request'
+        )
         set({ address: '', isConnected: false, error: null })
         return null
       }
@@ -462,26 +325,26 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
       ])
       return signature as string
     } catch (err) {
-      return handleError(err, 'Failed to sign message with Ethereum wallet', set)
+      return handleWaapError(
+        err,
+        'Failed to sign message with Ethereum wallet',
+        set
+      )
     }
   },
 
   getLoginMethod: async () => {
     try {
       if (typeof window !== 'undefined' && window.silk) {
-        const loginMethod = await window.silk.getLoginMethod() as WaapLoginMethod
-        
-        // Determine wallet provider based on login method
-        const detectedProvider = get().getWalletProvider()
-        const walletProvider = getWalletProviderName(loginMethod, detectedProvider)
-        
-        // Update state with wallet provider
+        const loginMethod =
+          (await window.silk.getLoginMethod()) as WaapLoginMethod
+
+        // Update state with login method
         set((state) => ({
           ...state,
           loginMethod,
-          walletProvider,
         }))
-        
+
         return loginMethod
       }
       return null
@@ -501,15 +364,16 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
       // Try EIP-6963 discovery first (most reliable)
       const eip6963Provider = getEIP6963Provider(address)
       if (eip6963Provider) {
+        set({ walletProvider: eip6963Provider })
         return eip6963Provider
       }
 
       // Fallback to window.ethereum detection
       if (window.ethereum) {
         const walletName = detectWalletByProvider(window.ethereum)
+        set({ walletProvider: walletName })
         return walletName
       }
-
       return null
     } catch (err) {
       console.error('Error detecting wallet provider:', err)
@@ -528,37 +392,21 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
       // Try EIP-6963 discovery first (most reliable)
       const eip6963Icon = getEIP6963WalletIcon(address)
       if (eip6963Icon) {
+        set({ walletIcon: eip6963Icon })
         return eip6963Icon
       }
 
       // Fallback to default icons based on wallet provider
       const { walletProvider, loginMethod } = get()
-      if (loginMethod === LOGIN_METHODS.WALLETCONNECT) {
-        return '/assets/wallets/wallet-connect-logo.svg'
-      }
-      
-      if (loginMethod === LOGIN_METHODS.WAAP) {
-        return '/assets/wallets/wally-dark.svg' // WaaP/Human wallet logo
-      }
-      
-      if (walletProvider) {
-        const providerLower = walletProvider.toLowerCase()
-        if (providerLower.includes('metamask')) {
-          return '/assets/wallets/metamask-logo.svg'
-        } else if (providerLower.includes('rabby')) {
-          return '/assets/wallets/rabby-wallet.svg' // Rabby wallet logo
-        } else if (providerLower.includes('coinbase')) {
-          return '/assets/wallets/metamask-logo.svg' // Fallback to MetaMask icon
-        } else if (providerLower.includes('brave')) {
-          return '/assets/wallets/metamask-logo.svg' // Fallback to MetaMask icon
-        }
-      }
+      const walletIcon = getFallbackWalletIcon(loginMethod, walletProvider)
 
-      // Default fallback
-      return '/assets/svg/silk-logo.svg'
+      set({ walletIcon })
+      return walletIcon
     } catch (err) {
       console.error('Error getting wallet icon:', err)
-      return '/assets/wallets/wally-dark.svg'
+      const fallbackIcon = '/assets/wallets/wally-dark.svg'
+      set({ walletIcon: fallbackIcon })
+      return fallbackIcon
     }
   },
 
@@ -593,6 +441,25 @@ export const waapWalletStore = create<WaapWalletState>((set, get) => ({
     }
   },
 
+  refreshWalletInfo: async () => {
+    try {
+      const { getLoginMethod, getWalletProvider, getWalletIcon } = get()
+      
+      // Get login method
+      await getLoginMethod()
+      
+      // Get wallet provider (this will update state)
+      getWalletProvider()
+      
+      // Get wallet icon (this will update state)
+      getWalletIcon()
+      
+      console.log('✅ Wallet info refreshed successfully')
+    } catch (err) {
+      console.error('❌ Error refreshing wallet info:', err)
+    }
+  },
+
   reset: () => set(initialState),
 }))
 
@@ -621,7 +488,7 @@ export const useWaapWalletStore = () =>
       getWalletProvider: state.getWalletProvider,
       getWalletIcon: state.getWalletIcon,
       getAllAvailableWallets: state.getAllAvailableWallets,
+      refreshWalletInfo: state.refreshWalletInfo,
       reset: state.reset,
     }))
   )
-

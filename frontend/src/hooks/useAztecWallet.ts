@@ -25,7 +25,7 @@ export function useAztecWallet() {
   const isConnected = !!address
 
   const { setL2Contracts, resetContracts } = useContractStore()
-  const { aztecWalletType, setAztecWalletType } = useWalletStore()
+  const { aztecLoginMethod, setAztecLoginMethod } = useWalletStore()
 
   // Setup contracts when account is available
   useEffect(() => {
@@ -39,7 +39,7 @@ export function useAztecWallet() {
   const connect = async (type: AztecLoginMethod) => {
     setIsConnecting(true)
     setError(null)
-    setAztecWalletType(type)
+    setAztecLoginMethod(type)
 
     try {
       if (type === 'obsidion') {
@@ -155,19 +155,19 @@ export function useAztecWallet() {
       await sdk.disconnect()
       setAzguardClient(null)
       resetContracts()
-      setAztecWalletType(null)
+      setAztecLoginMethod(null)
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
       setError(error)
       console.error(
-        `Failed to disconnect from ${aztecWalletType} wallet:`,
+        `Failed to disconnect from ${aztecLoginMethod} wallet:`,
         error
       )
     }
   }
 
   const executeTransaction = async (actions: any[]) => {
-    if (aztecWalletType === 'azguard' && azguardClient) {
+    if (aztecLoginMethod === 'azguard' && azguardClient) {
       const results = await azguardClient.execute(actions)
       if (results.length > 0 && results[0].status === 'success') {
         return results[0].txHash
@@ -192,7 +192,7 @@ export function useAztecWallet() {
     connect,
     disconnect,
     sdk,
-    aztecWalletType,
+    aztecLoginMethod,
     azguardClient,
     executeTransaction,
   }

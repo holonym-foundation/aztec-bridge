@@ -6,6 +6,11 @@ export default function PopupBlockedAlert({ onClose }: { onClose: () => void }) 
   const handleSupportClick = () => {
     // Log support link click
     logInfo('User clicked support link from popup blocked alert', {
+      walletType: null,
+      loginMethod: null,
+      walletProvider: null,
+      address: '',
+      chainId: null,
       action: 'support_link_click',
       supportUrl: 'https://support.google.com/chrome/answer/95472?hl=en&co=GENIE.Platform%3DDesktop',
       userAction: 'seeking_help',
@@ -20,6 +25,11 @@ export default function PopupBlockedAlert({ onClose }: { onClose: () => void }) 
   const handleRefreshClick = () => {
     // Log page refresh from popup blocked alert
     logInfo('User refreshed page from popup blocked alert', {
+      walletType: null,
+      loginMethod: null,
+      walletProvider: null,
+      address: '',
+      chainId: null,
       action: 'page_refresh',
       userAction: 'attempting_fix',
       refreshReason: 'popup_blocked_alert',

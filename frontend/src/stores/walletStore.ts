@@ -15,7 +15,7 @@ declare global {
 }
 
 // Constants for localStorage keys
-const AZTEC_WALLET_KEY = 'aztecWalletType'
+const AZTEC_WALLET_KEY = 'aztecLoginMethod'
 
 interface WalletState {
   // UI State
@@ -23,7 +23,7 @@ interface WalletState {
   showAzguardPrompt: boolean
 
   // Aztec Wallet State
-  aztecWalletType: AztecLoginMethod | null
+  aztecLoginMethod: AztecLoginMethod | null
   aztecAddress: string | null
   aztecAccount: any | null
   isAztecConnected: boolean
@@ -42,7 +42,7 @@ interface WalletState {
   setShowAzguardPrompt: (show: boolean) => void
 
   // Aztec Actions
-  setAztecWalletType: (type: AztecLoginMethod | null) => void
+  setAztecLoginMethod: (type: AztecLoginMethod | null) => void
   setAztecState: (state: {
     address: string | null
     account: any | null
@@ -75,7 +75,7 @@ const getInitialWalletType = (): AztecLoginMethod | null => {
 const initialState = {
   showWalletModal: false,
   showAzguardPrompt: false,
-  aztecWalletType: getInitialWalletType(),
+  aztecLoginMethod: getInitialWalletType(),
   aztecAddress: null,
   aztecAccount: null,
   isAztecConnected: false,
@@ -96,13 +96,13 @@ const walletStore = create<WalletState>((set, get) => ({
   setShowAzguardPrompt: (show) => set({ showAzguardPrompt: show }),
 
   // Aztec Actions
-  setAztecWalletType: (type) => {
+  setAztecLoginMethod: (type) => {
     if (type) {
       localStorage.setItem(AZTEC_WALLET_KEY, type)
     } else {
       localStorage.removeItem(AZTEC_WALLET_KEY)
     }
-    set({ aztecWalletType: type })
+    set({ aztecLoginMethod: type })
   },
 
   setAztecState: (state) => {
@@ -116,7 +116,7 @@ const walletStore = create<WalletState>((set, get) => ({
       aztecAccount: state.account,
       isAztecConnected: state.isConnected,
       aztecError: state.error || null,
-      aztecWalletType: storedWalletType,
+      aztecLoginMethod: storedWalletType,
     })
   },
 
@@ -128,7 +128,7 @@ const walletStore = create<WalletState>((set, get) => ({
         aztecAddress: null,
         aztecAccount: null,
         isAztecConnected: false,
-        aztecWalletType: null,
+        aztecLoginMethod: null,
       })
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
@@ -138,9 +138,9 @@ const walletStore = create<WalletState>((set, get) => ({
   },
 
   executeAztecTransaction: async (actions: any[]) => {
-    const { aztecWalletType, azguardClient } = get()
+    const { aztecLoginMethod, azguardClient } = get()
 
-    if (aztecWalletType === 'azguard' && azguardClient) {
+    if (aztecLoginMethod === 'azguard' && azguardClient) {
       const results = await azguardClient.execute(actions)
       if (results.length > 0 && results[0].status === 'success') {
         return results[0].txHash
@@ -197,7 +197,7 @@ export const useWalletStore = () =>
       showAzguardPrompt: state.showAzguardPrompt,
 
       // Aztec State
-      aztecWalletType: state.aztecWalletType,
+      aztecLoginMethod: state.aztecLoginMethod,
       aztecAddress: state.aztecAddress,
       aztecAccount: state.aztecAccount,
       isAztecConnected: state.isAztecConnected,
@@ -216,7 +216,7 @@ export const useWalletStore = () =>
       setShowAzguardPrompt: state.setShowAzguardPrompt,
 
       // Aztec Actions
-      setAztecWalletType: state.setAztecWalletType,
+      setAztecLoginMethod: state.setAztecLoginMethod,
       setAztecState: state.setAztecState,
       disconnectAztecWallet: state.disconnectAztecWallet,
       executeAztecTransaction: state.executeAztecTransaction,

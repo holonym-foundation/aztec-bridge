@@ -1,5 +1,6 @@
 import { writeFileSync, readFileSync, existsSync, mkdirSync, copyFileSync } from 'fs';
 import { join, resolve } from 'path';
+import { getEnv } from '../config/config.js';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 
@@ -248,29 +249,47 @@ export function loadExistingTokens(): DeployedToken[] {
 }
 
 /**
- * Bundle all deployments + registry into a single JSON for the frontend.
+ * Build a network-scoped bundle from the registry: only deployments whose network matches
+ * `env`, so the testnet site ships only testnet deployments and the mainnet site only
+ * mainnet ones (the two branches keep separate, non-overlapping deployment lists).
+ *
+ * `activeDeploymentId` is the registry's active id if it belongs to this env, otherwise the
+ * newest in-env deployment — never an id absent from the bundle.
+ */
+function buildEnvBundle(env: string): { activeDeploymentId: string; deployments: DeploymentFile[] } | null {
+  const registry = loadRegistry();
+  if (!registry || registry.deployments.length === 0) return null;
+
+  const inEnv = registry.deployments.filter(
+    (e) => String(e.network).toLowerCase() === env.toLowerCase(),
+  );
+
+  const deployments: DeploymentFile[] = [];
+  for (const entry of inEnv) {
+    const deployment = readJson<DeploymentFile>(join(DEPLOYMENTS_DIR, entry.file));
+    if (deployment) deployments.push(deployment);
+  }
+
+  const activeInEnv = inEnv.some((e) => e.id === registry.activeDeploymentId);
+  const newest = [...inEnv].sort((a, b) => b.deployedAt.localeCompare(a.deployedAt))[0];
+  const activeDeploymentId = activeInEnv ? registry.activeDeploymentId : (newest?.id ?? '');
+
+  return { activeDeploymentId, deployments };
+}
+
+/**
+ * Bundle the current environment's deployments into a single JSON for the frontend.
  * Format: { activeDeploymentId, deployments: DeploymentFile[] }
  */
-export function copyToFrontend(): void {
-  const registry = loadRegistry();
-  if (!registry || registry.deployments.length === 0) {
-    console.warn('⚠️  No deployments to copy');
+export function copyToFrontend(env: string = getEnv()): void {
+  const bundle = buildEnvBundle(env);
+  if (!bundle || bundle.deployments.length === 0) {
+    console.warn(`⚠️  No ${env} deployments to copy to frontend`);
     return;
   }
 
-  const allDeployments: DeploymentFile[] = [];
-  for (const entry of registry.deployments) {
-    const deployment = readJson<DeploymentFile>(join(DEPLOYMENTS_DIR, entry.file));
-    if (deployment) allDeployments.push(deployment);
-  }
-
-  const bundle = {
-    activeDeploymentId: registry.activeDeploymentId,
-    deployments: allDeployments,
-  };
-
   writeJson(FRONTEND_DEPLOYMENTS, bundle);
-  console.log(`📋 Synced ${allDeployments.length} deployment(s) to frontend: ${FRONTEND_DEPLOYMENTS}`);
+  console.log(`📋 Synced ${bundle.deployments.length} ${env} deployment(s) to frontend: ${FRONTEND_DEPLOYMENTS}`);
 
   // Sync contract artifacts to frontend
   ensureDir(FRONTEND_ARTIFACTS_DIR);
@@ -293,26 +312,15 @@ export function copyToFrontend(): void {
  * falls back to whatever (stale) deployment the SDK was last built with. Keep it in lockstep
  * with copyToFrontend so quoting (frontend bundle) and execution (SDK bundle) agree.
  */
-export function copyToSdk(): void {
-  const registry = loadRegistry();
-  if (!registry || registry.deployments.length === 0) {
-    console.warn('⚠️  No deployments to copy to SDK');
+export function copyToSdk(env: string = getEnv()): void {
+  const bundle = buildEnvBundle(env);
+  if (!bundle || bundle.deployments.length === 0) {
+    console.warn(`⚠️  No ${env} deployments to copy to SDK`);
     return;
   }
 
-  const allDeployments: DeploymentFile[] = [];
-  for (const entry of registry.deployments) {
-    const deployment = readJson<DeploymentFile>(join(DEPLOYMENTS_DIR, entry.file));
-    if (deployment) allDeployments.push(deployment);
-  }
-
-  const bundle = {
-    activeDeploymentId: registry.activeDeploymentId,
-    deployments: allDeployments,
-  };
-
   writeJson(SDK_DEPLOYMENTS, bundle);
-  console.log(`📋 Synced ${allDeployments.length} deployment(s) to SDK: ${SDK_DEPLOYMENTS}`);
+  console.log(`📋 Synced ${bundle.deployments.length} ${env} deployment(s) to SDK: ${SDK_DEPLOYMENTS}`);
 }
 
 /**

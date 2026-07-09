@@ -430,6 +430,7 @@ import {
   loadExistingTokens,
   loadActiveDeployment,
   copyToFrontend,
+  copyToSdk,
   type DeployedToken,
   type L1ContractAddresses,
 } from './utils/save_contracts.js'
@@ -4194,9 +4195,10 @@ async function main() {
       logger.info('\nTrusted forwarder setup complete')
     }
 
-    // Sync active deployment to frontend
+    // Sync active deployment to frontend + SDK (the SDK bundle resolves tx addresses).
     copyToFrontend()
-    logger.info('Deployment finalized and synced to frontend')
+    copyToSdk()
+    logger.info('Deployment finalized and synced to frontend + SDK')
   }
 
   // Run tests against the deployed/targeted token

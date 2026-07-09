@@ -1,0 +1,6 @@
+# Per-branch, network-partitioned deployment data: the testnet branch carries only testnet
+# deployments and main only mainnet. Keep each branch's copy on merge (e.g. promoting
+# testnet -> main) instead of overwriting it. Requires once per clone:
+#   git config merge.ours.driver true
+frontend/src/constants/deployments.json      merge=ours
+packages/sdk/src/contracts/deployments.json  merge=ours

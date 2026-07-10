@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
-import { STORAGE_KEYS } from '@human.tech/shield.human.sdk'
+import { STORAGE_KEYS } from '@human.tech/clean.sdk'
 import { buildFuelClaimUrl } from '@/utils/fuelClaimLink'
 import { useBridgeStore } from '@/stores/bridgeStore'
 

@@ -1,5 +1,5 @@
 /**
- * Core type definitions for @holonym/aztec-bridge-sdk
+ * Core type definitions for @human.tech/clean.sdk
  *
  * Types are organized into:
  * 1. SDK configuration types (HumanTechBridgeConfig, etc.)

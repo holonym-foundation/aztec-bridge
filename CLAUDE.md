@@ -8,7 +8,7 @@ This is the **Aztec Token Bridge** — a full-stack system for bridging ERC-20 t
 
 ```
 frontend/                    — Next.js app (bridge UI)
-packages/sdk/                — @human.tech/aztec-bridge-sdk (core bridge logic, env-agnostic)
+packages/sdk/                — @human.tech/clean.sdk (core bridge logic, env-agnostic)
 bridge-script/               — Deployment & testing scripts (TypeScript + viem)
   ├── index-testnet-compliant.ts — Main deployment + test script (deploy, seed, test all flows)
   ├── seed-pools.ts          — Standalone pool seeding script (direct USDC/FJ pool primary)

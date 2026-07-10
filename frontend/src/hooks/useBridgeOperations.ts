@@ -4,8 +4,8 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { useBridge } from '@/hooks/useBridge'
 import {
   decryptOperationPayload as sdkDecrypt,
-} from '@human.tech/shield.human.sdk'
-import type { BridgeOperation, BridgeActivityData } from '@human.tech/shield.human.sdk'
+} from '@human.tech/clean.sdk'
+import type { BridgeOperation, BridgeActivityData } from '@human.tech/clean.sdk'
 import { logInfo, DatadogUserAction } from '@/utils/datadog'
 
 /**

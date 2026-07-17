@@ -27,6 +27,7 @@ import {IInbox} from "@aztec/core/interfaces/messagebridge/IInbox.sol";
 import {IOutbox} from "@aztec/core/interfaces/messagebridge/IOutbox.sol";
 import {IRollup} from "@aztec/core/interfaces/IRollup.sol";
 import {DataStructures} from "@aztec/core/libraries/DataStructures.sol";
+import {Epoch} from "@aztec/core/libraries/TimeLib.sol";
 
 contract MockRegistry {
     address public rollup;
@@ -76,7 +77,7 @@ contract MockInbox {
 contract MockOutbox {
     mapping(bytes32 => bool) public consumed;
 
-    function consume(DataStructures.L2ToL1Msg memory message, uint256, uint256, bytes32[] calldata) external {
+    function consume(DataStructures.L2ToL1Msg memory message, Epoch, uint256, uint256, bytes32[] calldata) external {
         bytes32 messageHash = keccak256(abi.encode(message));
         require(!consumed[messageHash], "Already consumed");
         consumed[messageHash] = true;
@@ -1114,7 +1115,7 @@ contract TokenPortalTest is Test {
         bytes32[] memory path = new bytes32[](0);
 
         vm.prank(user);
-        portal.withdraw(recipient, 500 ether, false, 1, 0, path);
+        portal.withdraw(recipient, 500 ether, false, Epoch.wrap(1), 1, 0, path);
 
         uint256 expectedFee = portal.calculateFee(500 ether);
         assertEq(token.balanceOf(recipient), 500 ether - expectedFee);
@@ -1127,14 +1128,14 @@ contract TokenPortalTest is Test {
         bytes32[] memory path = new bytes32[](0);
         vm.prank(user);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        portal.withdraw(user, 100 ether, false, 1, 0, path);
+        portal.withdraw(user, 100 ether, false, Epoch.wrap(1), 1, 0, path);
     }
 
     function test_Withdraw_RevertWhen_ZeroAmount() public {
         bytes32[] memory path = new bytes32[](0);
         vm.prank(user);
         vm.expectRevert("Amount must be greater than zero");
-        portal.withdraw(user, 0, false, 1, 0, path);
+        portal.withdraw(user, 0, false, Epoch.wrap(1), 1, 0, path);
     }
 
     // =============================================================
@@ -1415,7 +1416,7 @@ contract TokenPortalTest is Test {
         bytes32[] memory path = new bytes32[](0);
 
         vm.prank(user);
-        portal.withdraw(recipient, 500 ether, false, 1, 0, path);
+        portal.withdraw(recipient, 500 ether, false, Epoch.wrap(1), 1, 0, path);
 
         uint256 expectedFee = portal.calculateFee(500 ether);
         assertEq(token.balanceOf(recipient), 500 ether - expectedFee);
@@ -1452,7 +1453,7 @@ contract TokenPortalTest is Test {
         bytes32[] memory path = new bytes32[](0);
         vm.prank(user);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        portal.withdraw(user, 500 ether, false, 1, 0, path);
+        portal.withdraw(user, 500 ether, false, Epoch.wrap(1), 1, 0, path);
     }
 
     function test_EmergencyPause_AlsoBlocksDeposits() public {

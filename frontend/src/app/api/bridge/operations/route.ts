@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
         l2ToL1MessageIndex: true,
         siblingPath: true,
         epoch: true,
+        numCheckpointsInEpoch: true,
         recipientL1Address: true,
         // Progress tracking
         currentStep: true,

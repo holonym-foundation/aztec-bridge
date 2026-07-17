@@ -74,6 +74,8 @@ export interface RecoveryWithdrawalData {
   l2BlockNumberBeforeTx: string | null
   l2ToL1MessageIndex: string | null
   siblingPath: string[] | null
+  epoch: number | null
+  numCheckpointsInEpoch: number | null
   recipientL1Address: string | null
   // Recovery-critical contract & version snapshot
   rollupVersion: number | null

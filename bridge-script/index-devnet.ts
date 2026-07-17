@@ -39,7 +39,7 @@ import {
   TokenPortalBytecode,
 } from '@aztec/l1-artifacts'
 import { TokenContract } from '@aztec/noir-contracts.js/Token'
-// import { TokenContract } from '@defi-wonderland/aztec-standards/artifacts/Token.js'
+// import { TokenContract } from '@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js'
 // import { TokenContract } from './constants/aztec/artifacts/Token.ts'
 import { TokenBridgeContract } from '@aztec/noir-contracts.js/TokenBridge'
 // import { TokenBridgeContract } from './constants/aztec/artifacts/TokenBridge.ts'
@@ -682,11 +682,11 @@ async function main() {
     logger.info('getting l1 contracts...')
     // Get the deployed L2 contracts for testing
     const l2TokenContract = await TokenContract.at(
-      AztecAddress.fromString(firstToken.l2TokenContract),
+      AztecAddress.fromStringUnsafe(firstToken.l2TokenContract),
       wallet,
     )
     const l2BridgeContract = await TokenBridgeContract.at(
-      AztecAddress.fromString(firstToken.l2BridgeContract),
+      AztecAddress.fromStringUnsafe(firstToken.l2BridgeContract),
       wallet,
     )
 

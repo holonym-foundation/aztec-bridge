@@ -1,4 +1,4 @@
-use crate::TokenBridge;
+use token_bridge_contract::TokenBridge;
 
 use aztec::{
     authwit::auth::compute_inner_authwit_hash,
@@ -10,6 +10,8 @@ use aztec::{
 };
 
 use std::embedded_curve_ops::{EmbeddedCurvePoint, EmbeddedCurveScalar, multi_scalar_mul};
+use poseidon::poseidon2::Poseidon2;
+use schnorr::SCHNORR_CHALLENGE_DST;
 
 pub global DUMMY_PORTAL: EthAddress = EthAddress::from_field(0xdead);
 pub global DUMMY_CIRCUIT_ID: Field = 42;
@@ -23,7 +25,6 @@ pub global DUMMY_ACTION_ID: Field = 1;
 global G1: EmbeddedCurvePoint = EmbeddedCurvePoint {
     x: 1,
     y: 17631683881184975370165255887551781615748388533673675138860,
-    is_infinite: false,
 };
 
 /// Fixed test private key. Using 1 so that e*sk = e, avoiding the need
@@ -41,23 +42,16 @@ pub unconstrained fn test_operator_pubkey() -> EmbeddedCurvePoint {
 }
 
 /// Compute a valid Schnorr signature over `message` using TEST_SIGNING_KEY.
-pub unconstrained fn test_schnorr_sign(message: [u8; 32]) -> [u8; 64] {
+/// Mirrors schnorr v0.4.0's Poseidon2 challenge so the sig verifies in-contract.
+pub unconstrained fn test_schnorr_sign(message: Field) -> [u8; 64] {
     let pk = test_operator_pubkey();
 
     let k: u128 = 0xdead_beef_1234;
     let r = multi_scalar_mul([G1], [EmbeddedCurveScalar::new(k as Field, 0)]);
 
-    // e = blake2s(pedersen_hash(R.x, PK.x, PK.y) || message)
-    let ped = std::hash::pedersen_hash([r.x, pk.x, pk.y]);
-    let ped_bytes: [u8; 32] = ped.to_be_bytes();
-    let mut hash_input: [u8; 64] = [0; 64];
-    for i in 0..32 {
-        hash_input[i] = ped_bytes[i];
-    }
-    for i in 0..32 {
-        hash_input[32 + i] = message[i];
-    }
-    let e_bytes: [u8; 32] = std::hash::blake2s(hash_input);
+    // e = Poseidon2(SCHNORR_CHALLENGE_DST, R.x, pk.x, pk.y, message)
+    let e: Field = Poseidon2::hash([SCHNORR_CHALLENGE_DST, r.x, pk.x, pk.y, message], 5);
+    let e_bytes: [u8; 32] = e.to_be_bytes();
 
     // s = k - e (mod Fq), since sk = 1
     let s_bytes = sub_mod_fq(k, e_bytes);
@@ -72,6 +66,24 @@ pub unconstrained fn test_schnorr_sign(message: [u8; 32]) -> [u8; 64] {
     sig
 }
 
+/// Decode a 64-byte signature (s ‖ e) into the scalar tuple schnorr v0.4.0 verifies,
+/// mirroring the in-contract decode so tests exercise the same wire format.
+pub fn sig_to_scalars(sig: [u8; 64]) -> (EmbeddedCurveScalar, EmbeddedCurveScalar) {
+    (scalar_from_bytes(sig, 0), scalar_from_bytes(sig, 32))
+}
+
+fn scalar_from_bytes(bytes: [u8; 64], offset: u32) -> EmbeddedCurveScalar {
+    let mut v: Field = 1;
+    let mut lo: Field = 0;
+    let mut hi: Field = 0;
+    for i in 0..16 {
+        lo = lo + (bytes[offset + 31 - i] as Field) * v;
+        hi = hi + (bytes[offset + 15 - i] as Field) * v;
+        v = v * 256;
+    }
+    EmbeddedCurveScalar::new(lo, hi)
+}
+
 // ========================================================================
 // Contract-specific signing helpers
 // ========================================================================
@@ -84,8 +96,7 @@ pub unconstrained fn sign_clean_hands(
     user_address: AztecAddress,
 ) -> [u8; 64] {
     let hash = compute_inner_authwit_hash([circuit_id, action_id, nonce, user_address.to_field()]);
-    let message: [u8; 32] = hash.to_be_bytes();
-    test_schnorr_sign(message)
+    test_schnorr_sign(hash)
 }
 
 /// Sign a passport attestation message (same preimage as the contract).
@@ -103,8 +114,7 @@ pub unconstrained fn sign_passport(
         deadline as Field,
         bridge_address.to_field(),
     ]);
-    let message: [u8; 32] = hash.to_be_bytes();
-    test_schnorr_sign(message)
+    test_schnorr_sign(hash)
 }
 
 // ========================================================================
@@ -219,7 +229,7 @@ pub unconstrained fn setup() -> (TestEnvironment, AztecAddress, AztecAddress, Az
     );
 
     let bridge_address =
-        env.deploy("TokenBridge").with_public_initializer(owner, initializer);
+        env.deploy("@token_bridge_contract/TokenBridge").with_public_initializer(owner, initializer);
 
     // Advance time past the DelayedPublicMutable delay (delay=600 seconds) so initial values become active.
     let advance_timestamp = env.last_block_timestamp() + 601;

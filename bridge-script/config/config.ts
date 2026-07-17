@@ -56,7 +56,7 @@ function buildConfig(env: Environment): EnvironmentConfig {
           l1RpcUrl: process.env.L1_RPC_SANDBOX || 'http://localhost:8545',
           l1ChainId: 31337,
         },
-        settings: { skipSandbox: false, version: '4.2.0-aztecnr-rc.2' },
+        settings: { skipSandbox: false, version: '5.0.0-rc.2' },
         timeouts: { deployTimeout: 120_000, txTimeout: 60_000, waitTimeout: 30_000 },
       };
 
@@ -69,7 +69,7 @@ function buildConfig(env: Environment): EnvironmentConfig {
           l1RpcUrl: process.env.L1_RPC_SEPOLIA || 'https://ethereum-sepolia-rpc.publicnode.com',
           l1ChainId: 11155111,
         },
-        settings: { skipSandbox: true, version: '4.2.0-aztecnr-rc.2' },
+        settings: { skipSandbox: true, version: '5.0.0-rc.2' },
         timeouts: { deployTimeout: 1_200_000, txTimeout: 180_000, waitTimeout: 60_000 },
       };
 
@@ -78,11 +78,11 @@ function buildConfig(env: Environment): EnvironmentConfig {
         name: 'testnet',
         environment: 'testnet',
         network: {
-          nodeUrl: process.env.AZTEC_NODE_TESTNET || 'https://rpc.testnet.aztec-labs.com',
+          nodeUrl: process.env.AZTEC_NODE_TESTNET || 'https://v5.testnet.rpc.aztec-labs.com',
           l1RpcUrl: process.env.L1_RPC_SEPOLIA || 'https://ethereum-sepolia-rpc.publicnode.com',
           l1ChainId: 11155111,
         },
-        settings: { skipSandbox: true, version: '4.2.0-aztecnr-rc.2' },
+        settings: { skipSandbox: true, version: '5.0.0-rc.2' },
         timeouts: { deployTimeout: 1_200_000, txTimeout: 180_000, waitTimeout: 60_000 },
       };
 
@@ -95,7 +95,7 @@ function buildConfig(env: Environment): EnvironmentConfig {
           l1RpcUrl: process.env.L1_RPC_MAINNET || 'https://ethereum-rpc.publicnode.com',
           l1ChainId: 1,
         },
-        settings: { skipSandbox: true, version: '4.2.0-aztecnr-rc.2' },
+        settings: { skipSandbox: true, version: '5.0.0-rc.2' },
         timeouts: { deployTimeout: 1_200_000, txTimeout: 300_000, waitTimeout: 120_000 },
       };
   }

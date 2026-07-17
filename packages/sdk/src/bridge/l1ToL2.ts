@@ -272,7 +272,7 @@ export async function executeL2Claim(
             walletAdapter.bridgeAddress,
             method,
             [
-              AztecAddress.fromString(aztecAddress),
+              AztecAddress.fromStringUnsafe(aztecAddress),
               amount,
               claimSecret,
               messageLeafIndex,
@@ -326,7 +326,7 @@ export async function executeL2Claim(
             walletAdapter.bridgeAddress,
             method,
             [
-              AztecAddress.fromString(aztecAddress),
+              AztecAddress.fromStringUnsafe(aztecAddress),
               amount,
               claimSecret,
               BigInt(idx),
@@ -1239,14 +1239,14 @@ export async function bridgeL1ToL2(
       // `fuelAmount >= maxGasCost`, so we need the fee-rate cap applied here
       // to match what checkFuelSufficiency('private') validated earlier.
       const { PrivateMintAndPayFeePaymentMethod, maxFeesPerGasFromBaseFees } =
-        await import('@wonderland/aztec-fee-payment')
+        await import('@alejoamiras/aztec-fee-payment')
       const { Gas, GasFees } = await import('@aztec/stdlib/gas')
       const baseFees = await aztecNode.getCurrentMinFees()
       const gasLimits = Gas.from({ l2Gas: 2_000_000, daGas: 50_000 })
       const teardownGasLimits = Gas.from({ l2Gas: 0, daGas: 0 })
       const maxFeesPerGas = maxFeesPerGasFromBaseFees(baseFees)
       const paymentMethod = new PrivateMintAndPayFeePaymentMethod(
-        AztecAddress.fromString(config.bridgedFpcAddress),
+        AztecAddress.fromStringUnsafe(config.bridgedFpcAddress),
         fuelAmountReceived,
         privateFuelSecret,
         privateFuelSalt,
@@ -1280,7 +1280,7 @@ export async function bridgeL1ToL2(
         const { FeeJuicePaymentMethodWithClaim } = await import('@aztec/aztec.js/fee')
         const { buildClaimGasSettings } = await import('../fuelGasEstimate')
         const paymentMethod = new FeeJuicePaymentMethodWithClaim(
-          AztecAddress.fromString(l2Address),
+          AztecAddress.fromStringUnsafe(l2Address),
           {
             claimAmount: fuelAmountReceived,
             claimSecret: fuelSecret,

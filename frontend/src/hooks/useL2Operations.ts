@@ -46,7 +46,7 @@ export const useL2TokenBalance = () => {
         throw new Error('Aztec wallet not connected or contracts not initialized')
       }
 
-      const userAddress = AztecAddress.fromString(aztecAddress)
+      const userAddress = AztecAddress.fromStringUnsafe(aztecAddress)
 
       // Single simulate_views call for both balances
       const tokenAddr = l2TokenAddress || walletAdapter.tokenAddress
@@ -109,7 +109,7 @@ export const useL2FeeJuiceBalance = () => {
         throw new Error('Aztec wallet not connected or contracts not initialized')
       }
 
-      const userAddress = AztecAddress.fromString(aztecAddress)
+      const userAddress = AztecAddress.fromStringUnsafe(aztecAddress)
 
       const [publicBalanceResult] = await walletAdapter.simulateViews([
         {
@@ -158,7 +158,7 @@ export const useL2PrivateFeeJuiceBalance = () => {
         throw new Error('Bridged FPC address not configured for this deployment')
       }
 
-      const userAddress = AztecAddress.fromString(aztecAddress)
+      const userAddress = AztecAddress.fromStringUnsafe(aztecAddress)
 
       // read the user's BridgedFPC balance (what they can spend on private
       // fuel via the FPC) — NOT FEE_JUICE.balance_of_private (the user's own
@@ -1015,12 +1015,12 @@ export const useL2TokenTransfer = () => {
         }
 
         const amountInWei = parseUnits(amount, L1_TOKENS[0]?.decimals ?? 6)
-        const recipientAddress = AztecAddress.fromString(recipient)
+        const recipientAddress = AztecAddress.fromStringUnsafe(recipient)
 
         // Use wallet adapter to execute transfer
         const method = isPrivate ? 'transfer_to_private' : 'transfer'
         const args = isPrivate
-          ? [AztecAddress.fromString(aztecAddress), recipientAddress, amountInWei]
+          ? [AztecAddress.fromStringUnsafe(aztecAddress), recipientAddress, amountInWei]
           : [recipientAddress, amountInWei]
 
         const result = await walletAdapter.executeCall(walletAdapter.tokenAddress, method, args, {

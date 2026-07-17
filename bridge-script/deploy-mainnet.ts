@@ -58,13 +58,14 @@
  */
 
 import { EthAddress } from '@aztec/foundation/eth-address'
+import { AztecAddress } from '@aztec/stdlib/aztec-address'
 import { Fr, GrumpkinScalar } from '@aztec/aztec.js/fields'
 import { createLogger, type Logger } from '@aztec/aztec.js/log'
 import { createExtendedL1Client } from '@aztec/ethereum/client'
 import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract'
 import { createEthereumChain } from '@aztec/ethereum/chain'
 import type { ExtendedViemWalletClient } from '@aztec/ethereum/types'
-import { TokenContract } from '@defi-wonderland/aztec-standards/dist/src/artifacts/Token.js'
+import { TokenContract } from '@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js'
 import { FeeJuicePaymentMethodWithClaim } from '@aztec/aztec.js/fee'
 import { createAztecNodeClient } from '@aztec/aztec.js/node'
 import { L1FeeJuicePortalManager } from '@aztec/aztec.js/ethereum'
@@ -74,8 +75,10 @@ import type { EmbeddedWallet } from '@aztec/wallets/embedded'
 import { FeeJuiceContract } from '@aztec/noir-contracts.js/FeeJuice'
 import { getCanonicalFeeJuice } from '@aztec/protocol-contracts/fee-juice'
 import { Schnorr } from '@aztec/foundation/crypto/schnorr'
-import { deriveSigningKey } from '@aztec/stdlib/keys'
-import { registerPrivateContract } from '@wonderland/aztec-fee-payment'
+// 5.0.0 dropped the deriveSigningKey export; it was an alias for the IVSK_M derivation,
+// so keep using that exact function to preserve previously-derived L2 account addresses.
+import { deriveMasterIncomingViewingSecretKey as deriveSigningKey } from '@aztec/stdlib/keys'
+import { registerPrivateContract } from '@alejoamiras/aztec-fee-payment/utils'
 import { getContract, keccak256, encodeAbiParameters, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
@@ -765,6 +768,7 @@ async function main() {
       tc.l2Symbol,
       tc.decimals,
       l2Proxy.address,
+      AztecAddress.ZERO,
     ).send({
       from: ownerAztecAddress,
       contractAddressSalt: salts.tokenSalt,

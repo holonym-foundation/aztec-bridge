@@ -44,7 +44,7 @@ export function computeL2ToL1MessageLeaf(params: {
   ])
 
   return computeL2ToL1MessageHash({
-    l2Sender: AztecAddress.fromString(l2BridgeAddress),
+    l2Sender: AztecAddress.fromStringUnsafe(l2BridgeAddress),
     l1Recipient: EthAddress.fromString(portalAddress),
     content,
     rollupVersion: new Fr(rollupVersion),
@@ -83,11 +83,9 @@ export async function computeWitness(
   let witness: Awaited<ReturnType<typeof computeL2ToL1MembershipWitness>> | undefined
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      witness = await computeL2ToL1MembershipWitness(
-        aztecNode,
-        msgLeaf,
-        txHash,
-      )
+      // v5: the node resolves the epoch's outbox roots internally (the low-level
+      // computeL2ToL1MembershipWitness now requires them to be passed explicitly).
+      witness = await aztecNode.getL2ToL1MembershipWitness(txHash, msgLeaf)
       if (witness) break
       if (attempt < maxRetries) {
         console.warn(
@@ -128,5 +126,10 @@ export async function computeWitness(
     .toBufferArray()
     .map((buf: Buffer) => `0x${buf.toString('hex')}`)
 
-  return { leafIndex, siblingPath, epoch: BigInt(epoch) }
+  return {
+    leafIndex,
+    siblingPath,
+    epoch: BigInt(epoch),
+    numCheckpointsInEpoch: BigInt(witness.numCheckpointsInEpoch),
+  }
 }

@@ -1,5 +1,5 @@
-use crate::TokenBridge;
-use crate::test::utils;
+use token_bridge_contract::TokenBridge;
+use crate::utils;
 
 use aztec::{
     authwit::auth::compute_inner_authwit_hash,
@@ -323,12 +323,10 @@ unconstrained fn test_schnorr_sign_clean_hands_valid() {
 
     // Recompute the hash the same way the contract does
     let hash = compute_inner_authwit_hash([circuit_id, action_id, nonce, user_address.to_field()]);
-    let message: [u8; 32] = hash.to_be_bytes();
-
     // Verify with the same pubkey
     let pk = utils::test_operator_pubkey();
-    let pubkey = EmbeddedCurvePoint { x: pk.x, y: pk.y, is_infinite: false };
-    let result = verify_signature(pubkey, signature, message);
+    let pubkey = EmbeddedCurvePoint { x: pk.x, y: pk.y };
+    let result = verify_signature(pubkey, utils::sig_to_scalars(signature), hash);
     assert(result, "Valid clean hands signature should verify");
 }
 
@@ -345,11 +343,9 @@ unconstrained fn test_schnorr_sign_clean_hands_wrong_message() {
     // Verify against a DIFFERENT message (wrong nonce)
     let wrong_nonce: Field = 999;
     let wrong_hash = compute_inner_authwit_hash([circuit_id, action_id, wrong_nonce, user_address.to_field()]);
-    let wrong_message: [u8; 32] = wrong_hash.to_be_bytes();
-
     let pk = utils::test_operator_pubkey();
-    let pubkey = EmbeddedCurvePoint { x: pk.x, y: pk.y, is_infinite: false };
-    let result = verify_signature(pubkey, signature, wrong_message);
+    let pubkey = EmbeddedCurvePoint { x: pk.x, y: pk.y };
+    let result = verify_signature(pubkey, utils::sig_to_scalars(signature), wrong_hash);
     assert(!result, "Signature should NOT verify against wrong message");
 }
 
@@ -365,15 +361,13 @@ unconstrained fn test_schnorr_sign_clean_hands_wrong_key() {
 
     // Recompute the correct hash
     let hash = compute_inner_authwit_hash([circuit_id, action_id, nonce, user_address.to_field()]);
-    let message: [u8; 32] = hash.to_be_bytes();
-
     // Verify against a DIFFERENT pubkey (key=2 instead of key=1)
     let wrong_pk = multi_scalar_mul(
-        [EmbeddedCurvePoint { x: 1, y: 17631683881184975370165255887551781615748388533673675138860, is_infinite: false }],
+        [EmbeddedCurvePoint { x: 1, y: 17631683881184975370165255887551781615748388533673675138860 }],
         [EmbeddedCurveScalar::new(2, 0)],
     );
-    let wrong_pubkey = EmbeddedCurvePoint { x: wrong_pk.x, y: wrong_pk.y, is_infinite: false };
-    let result = verify_signature(wrong_pubkey, signature, message);
+    let wrong_pubkey = EmbeddedCurvePoint { x: wrong_pk.x, y: wrong_pk.y };
+    let result = verify_signature(wrong_pubkey, utils::sig_to_scalars(signature), hash);
     assert(!result, "Signature should NOT verify against wrong pubkey");
 }
 
@@ -396,12 +390,10 @@ unconstrained fn test_schnorr_sign_passport_valid() {
         deadline as Field,
         bridge_address.to_field(),
     ]);
-    let message: [u8; 32] = hash.to_be_bytes();
-
     // Verify with the same pubkey
     let pk = utils::test_operator_pubkey();
-    let pubkey = EmbeddedCurvePoint { x: pk.x, y: pk.y, is_infinite: false };
-    let result = verify_signature(pubkey, signature, message);
+    let pubkey = EmbeddedCurvePoint { x: pk.x, y: pk.y };
+    let result = verify_signature(pubkey, utils::sig_to_scalars(signature), hash);
     assert(result, "Valid passport signature should verify");
 }
 
@@ -425,11 +417,9 @@ unconstrained fn test_schnorr_sign_passport_wrong_message() {
         deadline as Field,
         bridge_address.to_field(),
     ]);
-    let wrong_message: [u8; 32] = wrong_hash.to_be_bytes();
-
     let pk = utils::test_operator_pubkey();
-    let pubkey = EmbeddedCurvePoint { x: pk.x, y: pk.y, is_infinite: false };
-    let result = verify_signature(pubkey, signature, wrong_message);
+    let pubkey = EmbeddedCurvePoint { x: pk.x, y: pk.y };
+    let result = verify_signature(pubkey, utils::sig_to_scalars(signature), wrong_hash);
     assert(!result, "Signature should NOT verify against tampered amount");
 }
 

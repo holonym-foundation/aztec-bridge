@@ -4,7 +4,7 @@
 /* eslint-disable */
 import { AztecAddress, CompleteAddress } from '@aztec/aztec.js/addresses';
 import { type AbiType, type AztecAddressLike, type ContractArtifact, EventSelector, decodeFromAbi, type EthAddressLike, type FieldLike, type FunctionSelectorLike, loadContractArtifact, loadContractArtifactForPublic, type NoirCompiledContract, type OptionLike, type U128Like, type WrappedFieldLike } from '@aztec/aztec.js/abi';
-import { Contract, ContractBase, ContractFunctionInteraction, type ContractMethod, type ContractStorageLayout, DeployMethod } from '@aztec/aztec.js/contracts';
+import { Contract, ContractBase, ContractFunctionInteraction, type ContractMethod, type ContractStorageLayout, type DeployInstantiationOptions, DeployMethod } from '@aztec/aztec.js/contracts';
 import { EthAddress } from '@aztec/aztec.js/addresses';
 import { Fr, Point } from '@aztec/aztec.js/fields';
 import { type PublicKey, PublicKeys } from '@aztec/aztec.js/keys';
@@ -44,32 +44,37 @@ export class TokenBridgeContract extends ContractBase {
   
   /**
    * Creates a tx to deploy a new instance of this contract.
+   * @param instantiation - Optional address-affecting parameters (salt, deployer / universalDeploy, publicKeys).
+   *                       Salt defaults to a random value; the deployer is locked lazily from the first send-time `from`.
    */
-  public static deploy(wallet: Wallet, token_minter_proxy: AztecAddressLike, portal: EthAddressLike, human_id_attester_x: FieldLike, human_id_attester_y: FieldLike, circuit_id: FieldLike, action_id: FieldLike, passport_signer_x: FieldLike, passport_signer_y: FieldLike) {
-    return new DeployMethod<TokenBridgeContract>(PublicKeys.default(), wallet, TokenBridgeContractArtifact, (instance, wallet) => TokenBridgeContract.at(instance.address, wallet), Array.from(arguments).slice(1));
-  }
-
-  /**
-   * Creates a tx to deploy a new instance of this contract using the specified public keys hash to derive the address.
-   */
-  public static deployWithPublicKeys(publicKeys: PublicKeys, wallet: Wallet, token_minter_proxy: AztecAddressLike, portal: EthAddressLike, human_id_attester_x: FieldLike, human_id_attester_y: FieldLike, circuit_id: FieldLike, action_id: FieldLike, passport_signer_x: FieldLike, passport_signer_y: FieldLike) {
-    return new DeployMethod<TokenBridgeContract>(publicKeys, wallet, TokenBridgeContractArtifact, (instance, wallet) => TokenBridgeContract.at(instance.address, wallet), Array.from(arguments).slice(2));
+  public static deploy(wallet: Wallet, token_minter_proxy: AztecAddressLike, portal: EthAddressLike, human_id_attester_x: FieldLike, human_id_attester_y: FieldLike, circuit_id: FieldLike, action_id: FieldLike, passport_signer_x: FieldLike, passport_signer_y: FieldLike, instantiation?: DeployInstantiationOptions) {
+    return DeployMethod.create<TokenBridgeContract>(
+      wallet,
+      {
+        artifact: TokenBridgeContractArtifact,
+        postDeployCtor: (instance, wallet) => TokenBridgeContract.at(instance.address, wallet),
+        args: [token_minter_proxy, portal, human_id_attester_x, human_id_attester_y, circuit_id, action_id, passport_signer_x, passport_signer_y],
+      },
+      instantiation,
+    );
   }
 
   /**
    * Creates a tx to deploy a new instance of this contract using the specified constructor method.
    */
   public static deployWithOpts<M extends keyof TokenBridgeContract['methods']>(
-    opts: { publicKeys?: PublicKeys; method?: M; wallet: Wallet },
+    opts: { method?: M; wallet: Wallet; instantiation?: DeployInstantiationOptions },
     ...args: Parameters<TokenBridgeContract['methods'][M]>
   ) {
-    return new DeployMethod<TokenBridgeContract>(
-      opts.publicKeys ?? PublicKeys.default(),
+    return DeployMethod.create<TokenBridgeContract>(
       opts.wallet,
-      TokenBridgeContractArtifact,
-      (instance, wallet) => TokenBridgeContract.at(instance.address, wallet),
-      Array.from(arguments).slice(1),
-      opts.method ?? 'constructor',
+      {
+        artifact: TokenBridgeContractArtifact,
+        postDeployCtor: (instance, wallet) => TokenBridgeContract.at(instance.address, wallet),
+        args,
+        constructorNameOrArtifact: opts.method ?? 'constructor',
+      },
+      opts.instantiation,
     );
   }
   

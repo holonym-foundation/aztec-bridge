@@ -73,6 +73,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         l2ToL1MessageIndex: true,
         siblingPath: true,
         epoch: true,
+        numCheckpointsInEpoch: true,
         recipientL1Address: true,
         // Progress tracking
         currentStep: true,
@@ -210,6 +211,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const currentStep = sanitizeInt(body.currentStep, 0, 10)
     // L2→L1 witness epoch
     const epoch = sanitizeInt(body.epoch, 0, 1_000_000_000)
+    const numCheckpointsInEpoch = sanitizeInt(body.numCheckpointsInEpoch, 0, 1_000_000_000)
     // L1→L2 receipt fields
     const claimAmount = sanitizeNumericString(body.claimAmount)
     const l1BlockNumber = sanitizeNumericString(body.l1BlockNumber)
@@ -339,6 +341,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (fuelAmount) updateData.fuelAmount = fuelAmount
     // L2→L1 witness epoch
     if (epoch != null) updateData.epoch = epoch
+    if (numCheckpointsInEpoch != null) updateData.numCheckpointsInEpoch = numCheckpointsInEpoch
 
     if (Object.keys(updateData).length === 0) {
       // A currentStep-only no-op (resume re-walk / idempotent retry) is valid, not an error.

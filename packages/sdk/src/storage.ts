@@ -305,6 +305,10 @@ export function buildWithdrawalExport(withdrawal: any): {
       nodeInfo: withdrawal.nodeInfo ?? undefined,
       l2ToL1MessageIndex: withdrawal.l2ToL1MessageIndex ?? withdrawal.leafIndex,
       siblingPath: withdrawal.siblingPath,
+      // epoch + numCheckpointsInEpoch are required by the v5 epoch-based Outbox to
+      // replay the L1 withdraw directly from this file when the server DB is gone.
+      epoch: withdrawal.epoch ?? undefined,
+      numCheckpointsInEpoch: withdrawal.numCheckpointsInEpoch ?? undefined,
       amount: withdrawal.amount,
       l1Address: withdrawal.l1Address,
       l2Address: withdrawal.l2Address,
@@ -315,6 +319,7 @@ export function buildWithdrawalExport(withdrawal: any): {
       rollupVersion: withdrawal.rollupVersion ?? undefined,
       chainIdL1: withdrawal.chainIdL1 ?? undefined,
       l1RollupAddress: withdrawal.l1RollupAddress ?? undefined,
+      l1OutboxAddress: withdrawal.l1OutboxAddress ?? undefined,
     },
   }
 }

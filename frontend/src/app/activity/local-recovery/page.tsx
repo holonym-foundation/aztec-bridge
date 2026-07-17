@@ -45,6 +45,7 @@ interface LocalRecoveryEntry {
   l2ToL1MessageIndex: string | null
   siblingPath: string[] | null
   epoch: number | null
+  numCheckpointsInEpoch: number | null
   recipientL1Address: string | null
   rollupVersion: number | null
   chainIdL1: number | null
@@ -129,6 +130,7 @@ function toLocalRecoveryEntry(
     l2ToL1MessageIndex: raw.l2ToL1MessageIndex != null ? String(raw.l2ToL1MessageIndex) : null,
     siblingPath: Array.isArray(raw.siblingPath) ? raw.siblingPath : null,
     epoch: raw.epoch != null ? Number(raw.epoch) : null,
+    numCheckpointsInEpoch: raw.numCheckpointsInEpoch != null ? Number(raw.numCheckpointsInEpoch) : null,
     recipientL1Address: raw.recipientL1Address ?? null,
     rollupVersion: raw.rollupVersion != null ? Number(raw.rollupVersion) : null,
     chainIdL1: raw.chainIdL1 != null ? Number(raw.chainIdL1) : null,
@@ -186,6 +188,7 @@ function toBridgeOperationShape(entry: LocalRecoveryEntry): BridgeOperation {
     l2ToL1MessageIndex: server?.l2ToL1MessageIndex ?? entry.l2ToL1MessageIndex,
     siblingPath: server?.siblingPath ?? entry.siblingPath,
     epoch: server?.epoch ?? entry.epoch,
+    numCheckpointsInEpoch: server?.numCheckpointsInEpoch ?? entry.numCheckpointsInEpoch,
     recipientL1Address: server?.recipientL1Address ?? entry.recipientL1Address,
     rollupVersion: server?.rollupVersion ?? entry.rollupVersion,
     chainIdL1: server?.chainIdL1 ?? entry.chainIdL1,
@@ -559,6 +562,8 @@ export default function LocalRecoveryPage() {
             l2BlockNumberBeforeTx: op.l2BlockNumberBeforeTx,
             l2ToL1MessageIndex: op.l2ToL1MessageIndex,
             siblingPath: op.siblingPath,
+            epoch: op.epoch,
+            numCheckpointsInEpoch: op.numCheckpointsInEpoch,
             recipientL1Address: op.recipientL1Address ?? l1Address,
             rollupVersion: op.rollupVersion,
             chainIdL1: op.chainIdL1,

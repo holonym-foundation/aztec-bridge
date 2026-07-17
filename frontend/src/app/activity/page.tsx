@@ -67,6 +67,8 @@ export default function ActivityPage() {
             l2BlockNumberBeforeTx: operation.l2BlockNumberBeforeTx,
             l2ToL1MessageIndex: operation.l2ToL1MessageIndex,
             siblingPath: operation.siblingPath,
+            epoch: operation.epoch,
+            numCheckpointsInEpoch: operation.numCheckpointsInEpoch,
             recipientL1Address: operation.recipientL1Address ?? l1Address,
             rollupVersion: operation.rollupVersion,
             chainIdL1: operation.chainIdL1,

@@ -41,15 +41,14 @@ async function getContractArtifact(type: ContractType) {
     return loadContractArtifact(proxyJson.default ?? proxyJson)
   }
   if (type === 'bridged_fpc') {
-    const { PrivateFPCContractArtifact } = await import('@wonderland/aztec-fee-payment')
+    const { PrivateFPCContractArtifact } = await import('@alejoamiras/aztec-fee-payment')
     return PrivateFPCContractArtifact
   }
   if (type === 'fee_juice') {
     const { FeeJuiceContractArtifact } = await import('@aztec/noir-contracts.js/FeeJuice')
     return FeeJuiceContractArtifact
   }
-  // Token artifact from Wonderland npm package (compiled for SDK 4.2)
-  const { TokenContractArtifact } = await import('@defi-wonderland/aztec-standards/dist/src/artifacts/Token.js')
+  const { TokenContractArtifact } = await import('@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js')
   return TokenContractArtifact
 }
 
@@ -116,7 +115,7 @@ class WalletAdapter {
     await Promise.all(
       deployedContracts.map(async ({ addr, type }) => {
         try {
-          const address = AztecAddress.fromString(addr)
+          const address = AztecAddress.fromStringUnsafe(addr)
           const [instance, artifact] = await Promise.all([aztecNode.getContract(address), getContractArtifact(type)])
           if (instance) {
             await this.wallet.registerContract(instance, artifact)
@@ -132,7 +131,7 @@ class WalletAdapter {
     // locally and register it with the wallet's PXE.
     if (BRIDGED_FPC_ADDRESS) {
       try {
-        const { registerPrivateContract } = await import('@wonderland/aztec-fee-payment')
+        const { registerPrivateContract } = await import('@alejoamiras/aztec-fee-payment')
         await registerPrivateContract(this.wallet, Fr.ZERO)
       } catch {
         // May already be registered
@@ -141,7 +140,7 @@ class WalletAdapter {
   }
 
   async simulateView(contract: AztecAddress | string, method: string, args: any[]): Promise<SimulateViewResult> {
-    const addr = typeof contract === 'string' ? AztecAddress.fromString(contract) : contract
+    const addr = typeof contract === 'string' ? AztecAddress.fromStringUnsafe(contract) : contract
     const type = resolveArtifactType(addr.toString(), this.bridgeAddress)
     const artifact = await getContractArtifact(type)
     const instance = await Contract.at(addr, artifact, this.wallet)
@@ -169,7 +168,7 @@ class WalletAdapter {
     args: any[],
     options?: { contractType?: ContractType; fee?: { paymentMethod: any } },
   ): Promise<void> {
-    const addr = typeof contract === 'string' ? AztecAddress.fromString(contract) : contract
+    const addr = typeof contract === 'string' ? AztecAddress.fromStringUnsafe(contract) : contract
     const type = options?.contractType ?? resolveArtifactType(addr.toString(), this.bridgeAddress)
     const artifact = await getContractArtifact(type)
     const instance = await Contract.at(addr, artifact, this.wallet)
@@ -200,7 +199,7 @@ class WalletAdapter {
     args: any[],
     options?: { contractType?: ContractType; fee?: { paymentMethod: any; gasSettings?: any } },
   ): Promise<ExecuteCallResult> {
-    const addr = typeof contract === 'string' ? AztecAddress.fromString(contract) : contract
+    const addr = typeof contract === 'string' ? AztecAddress.fromStringUnsafe(contract) : contract
     const type = options?.contractType ?? resolveArtifactType(addr.toString(), this.bridgeAddress)
     const artifact = await getContractArtifact(type)
     const instance = await Contract.at(addr, artifact, this.wallet)
@@ -232,7 +231,7 @@ class WalletAdapter {
   ): Promise<ExecuteCallResult> {
     const interactions = await Promise.all(
       calls.map(async (call) => {
-        const addr = typeof call.contract === 'string' ? AztecAddress.fromString(call.contract) : call.contract
+        const addr = typeof call.contract === 'string' ? AztecAddress.fromStringUnsafe(call.contract) : call.contract
         const type = call.contractType ?? resolveArtifactType(addr.toString(), this.bridgeAddress)
         const artifact = await getContractArtifact(type)
         const instance = await Contract.at(addr, artifact, this.wallet)
@@ -276,12 +275,12 @@ class WalletAdapter {
   ): Promise<ExecuteCallResult> {
     const user = userAddress
       ? typeof userAddress === 'string'
-        ? AztecAddress.fromString(userAddress)
+        ? AztecAddress.fromStringUnsafe(userAddress)
         : userAddress
       : this.account
 
-    const bridgeAddr = AztecAddress.fromString(this.bridgeAddress)
-    const tokenAddr = AztecAddress.fromString(this.tokenAddress)
+    const bridgeAddr = AztecAddress.fromStringUnsafe(this.bridgeAddress)
+    const tokenAddr = AztecAddress.fromStringUnsafe(this.tokenAddress)
 
     const [tokenArtifact, bridgeArtifact] = await Promise.all([
       getContractArtifact('token'),
@@ -294,7 +293,7 @@ class WalletAdapter {
     // Set public authwit: allow TokenMinterProxy to burn_public on behalf of user.
     // Call chain: Bridge → TokenMinterProxy → Token.burn_public, so Token sees
     // msg_sender = TokenMinterProxy. The authwit caller must match that.
-    const proxyAddr = AztecAddress.fromString(this.proxyAddress)
+    const proxyAddr = AztecAddress.fromStringUnsafe(this.proxyAddress)
     const authwit = await SetPublicAuthwitContractInteraction.create(
       this.wallet,
       this.account,
@@ -338,12 +337,12 @@ class WalletAdapter {
   ): Promise<ExecuteCallResult> {
     const user = userAddress
       ? typeof userAddress === 'string'
-        ? AztecAddress.fromString(userAddress)
+        ? AztecAddress.fromStringUnsafe(userAddress)
         : userAddress
       : this.account
 
-    const bridgeAddr = AztecAddress.fromString(this.bridgeAddress)
-    const tokenAddr = AztecAddress.fromString(this.tokenAddress)
+    const bridgeAddr = AztecAddress.fromStringUnsafe(this.bridgeAddress)
+    const tokenAddr = AztecAddress.fromStringUnsafe(this.tokenAddress)
 
     const [tokenArtifact, bridgeArtifact] = await Promise.all([
       getContractArtifact('token'),
@@ -357,7 +356,7 @@ class WalletAdapter {
     // Call chain: Bridge → TokenMinterProxy → Token.burn_private.
     // Token calls verify_private_authwit as a static call → msg_sender inside verify = Token contract.
     // So consumer (outer hash) = tokenAddr, caller (inner hash) = proxyAddr.
-    const proxyAddr = AztecAddress.fromString(this.proxyAddress)
+    const proxyAddr = AztecAddress.fromStringUnsafe(this.proxyAddress)
     const burnCall = await token.methods.burn_private(user, amount, nonce).getFunctionCall()
     const authWit = await this.wallet.createAuthWit(this.account, {
       caller: proxyAddr,
@@ -386,7 +385,7 @@ class WalletAdapter {
   }
 
   async registerToken(tokenAddress: AztecAddress | string): Promise<void> {
-    const addr = typeof tokenAddress === 'string' ? AztecAddress.fromString(tokenAddress) : tokenAddress
+    const addr = typeof tokenAddress === 'string' ? AztecAddress.fromStringUnsafe(tokenAddress) : tokenAddress
     const type = resolveArtifactType(addr.toString(), this.bridgeAddress)
     try {
       const [instance, artifact] = await Promise.all([aztecNode.getContract(addr), getContractArtifact(type)])
@@ -407,7 +406,7 @@ export async function createWalletAdapter(context: WalletContext) {
   let account: AztecAddress
   if (context.aztecAccount?.address) {
     const addr = context.aztecAccount.address.toString()
-    account = AztecAddress.fromString(addr)
+    account = AztecAddress.fromStringUnsafe(addr)
   } else {
     const accounts = await context.sdkWallet.getAccounts()
     if (!accounts || accounts.length === 0) {

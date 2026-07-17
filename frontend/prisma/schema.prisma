@@ -162,6 +162,7 @@ model BridgeActivity {
   l2ToL1MessageIndex String? // Leaf index in L2→L1 message tree (same as frontend l2ToL1MessageIndex)
   siblingPath       Json?   // Merkle sibling path (array of hex strings) for L1 portal withdraw
   epoch             Int?    // L2→L1: epoch derived from l2BlockNumber; needed for L1 withdraw proof
+  numCheckpointsInEpoch Int? // L2→L1: partial-proof depth for the epoch-based Outbox consume; needed for L1 withdraw proof
 
   // --- L1→L2 recovery hint ---
   l1BlockNumberBeforeTx String? // L1 block number captured before sending deposit tx; starting point if receipt lost

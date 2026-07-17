@@ -23,6 +23,7 @@ function makeParams(overrides?: Partial<Parameters<typeof executeL1Withdraw>[0]>
     l1Address: '0x1111111111111111111111111111111111111111',
     amount: 1000n,
     epoch: 42n,
+    numCheckpointsInEpoch: 1n,
     leafIndex: '0',
     siblingPath: ['0x' + '00'.repeat(32)],
     portalAddress: '0x2222222222222222222222222222222222222222',

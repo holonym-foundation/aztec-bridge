@@ -1,5 +1,4 @@
 mod config;
-mod test;
 
 // Minimal implementation of the token bridge that can move funds between L1 <> L2.
 // The bridge has a corresponding Portal contract on L1 that it is attached to
@@ -36,9 +35,11 @@ pub contract TokenBridge {
         get_withdraw_content_hash,
     };
 
-    use std::embedded_curve_ops::EmbeddedCurvePoint;
+    use std::embedded_curve_ops::{EmbeddedCurvePoint, EmbeddedCurveScalar};
     use schnorr::verify_signature;
     use token_minter_proxy::TokenMinterProxy;
+
+    pub(crate) global VALUE_CHANGE_DELAY: u64 = 600;
 
     #[derive(Deserialize, Serialize)]
     pub struct CleanHandsData {
@@ -67,10 +68,10 @@ pub contract TokenBridge {
         pending_owner: PublicMutable<AztecAddress, Context>,
         config: PublicImmutable<Config, Context>,
         // clean hands and passport verification vars
-        human_id_attester_pubkey: DelayedPublicMutable<GrumpkinPubKey, 600, Context>,
-        clean_hands_circuit_id: DelayedPublicMutable<Field, 600, Context>,
-        clean_hands_action_id: DelayedPublicMutable<Field, 600, Context>,
-        passport_signer_pubkey: DelayedPublicMutable<GrumpkinPubKey, 600, Context>,
+        human_id_attester_pubkey: DelayedPublicMutable<GrumpkinPubKey, VALUE_CHANGE_DELAY, Context>,
+        clean_hands_circuit_id: DelayedPublicMutable<Field, VALUE_CHANGE_DELAY, Context>,
+        clean_hands_action_id: DelayedPublicMutable<Field, VALUE_CHANGE_DELAY, Context>,
+        passport_signer_pubkey: DelayedPublicMutable<GrumpkinPubKey, VALUE_CHANGE_DELAY, Context>,
         // Mapping: user address => nonce => consumed status
         clean_hands_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
         passport_nonces: Map<AztecAddress, Map<Field, PublicMutable<bool, Context>, Context>, Context>,
@@ -186,7 +187,7 @@ pub contract TokenBridge {
         // Consume message and emit nullifier
         self.context.consume_l1_to_l2_message(
             content_hash,
-            secret,
+            [secret],
             config.portal,
             message_leaf_index,
         );
@@ -355,12 +356,28 @@ pub contract TokenBridge {
         let content_hash = get_mint_to_private_content_hash(amount);
         self.context.consume_l1_to_l2_message(
             content_hash,
-            secret_for_L1_to_L2_message_consumption,
+            [secret_for_L1_to_L2_message_consumption],
             config.portal,
             message_leaf_index,
         );
         // At last we mint the tokens
         self.call(TokenMinterProxy::at(config.token_minter_proxy).mint_to_private(recipient, amount));
+    }
+
+    // Decode a 64-byte Schnorr signature (s ‖ e, each a 32-byte big-endian grumpkin scalar,
+    // as emitted by @aztec/foundation's SchnorrSignature) into an EmbeddedCurveScalar. schnorr
+    // v0.4.0's verify_signature takes the scalar tuple directly rather than raw bytes.
+    #[contract_library_method]
+    fn schnorr_scalar_from_bytes(bytes: [u8; 64], offset: u32) -> EmbeddedCurveScalar {
+        let mut v: Field = 1;
+        let mut lo: Field = 0;
+        let mut hi: Field = 0;
+        for i in 0..16 {
+            lo = lo + (bytes[offset + 31 - i] as Field) * v;
+            hi = hi + (bytes[offset + 15 - i] as Field) * v;
+            v = v * 256;
+        }
+        EmbeddedCurveScalar::new(lo, hi)
     }
 
     // Verify clean hands signature using Schnorr over Grumpkin
@@ -374,8 +391,10 @@ pub contract TokenBridge {
         signature: [u8; 64],
     ) -> bool {
         let hash = compute_inner_authwit_hash([circuit_id, action_id, nonce, user_address.to_field()]);
-        let pubkey = EmbeddedCurvePoint { x: attester_pubkey.x, y: attester_pubkey.y, is_infinite: false };
-        verify_signature(pubkey, signature, hash.to_be_bytes::<32>())
+        let pubkey = EmbeddedCurvePoint { x: attester_pubkey.x, y: attester_pubkey.y };
+        let sig_s = schnorr_scalar_from_bytes(signature, 0);
+        let sig_e = schnorr_scalar_from_bytes(signature, 32);
+        verify_signature(pubkey, (sig_s, sig_e), hash)
     }
 
     #[external("public")]
@@ -411,8 +430,10 @@ pub contract TokenBridge {
             deadline as Field,
             bridge_address.to_field(),
         ]);
-        let pubkey = EmbeddedCurvePoint { x: passport_pubkey.x, y: passport_pubkey.y, is_infinite: false };
-        verify_signature(pubkey, signature, hash.to_be_bytes::<32>())
+        let pubkey = EmbeddedCurvePoint { x: passport_pubkey.x, y: passport_pubkey.y };
+        let sig_s = schnorr_scalar_from_bytes(signature, 0);
+        let sig_e = schnorr_scalar_from_bytes(signature, 32);
+        verify_signature(pubkey, (sig_s, sig_e), hash)
     }
 
     // Public function to consume passport nonce (called from private context)

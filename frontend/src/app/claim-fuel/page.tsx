@@ -122,7 +122,7 @@ export default function ClaimFuelPage() {
   const recipientMatches = useMemo(() => {
     if (!payload || !aztecAddress) return false
     try {
-      const expected = AztecAddress.fromString(payload.recipient).toString().toLowerCase()
+      const expected = AztecAddress.fromStringUnsafe(payload.recipient).toString().toLowerCase()
       return expected === aztecAddress.toLowerCase()
     } catch {
       return false
@@ -145,7 +145,7 @@ export default function ClaimFuelPage() {
       const { buildClaimGasSettings } = await import('@/utils/fuelGasEstimate')
 
       const gasSettings = await buildClaimGasSettings()
-      const paymentMethod = new FeeJuicePaymentMethodWithClaim(AztecAddress.fromString(aztecAddress), {
+      const paymentMethod = new FeeJuicePaymentMethodWithClaim(AztecAddress.fromStringUnsafe(aztecAddress), {
         claimAmount: BigInt(payload.claimAmount),
         claimSecret: Fr.fromString(payload.claimSecret),
         messageLeafIndex: BigInt(payload.messageLeafIndex),

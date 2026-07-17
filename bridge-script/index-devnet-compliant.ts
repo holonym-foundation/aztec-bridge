@@ -32,7 +32,7 @@ import {
   FeeAssetHandlerBytecode,
   RollupAbi,
 } from '@aztec/l1-artifacts'
-import { TokenContract, TokenContractArtifact } from '@defi-wonderland/aztec-standards/dist/src/artifacts/Token.js'
+import { TokenContract, TokenContractArtifact } from '@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js'
 import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee/testing'
 import { SetPublicAuthwitContractInteraction, computeInnerAuthWitHashFromAction } from '@aztec/aztec.js/authorization'
 import { EmbeddedWallet } from '@aztec/wallets/embedded'
@@ -41,7 +41,9 @@ import { computeL2ToL1MembershipWitness } from '@aztec/stdlib/messaging'
 import { sha256ToField } from '@aztec/foundation/crypto/sha256'
 import { computeL2ToL1MessageHash, computeSecretHash } from '@aztec/stdlib/hash'
 import { Schnorr } from '@aztec/foundation/crypto/schnorr'
-import { deriveSigningKey } from '@aztec/stdlib/keys'
+// 5.0.0 dropped the deriveSigningKey export; it was an alias for the IVSK_M derivation,
+// so keep using that exact function to preserve previously-derived L2 account addresses.
+import { deriveMasterIncomingViewingSecretKey as deriveSigningKey } from '@aztec/stdlib/keys'
 import { computeInnerAuthWitHash } from '@aztec/stdlib/auth-witness'
 import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin'
 import 'dotenv/config'
@@ -561,7 +563,7 @@ async function signL2CleanHandsAttestation(params: {
     new Fr(params.nonce),
     new Fr(BigInt(params.userAztecAddress.toString())),
   ])
-  const sig = await schnorr.constructSignature(hash.toBuffer(), l2PochSigningKey)
+  const sig = await schnorr.constructSignature(hash, l2PochSigningKey)
   return [...sig.toBuffer()]
 }
 
@@ -585,7 +587,7 @@ async function signL2PassportAttestation(params: {
     new Fr(params.deadline),
     new Fr(BigInt(params.bridgeAddress.toString())),
   ])
-  const sig = await schnorr.constructSignature(hash.toBuffer(), l2PassportSigningKey)
+  const sig = await schnorr.constructSignature(hash, l2PassportSigningKey)
   return [...sig.toBuffer()]
 }
 
@@ -681,7 +683,7 @@ async function deployCompliantTokenSetup(
     tokenConfig.l2Symbol,
     tokenConfig.decimals,
     l2ProxyContract.address,    // minter = proxy
-    ownerAztecAddress,          // upgrade_authority = owner
+    AztecAddress.ZERO,          // auth_contract disabled (bridge uses AuthRegistry authwits)
   ).send({
     from: ownerAztecAddress,
     contractAddressSalt: tokenSalt,
@@ -841,7 +843,7 @@ async function testPublicBridgeFlow(
   // Claim on L2
   logger.info(`[L2] Claiming tokens publicly`)
   const l2BridgeContract = TokenBridgeContract.at(
-    AztecAddress.fromString(deployed.l2BridgeContract),
+    AztecAddress.fromStringUnsafe(deployed.l2BridgeContract),
     wallet
   )
 
@@ -862,7 +864,7 @@ async function testPublicBridgeFlow(
     })
 
   const l2TokenContract = TokenContract.at(
-    AztecAddress.fromString(deployed.l2TokenContract),
+    AztecAddress.fromStringUnsafe(deployed.l2TokenContract),
     wallet
   )
   const balance = await l2TokenContract.methods
@@ -1018,7 +1020,7 @@ async function testBridgeWithFuelFlow(
   // Claim token deposit on L2
   logger.info(`[L2] Claiming tokens publicly (from BridgeWithFuel deposit)`)
   const l2BridgeContract = TokenBridgeContract.at(
-    AztecAddress.fromString(deployed.l2BridgeContract),
+    AztecAddress.fromStringUnsafe(deployed.l2BridgeContract),
     wallet
   )
 
@@ -1031,7 +1033,7 @@ async function testBridgeWithFuelFlow(
     })
 
   const l2TokenContract = TokenContract.at(
-    AztecAddress.fromString(deployed.l2TokenContract),
+    AztecAddress.fromStringUnsafe(deployed.l2TokenContract),
     wallet
   )
   const newBalance = await l2TokenContract.methods
@@ -1071,7 +1073,7 @@ async function testPublicExitFlow(
     wallet,
     ownerAztecAddress,
     {
-      caller: AztecAddress.fromString(deployed.l2ProxyContract),
+      caller: AztecAddress.fromStringUnsafe(deployed.l2ProxyContract),
       action: l2TokenContract.methods.burn_public(ownerAztecAddress, withdrawAmount, nonce),
     },
     true
@@ -1257,7 +1259,7 @@ async function testPrivateDepositAndClaimFlow(
   // Claim on L2 (private)
   logger.info(`[L2] Claiming tokens privately`)
   const l2BridgeContract = TokenBridgeContract.at(
-    AztecAddress.fromString(deployed.l2BridgeContract),
+    AztecAddress.fromStringUnsafe(deployed.l2BridgeContract),
     wallet
   )
 
@@ -1281,7 +1283,7 @@ async function testPrivateDepositAndClaimFlow(
 
   // Verify private balance
   const l2TokenContract = TokenContract.at(
-    AztecAddress.fromString(deployed.l2TokenContract),
+    AztecAddress.fromStringUnsafe(deployed.l2TokenContract),
     wallet
   )
   const privateBalance = await l2TokenContract.methods
@@ -1321,7 +1323,7 @@ async function testPrivateExitFlow(
 
   // Private AuthWit: authorize the PROXY to burn private tokens
   logger.info(`[L2] Creating private authwit for proxy to burn ${withdrawAmount} tokens`)
-  const proxyAddress = AztecAddress.fromString(deployed.l2ProxyContract)
+  const proxyAddress = AztecAddress.fromStringUnsafe(deployed.l2ProxyContract)
   const burnAction = l2TokenContract.methods.burn_private(ownerAztecAddress, withdrawAmount, authwitNonce)
   const burnAuthWitness = await wallet.createAuthWit(ownerAztecAddress, {
     caller: proxyAddress,
@@ -1333,7 +1335,7 @@ async function testPrivateExitFlow(
   let cleanHandsData: { nonce: bigint, action_id: bigint, signature: number[] }
   let passportData: { max_amount: bigint, nonce: bigint, deadline: bigint, signature: number[] }
 
-  const l2BridgeAddress = AztecAddress.fromString(deployed.l2BridgeContract)
+  const l2BridgeAddress = AztecAddress.fromStringUnsafe(deployed.l2BridgeContract)
 
   if (attestationType === 'poch') {
     const pochNonce = BigInt(Date.now())
@@ -1531,7 +1533,7 @@ async function testNegativeCrossClaim(
 
   // Now try the WRONG claim type
   const l2BridgeContract = TokenBridgeContract.at(
-    AztecAddress.fromString(deployed.l2BridgeContract),
+    AztecAddress.fromStringUnsafe(deployed.l2BridgeContract),
     wallet
   )
 
@@ -1639,12 +1641,12 @@ async function testWrongRecipientCantClaimPublic(
   await wait(120_000)
 
   const l2BridgeContract = TokenBridgeContract.at(
-    AztecAddress.fromString(deployed.l2BridgeContract),
+    AztecAddress.fromStringUnsafe(deployed.l2BridgeContract),
     wallet
   )
 
   // Try claiming with a DIFFERENT address (random)
-  const wrongAddress = AztecAddress.fromString('0x' + '01'.repeat(32))
+  const wrongAddress = AztecAddress.fromStringUnsafe('0x' + '01'.repeat(32))
   logger.info(`[L2] Attempting claim_public with wrong to=${wrongAddress} (should FAIL)`)
   try {
     await l2BridgeContract.methods
@@ -1752,7 +1754,7 @@ async function testWrongSecretCantClaimPrivate(
   await wait(120_000)
 
   const l2BridgeContract = TokenBridgeContract.at(
-    AztecAddress.fromString(deployed.l2BridgeContract),
+    AztecAddress.fromStringUnsafe(deployed.l2BridgeContract),
     wallet
   )
 
@@ -2159,7 +2161,7 @@ async function main() {
       { address: deployed.l2TokenContract, artifact: TokenContractArtifact, name: 'Token' },
     ]
     for (const { address, artifact, name } of contractsToRegister) {
-      const aztecAddr = AztecAddress.fromString(address)
+      const aztecAddr = AztecAddress.fromStringUnsafe(address)
       const instance = await node.getContract(aztecAddr)
       if (!instance) {
         logger.warn(`[PXE] Contract instance not found on node for ${name} at ${address} — may already be registered`)
@@ -2171,11 +2173,11 @@ async function main() {
 
     // Instantiate L2 contract handles (reused across tests)
     const l2BridgeContract = TokenBridgeContract.at(
-      AztecAddress.fromString(deployed.l2BridgeContract),
+      AztecAddress.fromStringUnsafe(deployed.l2BridgeContract),
       wallet
     )
     const l2TokenContract = TokenContract.at(
-      AztecAddress.fromString(deployed.l2TokenContract),
+      AztecAddress.fromStringUnsafe(deployed.l2TokenContract),
       wallet
     )
 

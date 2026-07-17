@@ -22,7 +22,9 @@ import {
   PASSPORT_API_KEY,
   PASSPORT_SCORER_ID,
 } from '@/config/env.config'
-import { deriveSigningKey } from '@aztec/stdlib/keys'
+// 5.0.0 dropped the deriveSigningKey export; it was an alias for the IVSK_M derivation,
+// so keep using that exact function to preserve previously-derived L2 account addresses.
+import { deriveMasterIncomingViewingSecretKey as deriveSigningKey } from '@aztec/stdlib/keys'
 import { computeInnerAuthWitHash } from '@aztec/stdlib/auth-witness'
 import { Fr } from '@aztec/aztec.js/fields'
 import type { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin'
@@ -196,7 +198,7 @@ export async function signL2CleanHandsAttestation(params: {
     new Fr(params.nonce),
     new Fr(BigInt(params.userAztecAddress)),
   ])
-  const sig = await schnorrInstance.constructSignature(hash.toBuffer(), signingKey)
+  const sig = await schnorrInstance.constructSignature(hash, signingKey)
   return [...sig.toBuffer()]
 }
 
@@ -223,7 +225,7 @@ export async function signL2PassportAttestation(params: {
     new Fr(params.deadline),
     new Fr(BigInt(params.bridgeAddress)),
   ])
-  const sig = await schnorrInstance.constructSignature(hash.toBuffer(), signingKey)
+  const sig = await schnorrInstance.constructSignature(hash, signingKey)
   return [...sig.toBuffer()]
 }
 

@@ -1,0 +1,14 @@
+{
+  "lib/aztec-contracts": {
+    "tag": {
+      "name": "v5.0.0",
+      "rev": "7aa2bd616d632801fe65d97ee8a4434f26886b40"
+    }
+  },
+  "lib/forge-std": {
+    "rev": "3b20d60d14b343ee4f908cb8079495c07f5e8981"
+  },
+  "lib/openzeppelin-contracts": {
+    "rev": "acd4ff74de833399287ed6b31b4debf6b2b35527"
+  }
+}

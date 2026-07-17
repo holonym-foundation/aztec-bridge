@@ -29,13 +29,9 @@ export async function deploySchnorrAccount(wallet?: EmbeddedWallet): Promise<Acc
     const account = await activeWallet.createSchnorrAccount(secretKey, salt, signingKey)
     logger.info(`📍 Account address will be: ${account.address}`);
 
-    // Register SponsoredFPC with PXE before using it
     logger.info('💰 Setting up sponsored fee payment for account deployment...');
     const sponsoredFPC = await getSponsoredFPCInstance();
-    const pxe = (activeWallet as any).pxe;
-    if (pxe?.registerContract) {
-        await pxe.registerContract({ instance: sponsoredFPC, artifact: SponsoredFPCContractArtifact });
-    }
+    await activeWallet.registerContract(sponsoredFPC, SponsoredFPCContractArtifact);
     const sponsoredPaymentMethod = new SponsoredFeePaymentMethod(sponsoredFPC.address);
     logger.info('✅ Sponsored fee payment method configured for account deployment');
 

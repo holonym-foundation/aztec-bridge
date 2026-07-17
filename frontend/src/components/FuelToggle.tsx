@@ -227,7 +227,7 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
       return { valid: true, isThirdParty: false, error: null, parsed: null }
     }
     try {
-      const parsed = AztecAddress.fromString(raw).toString()
+      const parsed = AztecAddress.fromStringUnsafe(raw).toString()
       const isSelf = !!selfAztecAddress && parsed.toLowerCase() === selfAztecAddress.toLowerCase()
       return { valid: true, isThirdParty: !isSelf, error: null, parsed }
     } catch {

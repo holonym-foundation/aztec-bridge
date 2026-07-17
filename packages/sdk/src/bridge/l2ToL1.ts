@@ -64,6 +64,7 @@ export async function executeL1Withdraw(params: {
   l1Address: string
   amount: bigint
   epoch: bigint
+  numCheckpointsInEpoch: bigint
   leafIndex: string
   siblingPath: string[]
   portalAddress: string
@@ -73,26 +74,28 @@ export async function executeL1Withdraw(params: {
   /** Outbox address for idempotency check */
   outboxAddress?: string
 }): Promise<L1WithdrawResult> {
-  const { publicClient, sendTransaction, l1Address, amount, epoch, leafIndex, siblingPath, portalAddress, chainId, l2BlockNumber, outboxAddress } = params
+  const { publicClient, sendTransaction, l1Address, amount, epoch, numCheckpointsInEpoch, leafIndex, siblingPath, portalAddress, chainId, l2BlockNumber, outboxAddress } = params
 
   // Check if the L2→L1 message has already been consumed on L1.
   // Prevents wasting gas on a tx that would revert, and unblocks stuck operations.
   if (outboxAddress) {
     try {
+      // v5 epoch-based Outbox nullifies by leafId = (1 << path.length) + leafIndex, keyed by epoch.
+      const leafId = (1n << BigInt(siblingPath.length)) + BigInt(leafIndex)
       const isConsumed = await publicClient.readContract({
         address: outboxAddress as `0x${string}`,
         abi: [{
           type: 'function',
-          name: 'hasMessageBeenConsumedAtBlockAndIndex',
+          name: 'hasMessageBeenConsumedAtEpoch',
           inputs: [
-            { name: 'l2BlockNumber', type: 'uint256' },
-            { name: 'leafIndex', type: 'uint256' },
+            { name: 'epoch', type: 'uint256' },
+            { name: 'leafId', type: 'uint256' },
           ],
           outputs: [{ name: '', type: 'bool' }],
           stateMutability: 'view',
         }],
-        functionName: 'hasMessageBeenConsumedAtBlockAndIndex',
-        args: [BigInt(l2BlockNumber), BigInt(leafIndex)],
+        functionName: 'hasMessageBeenConsumedAtEpoch',
+        args: [epoch, leafId],
       })
       if (isConsumed) {
         const l1TxUrl = `${getEtherscanBaseUrl(chainId)}/tx/already-consumed`
@@ -125,6 +128,7 @@ export async function executeL1Withdraw(params: {
       amount,
       false, // _withCaller
       epoch,
+      numCheckpointsInEpoch,
       BigInt(leafIndex),
       siblingPathHex,
     ],
@@ -407,7 +411,7 @@ export async function withdrawL2ToL1(
     // Danger zone: from here on, the L2 burn is irreversible. Consumers map
     // this event to a persistent "do not reload" banner.
     emit({ type: BridgeEventType.DO_NOT_RELOAD, phase: BridgePhase.L2_BURN })
-    const userAddress = AztecAddress.fromString(l2Address)
+    const userAddress = AztecAddress.fromStringUnsafe(l2Address)
     let burnResult: { txHash: string; blockNumber?: number }
     try {
       burnResult = isPrivate
@@ -613,6 +617,7 @@ export async function withdrawL2ToL1(
       l2ToL1MessageIndex: witnessResult.leafIndex,
       siblingPath: witnessResult.siblingPath,
       epoch: resolvedEpoch != null ? Number(resolvedEpoch) : undefined,
+      numCheckpointsInEpoch: Number(witnessResult.numCheckpointsInEpoch),
       currentStep: 3,
     }
     const witnessPatchOk = await patchOperationWithRetry(apiClient, operationId, witnessPatchData, { label: 'witness data' })
@@ -631,6 +636,7 @@ export async function withdrawL2ToL1(
         // fall back to localStorage doesn't have to re-derive it from the
         // rollup contract via getEpochForCheckpoint.
         epoch: resolvedEpoch != null ? Number(resolvedEpoch) : undefined,
+        numCheckpointsInEpoch: Number(witnessResult.numCheckpointsInEpoch),
         status: 'ready',
       }),
     )
@@ -702,6 +708,7 @@ export async function withdrawL2ToL1(
         l1Address,
         amount,
         epoch: finalEpoch,
+        numCheckpointsInEpoch: witnessResult.numCheckpointsInEpoch,
         leafIndex: witnessResult.leafIndex,
         siblingPath: witnessResult.siblingPath,
         portalAddress: tokenConfig.l1PortalContract,

@@ -483,14 +483,14 @@ async function resumeL1ToL2(
       )
     }
     const { PrivateMintAndPayFeePaymentMethod, maxFeesPerGasFromBaseFees } =
-      await import('@wonderland/aztec-fee-payment')
+      await import('@alejoamiras/aztec-fee-payment')
     const { Gas, GasFees } = await import('@aztec/stdlib/gas')
     const baseFees = await aztecNode.getCurrentMinFees()
     const gasLimits = Gas.from({ l2Gas: 2_000_000, daGas: 50_000 })
     const teardownGasLimits = Gas.from({ l2Gas: 0, daGas: 0 })
     const maxFeesPerGas = maxFeesPerGasFromBaseFees(baseFees)
     const paymentMethod = new PrivateMintAndPayFeePaymentMethod(
-      AztecAddress.fromString(config.bridgedFpcAddress),
+      AztecAddress.fromStringUnsafe(config.bridgedFpcAddress),
       BigInt(fuelAmount),
       Fr.fromString(data.privateFuelSecret),
       Fr.fromString(data.privateFuelSalt),
@@ -538,7 +538,7 @@ async function resumeL1ToL2(
       const { FeeJuicePaymentMethodWithClaim } = await import('@aztec/aztec.js/fee')
       const { buildClaimGasSettings } = await import('../fuelGasEstimate')
       const paymentMethod = new FeeJuicePaymentMethodWithClaim(
-        AztecAddress.fromString(l2Address),
+        AztecAddress.fromStringUnsafe(l2Address),
         {
           claimAmount: BigInt(fuelAmount),
           claimSecret: Fr.fromString(data.fuelSecret),
@@ -1049,6 +1049,8 @@ async function resumeL2ToL1(
   let l2ToL1MessageIndex = op.l2ToL1MessageIndex
   let siblingPath = op.siblingPath
   let withdrawEpoch: bigint | undefined = op.epoch != null ? BigInt(op.epoch) : undefined
+  let withdrawNumCheckpoints: bigint | undefined =
+    op.numCheckpointsInEpoch != null ? BigInt(op.numCheckpointsInEpoch) : undefined
   let l2BlockNumber = op.l2BlockNumber
   let rollupVersion: number | undefined = op.rollupVersion ?? config.rollupVersion
   let l1RollupAddress = op.l1RollupAddress ?? config.l1ContractAddresses.rollupAddress
@@ -1060,7 +1062,12 @@ async function resumeL2ToL1(
   // ═════════════════════════════════════════════════════════════════════
   // Step 2: Recompute witness if missing
   // ═════════════════════════════════════════════════════════════════════
-  const needsWitness = !l2ToL1MessageIndex || !siblingPath || siblingPath.length === 0
+  // numCheckpointsInEpoch is required by the v5 epoch-based Outbox. Operations
+  // created before that migration have witness data but no numCheckpointsInEpoch,
+  // so treat its absence as "witness incomplete" and force a fresh recompute from
+  // the node (which returns it) — otherwise the L1 withdraw arg would be undefined.
+  const needsWitness =
+    !l2ToL1MessageIndex || !siblingPath || siblingPath.length === 0 || withdrawNumCheckpoints == null
 
   if (needsWitness) {
     onStep?.(2, 'active')
@@ -1127,6 +1134,7 @@ async function resumeL2ToL1(
             l2ToL1MessageIndex = result.leafIndex
             siblingPath = result.siblingPath
             withdrawEpoch = result.epoch
+            withdrawNumCheckpoints = result.numCheckpointsInEpoch
             console.log('[SDK Resume L2→L1] Found burn tx in L2 block', b, 'leafIndex=', result.leafIndex)
             break
           }
@@ -1155,6 +1163,7 @@ async function resumeL2ToL1(
         l2ToL1MessageIndex,
         siblingPath,
         epoch: withdrawEpoch != null ? Number(withdrawEpoch) : undefined,
+        numCheckpointsInEpoch: withdrawNumCheckpoints != null ? Number(withdrawNumCheckpoints) : undefined,
         l2BlockNumber: String(foundBlock),
         currentStep: 3,
       }, { label: 'recovered witness from block scan' })
@@ -1169,7 +1178,7 @@ async function resumeL2ToL1(
     }
 
     // If we recovered blockNum but didn't compute witness via block scan above, do it now
-    if (!l2ToL1MessageIndex || !siblingPath || siblingPath.length === 0) {
+    if (!l2ToL1MessageIndex || !siblingPath || siblingPath.length === 0 || withdrawNumCheckpoints == null) {
       if (rollupVersion == null) {
         const nodeInfo = await aztecNode.getNodeInfo()
         rollupVersion = nodeInfo?.rollupVersion != null ? Number(nodeInfo.rollupVersion) : undefined
@@ -1197,6 +1206,7 @@ async function resumeL2ToL1(
       l2ToL1MessageIndex = witnessResult.leafIndex
       siblingPath = witnessResult.siblingPath
       withdrawEpoch = witnessResult.epoch
+      withdrawNumCheckpoints = witnessResult.numCheckpointsInEpoch
 
       // Persist witness data — only send l2BlockNumber if not already stored
       const witnessPatchData: Record<string, unknown> = {
@@ -1204,6 +1214,7 @@ async function resumeL2ToL1(
         l2ToL1MessageIndex,
         siblingPath,
         epoch: withdrawEpoch != null ? Number(withdrawEpoch) : undefined,
+        numCheckpointsInEpoch: withdrawNumCheckpoints != null ? Number(withdrawNumCheckpoints) : undefined,
         currentStep: 3,
       }
       if (!op.l2BlockNumber && blockNum != null) witnessPatchData.l2BlockNumber = String(blockNum)
@@ -1217,6 +1228,8 @@ async function resumeL2ToL1(
         ...w,
         l2ToL1MessageIndex: l2ToL1MessageIndex!,
         siblingPath: siblingPath as string[],
+        epoch: withdrawEpoch != null ? Number(withdrawEpoch) : w.epoch,
+        numCheckpointsInEpoch: withdrawNumCheckpoints != null ? Number(withdrawNumCheckpoints) : w.numCheckpointsInEpoch,
         status: 'ready',
       }),
     )
@@ -1292,6 +1305,12 @@ async function resumeL2ToL1(
   if (withdrawEpoch == null) {
     throw new Error('Could not determine epoch for L1 withdraw. Rollup address not available.')
   }
+  if (withdrawNumCheckpoints == null) {
+    throw new Error(
+      'Could not determine numCheckpointsInEpoch for L1 withdraw. ' +
+      'Resume from the Activity page to recompute the witness from the node.',
+    )
+  }
 
   // Check return value — don't proceed if block isn't proven
   const provenResult = await waitForBlockProven({
@@ -1342,6 +1361,7 @@ async function resumeL2ToL1(
       l1Address,
       amount,
       epoch: withdrawEpoch,
+      numCheckpointsInEpoch: withdrawNumCheckpoints,
       leafIndex: l2ToL1MessageIndex!,
       siblingPath: siblingPath as string[],
       portalAddress: op.portalAddressL1,

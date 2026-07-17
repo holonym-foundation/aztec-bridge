@@ -3,10 +3,10 @@ import { BRIDGED_FPC_ADDRESS, L1_TOKENS } from '@/config'
 import type { ContractFunctionPattern } from '@aztec/aztec.js/wallet'
 
 /** Well-known Fee Juice contract on L2 */
-const FEE_JUICE_ADDRESS = AztecAddress.fromString('0x0000000000000000000000000000000000000000000000000000000000000005')
+const FEE_JUICE_ADDRESS = AztecAddress.fromStringUnsafe('0x0000000000000000000000000000000000000000000000000000000000000005')
 
 /** Auth Registry protocol contract on L2 (canonical address = 1) */
-const AUTH_REGISTRY_ADDRESS = AztecAddress.fromString(
+const AUTH_REGISTRY_ADDRESS = AztecAddress.fromStringUnsafe(
   '0x0000000000000000000000000000000000000000000000000000000000000001',
 )
 
@@ -44,17 +44,17 @@ const AUTH_REGISTRY_TRANSACTION_METHODS = ['set_authorized'] as const
 export function buildCapabilityManifest() {
   const tokenAddresses = L1_TOKENS.map((t) => t.l2TokenContract)
     .filter((addr): addr is string => !!addr)
-    .map((addr) => AztecAddress.fromString(addr))
+    .map((addr) => AztecAddress.fromStringUnsafe(addr))
 
   const bridgeAddresses = L1_TOKENS.map((t) => t.l2BridgeContract)
     .filter((addr): addr is string => !!addr)
-    .map((addr) => AztecAddress.fromString(addr))
+    .map((addr) => AztecAddress.fromStringUnsafe(addr))
 
   const proxyAddresses = L1_TOKENS.map((t) => t.l2ProxyContract)
     .filter((addr): addr is string => !!addr)
-    .map((addr) => AztecAddress.fromString(addr))
+    .map((addr) => AztecAddress.fromStringUnsafe(addr))
 
-  const fpcAddress = BRIDGED_FPC_ADDRESS ? AztecAddress.fromString(BRIDGED_FPC_ADDRESS) : null
+  const fpcAddress = BRIDGED_FPC_ADDRESS ? AztecAddress.fromStringUnsafe(BRIDGED_FPC_ADDRESS) : null
 
   const allContracts = [
     ...tokenAddresses,

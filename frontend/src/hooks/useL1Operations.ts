@@ -446,7 +446,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
     let resolvedFuelRecipient: string | undefined
     if (fuelRecipientOverride && fuelRecipientOverride.trim().length > 0) {
       try {
-        const parsed = AztecAddress.fromString(fuelRecipientOverride.trim())
+        const parsed = AztecAddress.fromStringUnsafe(fuelRecipientOverride.trim())
         resolvedFuelRecipient = parsed.toString()
       } catch {
         throw new Error('Invalid fuel-recipient L2 address. Clear the override or paste a valid Aztec address.')

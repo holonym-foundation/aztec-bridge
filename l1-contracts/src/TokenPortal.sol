@@ -15,6 +15,7 @@ import {IOutbox} from "@aztec/core/interfaces/messagebridge/IOutbox.sol";
 import {IRollup} from "@aztec/core/interfaces/IRollup.sol";
 import {DataStructures} from "@aztec/core/libraries/DataStructures.sol";
 import {Hash} from "@aztec/core/libraries/crypto/Hash.sol";
+import {Epoch} from "@aztec/core/libraries/TimeLib.sol";
 
 // =============================================================
 // CUSTOM ERRORS
@@ -274,7 +275,8 @@ contract TokenPortal is Pausable, ReentrancyGuard, Ownable2Step {
         address _recipient,
         uint256 _amount,
         bool _withCaller,
-        uint256 _l2BlockNumber,
+        Epoch _epoch,
+        uint256 _numCheckpointsInEpoch,
         uint256 _leafIndex,
         bytes32[] calldata _path
     ) external whenNotPaused nonReentrant {
@@ -293,7 +295,7 @@ contract TokenPortal is Pausable, ReentrancyGuard, Ownable2Step {
         uint256 amountAfterFee = _amount - fee;
         collectedFees += fee;
 
-        outbox.consume(message, _l2BlockNumber, _leafIndex, _path);
+        outbox.consume(message, _epoch, _numCheckpointsInEpoch, _leafIndex, _path);
 
         underlying.safeTransfer(_recipient, amountAfterFee);
     }

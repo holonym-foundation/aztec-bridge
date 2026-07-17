@@ -264,6 +264,7 @@ export interface BridgeOperation {
   l2ToL1MessageIndex: string | null
   siblingPath: string[] | null
   epoch: number | null
+  numCheckpointsInEpoch: number | null
   recipientL1Address: string | null
   // Recovery-critical contract & version snapshot
   rollupVersion: number | null
@@ -457,6 +458,8 @@ export interface RecoveryWithdrawalData {
   l2BlockNumberBeforeTx: string | null
   l2ToL1MessageIndex: string | null
   siblingPath: string[] | null
+  epoch: number | null
+  numCheckpointsInEpoch: number | null
   recipientL1Address: string | null
   rollupVersion: number | null
   chainIdL1: number | null
@@ -613,6 +616,7 @@ export interface WitnessResult {
   leafIndex: string
   siblingPath: string[]
   epoch: bigint
+  numCheckpointsInEpoch: bigint
 }
 
 export interface L1WithdrawResult {
@@ -649,6 +653,7 @@ export interface WitnessComputeResult {
   siblingPath: string[]
   rollupAddress: string | undefined
   epoch: bigint
+  numCheckpointsInEpoch: bigint
   witnessPatchOk: boolean
 }
 

@@ -1,30 +1,40 @@
-# Deploy Aztec Bridge to Vercel following the recommended pattern
+# Deploy Aztec Bridge to Vercel.
+# Single workflow, one project (aztec-bridge), branch selects the target:
+#   main    → Preview build, then Production (--prod)
+#   testnet → the `testnet` Vercel Custom Environment (--target=testnet), which
+#             scopes the deploy so it can never touch the mainnet production domain.
+# Per-job env blocks below supply the network-specific DATABASE_URL / JWT / RPC used
+# by the prisma migration and manual Next build; Vercel-side env vars (pulled by
+# `vercel build`) drive the deployed artifact's network selection.
 name: Deploy Aztec Bridge to Vercel
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_AZTEC_BRIDGE_PROJECT_ID }}
-  ETHEREUM_RPC_URL: ${{ secrets.ETHEREUM_RPC_URL }}
-  ETHEREUM_RPC_URL_2: ${{ secrets.ETHEREUM_RPC_URL_2 }}
   ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
-  JWT_SECRET: ${{ secrets.JWT_SECRET }}
   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
   NEXT_PUBLIC_DATADOG_APPLICATION_ID: ${{ secrets.NEXT_PUBLIC_DATADOG_APPLICATION_ID }}
   NEXT_PUBLIC_DATADOG_CLIENT_TOKEN: ${{ secrets.NEXT_PUBLIC_DATADOG_CLIENT_TOKEN }}
   NEXT_PUBLIC_DATADOG_SITE: ${{ secrets.NEXT_PUBLIC_DATADOG_SITE }}
   NEXT_PUBLIC_DATADOG_SERVICE: ${{ secrets.NEXT_PUBLIC_DATADOG_SERVICE }}
-  NEXT_PUBLIC_DATADOG_ENV: ${{ secrets.NEXT_PUBLIC_DATADOG_ENV }}
   NEXT_PUBLIC_DATADOG_LOGS_CLIENT_TOKEN: ${{ secrets.NEXT_PUBLIC_DATADOG_LOGS_CLIENT_TOKEN }}
-  DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
 on:
   push:
     branches:
       - main
+      - testnet
 
 jobs:
   Deploy-Preview:
     permissions: write-all
     runs-on: ubuntu-latest
+    if: github.ref_name == 'main'
+    env:
+      ETHEREUM_RPC_URL: ${{ secrets.ETHEREUM_RPC_URL }}
+      ETHEREUM_RPC_URL_2: ${{ secrets.ETHEREUM_RPC_URL_2 }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      NEXT_PUBLIC_DATADOG_ENV: ${{ secrets.NEXT_PUBLIC_DATADOG_ENV }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v3
 
@@ -62,6 +72,12 @@ jobs:
     environment: Production
     if: github.ref_name == 'main'
     needs: Deploy-Preview
+    env:
+      ETHEREUM_RPC_URL: ${{ secrets.ETHEREUM_RPC_URL }}
+      ETHEREUM_RPC_URL_2: ${{ secrets.ETHEREUM_RPC_URL_2 }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      NEXT_PUBLIC_DATADOG_ENV: ${{ secrets.NEXT_PUBLIC_DATADOG_ENV }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v3
 
@@ -92,4 +108,43 @@ jobs:
 
       - name: Deploy to Production
         run: vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
-      
+
+  Deploy-Testnet:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'testnet'
+    env:
+      ETHEREUM_RPC_URL: ${{ secrets.TESTNET_ETHEREUM_RPC_URL }}
+      JWT_SECRET: ${{ secrets.TESTNET_JWT_SECRET }}
+      NEXT_PUBLIC_DATADOG_ENV: testnet
+      DATABASE_URL: ${{ secrets.TESTNET_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: ./.github/actions/setup-pnpm-and-install
+        with:
+          working-directory: .
+
+      - name: Build SDK
+        working-directory: ./packages/sdk
+        run: pnpm build
+
+      - name: Run DB migrations
+        working-directory: ./frontend
+        run: pnpm exec prisma migrate deploy
+
+      - name: Install Vercel CLI
+        run: pnpm add --global vercel@latest
+
+      - name: Build Next App
+        working-directory: ./frontend
+        run: pnpm build
+
+      - name: Pull Testnet Environment From Vercel
+        run: vercel pull --yes --environment=testnet --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        run: vercel build --target=testnet --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Testnet Environment
+        run: vercel deploy --target=testnet --prebuilt --token=${{ secrets.VERCEL_TOKEN }}

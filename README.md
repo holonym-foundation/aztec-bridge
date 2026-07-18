@@ -1,4 +1,7 @@
-# Aztec Bridge UI
+# Shield — human.tech's bridge to Aztec
+
+Shield is human.tech's privacy-preserving, accountable bridge to Aztec, the first app built on the Clean SDK. Live at https://shield.human.tech.
+
 A visual overview of the Aztec Bridge flow:
 
 ![Aztec Bridge Flow](docs/aztec%20bridge%20flow.png)
@@ -17,14 +20,14 @@ Active deployment: **Ethereum mainnet (L1) + Aztec Mainnet Alpha v4.3.0 (L2)** w
 
 **Bridge-specific:**
 
-- Audited by Nethermind Security (NM-0756, May 2026) — 1 critical / 2 high / 3 medium findings, all resolved before deployment
+- Audited by Nethermind Security (NM-0756, May 2026); all findings resolved
 - Public marketing launch aligned with Aztec v5 release (~July 2026)
 
 Prior testnet deployments (Sepolia + Aztec testnet 4.2.0-rc.1) remain in `bridge-script/deployments/` for historical reference but are no longer the active deployment.
 
 ## 🌟 Overview
 
-The Aztec Bridge UI enables users to:
+Shield enables users to:
 - Bridge tokens between Ethereum Layer 1 and Aztec Layer 2
 - Manage multiple token types (ERC20, NFTs)
 - Interact with Aztec's privacy-preserving Layer 2 network
@@ -139,11 +142,12 @@ forge deploy       # Deploy contracts
 ## 🌐 Supported Networks
 
 ### Layer 1 (Ethereum)
-- **Mainnet**: Ethereum Mainnet
-- **Testnet**: Sepolia
+- **Mainnet**: Ethereum Mainnet (active deployment)
+- **Testnet**: Sepolia (historical/dev only)
 
 ### Layer 2 (Aztec)
-- **Testnet**: Aztec Testnet (Chain ID: 1337)
+- **Mainnet**: Aztec Mainnet Alpha v4.3.0 (active deployment)
+- **Testnet**: Aztec Testnet (historical/dev only)
 
 ## 🎨 Frontend Features
 
@@ -166,35 +170,17 @@ forge deploy       # Deploy contracts
 
 ## 🔐 Security
 
-### ⚠️ **CRITICAL SECURITY DISCLAIMER**
-**THIS IS A TESTNET BRIDGE WITH KNOWN VULNERABILITIES - NOT PRODUCTION READY**
-
-This bridge implementation:
-- ❌ Contains known security vulnerabilities
-- ❌ Has not undergone professional security audits
-- ❌ Should never be used with real value or on mainnet
-- ❌ May have unpatched critical security flaws
-- ⚠️ Is intended for educational and testing purposes only
-
 ### Basic Security Practices Implemented
 - ✅ Environment variables for all sensitive data
 - ✅ Proper secret management in CI/CD
 - ✅ No hardcoded production credentials
 - ✅ Basic input validation
-- ⚠️ **However, these do not address the underlying architectural vulnerabilities**
 
 ### Environment Variables
 All sensitive information is properly managed through environment variables:
 - API keys, private keys, and RPC URLs are never committed
 - Production secrets are managed through Vercel and GitHub Secrets
 - Test values are clearly marked and separated from production
-
-### Known Limitations
-- Bridge contracts may have reentrancy vulnerabilities
-- Insufficient access controls in some components
-- Lack of comprehensive validation in bridge operations
-- Potential for fund loss due to architectural issues
-- Missing security features required for production use
 
 ## 🚀 Deployment
 
@@ -242,11 +228,11 @@ aztec test         # Test L2 contracts
 
 ### Bridge API Endpoints
 
-#### Faucet
+#### Faucet (testnet/dev only)
 - `POST /api/faucet` - Request test ETH for gas fees
 - Body: `{ "address": "0x..." }`
 
-#### Token Minting
+#### Token Minting (testnet/dev only)
 - `POST /api/mint-tokens` - Mint test tokens
 - Body: `{ "address": "0x...", "amount": "1000" }`
 

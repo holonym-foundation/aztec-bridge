@@ -143,6 +143,7 @@ export class ConfigManager {
 const configManager = ConfigManager.getInstance();
 
 export function getAztecNodeUrl(): string { return configManager.getNodeUrl(); }
+export function getAztecNodeApiKey(): string | undefined { return process.env.AZTEC_NODE_API_KEY || undefined; }
 export function getL1RpcUrl(): string { return configManager.getL1RpcUrl(); }
 export function getL1ChainId(): number { return configManager.getL1ChainId(); }
 export function getEnv(): string { return configManager.getConfig().name; }

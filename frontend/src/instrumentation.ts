@@ -12,10 +12,20 @@
  *
  * Fix: define globalThis.self before any Aztec modules load so poseidon2 takes
  * the BarretenbergSync path, matching what Schnorr already does.
+ *
+ * Also force LOG_JSON before @aztec/foundation's logger initializes. Its logger
+ * is built at import time and, unless LOG_JSON is truthy, configures a pino
+ * worker-thread transport targeting `pino-pretty`. Vercel's file tracer never
+ * copies pino-pretty into the lambda (it's referenced only as a dynamic string
+ * target, so NFT can't see it), so pino throws "unable to determine transport
+ * target for pino-pretty" the moment any route imports an Aztec module. With
+ * LOG_JSON set it uses the `pino/file` transport instead, which lives inside
+ * the (traced) pino package and resolves fine.
  */
 export async function register() {
   if (typeof globalThis.self === 'undefined') {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(globalThis as any).self = globalThis
   }
+  process.env.LOG_JSON ||= 'true'
 }

@@ -1,7 +1,7 @@
 import { BridgeDirection, BridgeOperationStatus } from '@prisma/client'
 import { prisma } from './prisma'
 import { getTokenPriceUsd } from '@/utils/fuelPricing'
-import { getBridgeMaxDepositUsd } from './attestation'
+import { getBridgeMaxDepositUsd, getTravelRuleThresholdUsd } from './attestation'
 
 // L1→L2 statuses where funds are locked on L1 (the deposit tx confirmed).
 // Excludes 'pending' (operation row exists but no L1 deposit yet — this is the
@@ -72,14 +72,17 @@ export const DEPOSIT_CAP_WINDOW_MS = 24 * 60 * 60 * 1000
  * age out. USDC (the only Alpha-mainnet token) is USD-pegged, so the hardcoded
  * fallback price (USDC=$1) is exact and no live price feed is needed.
  */
-export async function getConfirmedDepositUsd(userId: string): Promise<number> {
-  const since = new Date(Date.now() - DEPOSIT_CAP_WINDOW_MS)
+export async function getConfirmedDepositUsd(
+  userId: string,
+  windowMs: number | null = DEPOSIT_CAP_WINDOW_MS,
+): Promise<number> {
   const rows = await prisma.bridgeActivity.findMany({
     where: {
       fkUserId: userId,
       direction: BridgeDirection.L1_TO_L2,
       status: { in: LOCKED_DEPOSIT_STATUSES },
-      createdAt: { gte: since },
+      // windowMs === null → all-time (Travel Rule cumulative sum); otherwise rolling window.
+      ...(windowMs != null ? { createdAt: { gte: new Date(Date.now() - windowMs) } } : {}),
     },
     select: { amountL1: true, tokenDecimalsL1: true, tokenSymbolL1: true },
   })
@@ -137,6 +140,47 @@ export async function evaluateDepositLimit(params: {
   // Small epsilon so float rounding (e.g. 10.000000001) doesn't false-trigger.
   const overLimit = confirmedUsd + requestedUsd > limitUsd + 1e-6
   return { enabled: true, overLimit, limitUsd, confirmedUsd, requestedUsd, remainingUsd }
+}
+
+export interface TravelRuleResult {
+  /** Whether the threshold is configured (TRAVEL_RULE_THRESHOLD_USD > 0). */
+  enabled: boolean
+  /** True when lifetime + requested reaches the threshold (passport tier must upgrade to POCH). */
+  exceeded: boolean
+  thresholdUsd: number
+  lifetimeUsd: number
+  requestedUsd: number
+  /** Budget left before the threshold (threshold − lifetime), floored at 0; Infinity when disabled. */
+  remainingUsd: number
+}
+
+/**
+ * Evaluate the cumulative per-human Travel Rule threshold for a user's L1→L2 deposit.
+ *
+ * Sums ALL-TIME confirmed L1→L2 deposits (no window) for the bound (L1,L2) User —
+ * the only stable per-human anchor, since AddressBinding enforces 1 L1 ↔ 1 L2.
+ * Only the passport tier consults this; POCH-verified humans are exempt.
+ */
+export async function evaluateTravelRuleThreshold(params: {
+  userId: string
+  amount?: string
+  tokenSymbol?: string
+  tokenDecimals?: number
+}): Promise<TravelRuleResult> {
+  const thresholdUsd = getTravelRuleThresholdUsd()
+  if (thresholdUsd <= 0) {
+    return { enabled: false, exceeded: false, thresholdUsd: 0, lifetimeUsd: 0, requestedUsd: 0, remainingUsd: Infinity }
+  }
+
+  const lifetimeUsd = await getConfirmedDepositUsd(params.userId, null)
+  const decimals = params.tokenDecimals ?? 6
+  const requestedUsd = params.amount
+    ? (Number(params.amount) / 10 ** decimals) * getTokenPriceUsd(params.tokenSymbol ?? 'USDC', null)
+    : 0
+  const remainingUsd = Math.max(0, thresholdUsd - lifetimeUsd)
+  // Legal threshold triggers at "$1,000 or more" → `>=`; epsilon guards float rounding.
+  const exceeded = lifetimeUsd + requestedUsd >= thresholdUsd - 1e-6
+  return { enabled: true, exceeded, thresholdUsd, lifetimeUsd, requestedUsd, remainingUsd }
 }
 
 /**

@@ -716,6 +716,10 @@ export interface PassportCheckResult {
   /** Alpha deposit cap: present only when the cap is enabled. */
   depositLimitReached?: boolean
   remainingUsd?: number
+  /** Travel Rule: true when lifetime volume reached the threshold — must upgrade to POCH. */
+  travelRuleExceeded?: boolean
+  /** Travel Rule: USD budget left before the threshold. Present only when enabled. */
+  travelRuleRemainingUsd?: number
 }
 
 // ─── L1 Token Balance Types ──────────────────────────────────────────

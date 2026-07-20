@@ -85,6 +85,10 @@ interface BridgeActionButtonProps {
   passportThreshold?: number
   // Alpha per-day (rolling 24h) deposit cap: USD left for this user (undefined = cap disabled)
   remainingDepositUsd?: number
+  // Travel Rule: passport tier blocked because lifetime volume reached the threshold.
+  travelRuleBlocked?: boolean
+  // Travel Rule: USD budget left before the threshold (undefined = disabled).
+  travelRuleRemainingUsd?: number
 
   // Operation completion state
   bridgeCompleted?: boolean
@@ -132,6 +136,8 @@ function BridgeActionButton({
   attestationMethod,
   passportMaxAmount,
   remainingDepositUsd,
+  travelRuleBlocked = false,
+  travelRuleRemainingUsd,
   passportScore,
   passportThreshold,
   bridgeCompleted = false,
@@ -376,6 +382,15 @@ function BridgeActionButton({
     remainingDepositUsd != null &&
     (remainingDepositUsd <= 0 || parseFloat(inputAmount || '0') > remainingDepositUsd)
 
+  // Travel Rule: passport-tier user whose lifetime volume reached the threshold — or
+  // whose entered amount would cross it — must upgrade to POCH before bridging more.
+  // `>=` because the threshold triggers at "$1,000 or more"; USDC is $1-pegged on Alpha.
+  const travelRuleBlockedDeposit =
+    direction === BridgeDirection.L1_TO_L2 &&
+    (travelRuleBlocked ||
+      (travelRuleRemainingUsd != null &&
+        (travelRuleRemainingUsd <= 0 || parseFloat(inputAmount || '0') >= travelRuleRemainingUsd - 1e-6)))
+
   const isButtonDisabled =
     l2NodeIsReadyLoading ||
     l2NodeError ||
@@ -387,6 +402,7 @@ function BridgeActionButton({
     bridgeTokensToL2Pending ||
     isOperationPending ||
     depositLimitBlocked ||
+    travelRuleBlockedDeposit ||
     bridgeCompleted
 
   const isOperationInFlight =
@@ -420,6 +436,11 @@ function BridgeActionButton({
     // Connection states
     if (!isWaapConnected) return 'Connect Ethereum Wallet'
     if (!isAztecConnected) return 'Connect Aztec Wallet'
+
+    // Travel Rule: passport tier exhausted, POCH required (deposits only)
+    if (travelRuleBlockedDeposit) {
+      return 'Verify with Clean Hands to bridge more'
+    }
 
     // Alpha deposit cap (deposits only)
     if (depositLimitBlocked) {

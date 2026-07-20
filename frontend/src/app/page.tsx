@@ -653,6 +653,8 @@ export default function Home() {
                 passportScore={attestationData?.passportScore}
                 passportThreshold={attestationData?.passportThreshold}
                 remainingDepositUsd={attestationData?.remainingDepositUsd}
+                travelRuleBlocked={attestationData?.travelRuleExceeded}
+                travelRuleRemainingUsd={attestationData?.travelRuleRemainingUsd}
                 // Operation completion state
                 bridgeCompleted={bridgeCompleted}
                 // Disable if L2 node error

@@ -18,6 +18,7 @@ import {
   PASSPORT_SCORE_THRESHOLD,
   PASSPORT_MAX_AMOUNT,
   BRIDGE_MAX_DEPOSIT_USD,
+  TRAVEL_RULE_THRESHOLD_USD,
   HOLONYM_API_URL,
   PASSPORT_API_KEY,
   PASSPORT_SCORER_ID,
@@ -81,6 +82,17 @@ export function getPassportMaxAmount(): bigint {
  */
 export function getBridgeMaxDepositUsd(): number {
   const parsed = Number(BRIDGE_MAX_DEPOSIT_USD)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+  return parsed
+}
+
+/**
+ * Cumulative per-human lifetime deposit volume (USD) at or above which the
+ * passport tier is refused and POCH is required. Returns 0 when unset/'0'/''
+ * — callers treat 0 as "no threshold".
+ */
+export function getTravelRuleThresholdUsd(): number {
+  const parsed = Number(TRAVEL_RULE_THRESHOLD_USD)
   if (!Number.isFinite(parsed) || parsed <= 0) return 0
   return parsed
 }

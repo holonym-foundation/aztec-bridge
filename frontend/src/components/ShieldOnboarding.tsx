@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { MeshGradient } from '@paper-design/shaders-react'
 
 const ONBOARDED_KEY = 'shield_onboarded'
 const BRAND = '#81133B'
@@ -19,7 +20,7 @@ type Screen = {
 const SCREENS: Screen[] = [
   {
     eyebrow: 'Private bridge · Ethereum ⇄ Aztec',
-    title: 'Fully private transactions have arrived on Ethereum',
+    title: 'Private transactions have arrived on Ethereum',
     body: (
       <p>Shield is a private bridge between Ethereum and Aztec. Move your funds privately.</p>
     ),
@@ -71,33 +72,17 @@ const SCREENS: Screen[] = [
   },
 ]
 
-/* Subtle paper-shader field: slow-drifting soft blobs + fine grain. Dependency-free. */
+/* Paper-shader field: real @paper-design MeshGradient in Shield tones, softened by a
+   translucent veil so copy stays legible, plus a fine grain for paper texture. */
 function PaperField({ still }: { still: boolean }) {
-  const drift = (i: number) =>
-    still
-      ? {}
-      : {
-          x: [0, i % 2 ? 40 : -40, 0],
-          y: [0, i % 2 ? -30 : 30, 0],
-          scale: [1, 1.12, 1],
-        }
-  const blobs = [
-    { c: 'rgba(244,98,166,0.42)', s: 620, top: '-12%', left: '-8%' },
-    { c: 'rgba(129,19,59,0.30)', s: 560, top: '38%', left: '58%' },
-    { c: 'rgba(250,143,196,0.38)', s: 480, top: '62%', left: '4%' },
-    { c: 'rgba(255,239,246,0.9)', s: 520, top: '4%', left: '46%' },
-  ]
   return (
     <div className="ob-field" aria-hidden="true">
-      {blobs.map((b, i) => (
-        <motion.div
-          key={i}
-          className="ob-blob"
-          style={{ width: b.s, height: b.s, top: b.top, left: b.left, background: `radial-gradient(circle at center, ${b.c}, transparent 68%)` }}
-          animate={drift(i)}
-          transition={{ duration: 18 + i * 4, repeat: Infinity, ease: 'easeInOut' }}
-        />
-      ))}
+      <MeshGradient
+        colors={['#fff6fa', '#fde7f3', '#f462a6', '#81133b']}
+        speed={still ? 0 : 0.22}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+      />
+      <div className="ob-veil" />
       <svg className="ob-grain" width="100%" height="100%">
         <filter id="ob-noise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" /></filter>
         <rect width="100%" height="100%" filter="url(#ob-noise)" />
@@ -267,7 +252,8 @@ export default function ShieldOnboarding() {
           overflow: hidden; font-family: 'Suisse Intl', system-ui, sans-serif;
           background: #fff6fa; color: #1c1116; }
         .ob-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
-        .ob-blob { position: absolute; border-radius: 50%; filter: blur(30px); will-change: transform; }
+        .ob-field canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
+        .ob-veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,246,250,0.30), rgba(255,246,250,0.66)); }
         .ob-grain { position: absolute; inset: 0; opacity: 0.05; mix-blend-mode: multiply; pointer-events: none; }
         .ob-progress { position: relative; z-index: 3; height: 4px; width: 100%; background: rgba(129,19,59,0.12); }
         .ob-progress-fill { height: 100%; background: linear-gradient(90deg, ${BRAND}, #f462a6); }
@@ -326,6 +312,7 @@ export default function ShieldOnboarding() {
         @media (prefers-color-scheme: dark) {
           .ob-root { background: #150a0f; color: #f6ecf1; }
           .ob-grain { mix-blend-mode: screen; opacity: 0.06; }
+          .ob-veil { background: linear-gradient(180deg, rgba(21,10,15,0.34), rgba(21,10,15,0.68)); }
           .ob-body { color: #cba7b6; } .ob-body strong { color: #f6ecf1; }
           .ob-node span { color: #cba7b6; } .ob-back { color: #cba7b6; border-color: #3a2530; }
           .ob-secured strong { color: #cba7b6; }

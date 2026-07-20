@@ -39,6 +39,7 @@
     "@iconify/react": "^6.0.0",
     "@noble/ciphers": "^2.1.1",
     "@noble/hashes": "^2.0.1",
+    "@paper-design/shaders-react": "^0.0.77",
     "@prisma/client": "^6.15.0",
     "@tanstack/query-sync-storage-persister": "^5.75.0",
     "@tanstack/react-query": "^5.75.0",

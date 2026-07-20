@@ -146,12 +146,13 @@ interface BridgeStoreState extends StepState, BridgeConfigState, TransactionStat
   reset: () => void
 }
 
-// Initial states (default amount '1' so /progress can be used directly for development)
+// Initial states. Amount defaults to empty so a bare/refreshed /progress can never
+// auto-submit a stray transfer (the page only fires when amount > 0).
 const DEFAULT_BRIDGE_STATE: BridgeState = {
   from: { network: L1_NETWORKS[0], token: L1_TOKENS[0] },
   to: { network: L2_NETWORKS[0], token: L2_TOKENS[0] },
   direction: BridgeDirection.L1_TO_L2,
-  amount: '1',
+  amount: '',
 }
 
 const initialStepState: StepState = {

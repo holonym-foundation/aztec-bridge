@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import StyledImage from '../StyledImage'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Oval } from 'react-loader-spinner'
@@ -9,6 +10,8 @@ interface WalletDiscoveryModalProps {
   isDiscovering: boolean
   onSelectWallet: (provider: WalletProvider) => void
   onClose: () => void
+  webWalletUrl?: string
+  onConnectWebWallet?: (url: string) => void
 }
 
 export default function WalletDiscoveryModal({
@@ -17,7 +20,19 @@ export default function WalletDiscoveryModal({
   isDiscovering,
   onSelectWallet,
   onClose,
+  webWalletUrl = '',
+  onConnectWebWallet,
 }: WalletDiscoveryModalProps) {
+  const [urlInput, setUrlInput] = useState(webWalletUrl)
+
+  const trimmedUrl = urlInput.trim()
+  const isValidUrl = /^https?:\/\/.+/i.test(trimmedUrl)
+
+  const submitWebWallet = () => {
+    if (!isValidUrl || !onConnectWebWallet) return
+    onConnectWebWallet(trimmedUrl)
+  }
+
   if (!isOpen) return null
 
   const noWalletsFound = !isDiscovering && wallets.length === 0
@@ -59,6 +74,38 @@ export default function WalletDiscoveryModal({
               </motion.button>
             </div>
             <div className='mt-4 mx-2.5'>
+              {onConnectWebWallet && (
+                <div className='mb-4'>
+                  <label className='block text-latest-grey-600 text-12 font-medium mb-1.5'>
+                    Web wallet URL
+                  </label>
+                  <div className='flex gap-2'>
+                    <input
+                      type='url'
+                      inputMode='url'
+                      value={urlInput}
+                      onChange={(e) => setUrlInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') submitWebWallet()
+                      }}
+                      placeholder='https://your-wallet.vercel.app'
+                      className='flex-1 min-w-0 px-3 py-2 rounded-[8px] bg-[#F5F5F5] text-14 text-latest-black-300 outline-none focus:ring-2 focus:ring-[#3b82f6]'
+                    />
+                    <motion.button
+                      onClick={submitWebWallet}
+                      disabled={!isValidUrl}
+                      whileHover={isValidUrl ? { scale: 1.02 } : undefined}
+                      whileTap={isValidUrl ? { scale: 0.98 } : undefined}
+                      className='px-4 py-2 rounded-[8px] bg-latest-black-300 text-white text-14 font-medium disabled:opacity-40 disabled:cursor-not-allowed'>
+                      Connect
+                    </motion.button>
+                  </div>
+                  {trimmedUrl && !isValidUrl && (
+                    <p className='text-red-500 text-12 mt-1'>Enter a valid http(s) URL</p>
+                  )}
+                </div>
+              )}
+
               {isDiscovering && wallets.length === 0 && (
                 <motion.div
                   initial={{ opacity: 0 }}

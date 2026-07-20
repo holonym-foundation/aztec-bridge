@@ -34,6 +34,7 @@ import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee'
 import { SetPublicAuthwitContractInteraction, computeInnerAuthWitHashFromAction, lookupValidity } from '@aztec/aztec.js/authorization'
 import { EmbeddedWallet } from '@aztec/wallets/embedded'
 import { createAztecNodeClient } from '@aztec/aztec.js/node'
+import { waitForL1ToL2MessageReady } from '@aztec/aztec.js/messaging'
 import { getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry'
 import { getStandardPublicChecks } from '@aztec/standard-contracts/public-checks'
 import { TxHash } from '@aztec/stdlib/tx'
@@ -103,59 +104,24 @@ import { privateKeyToAccount, signMessage } from 'viem/accounts'
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/**
- * Wait for the L2 sequencer to include the L1→L2 message in the state tree.
- *
- * The archiver checkpoint appears quickly, but the message is only consumable
- * after the sequencer includes it in an L2 block — which can take up to 1
- * epoch (~19 min on testnet: 32 slots × 36s).
- *
- * Strategy: wait for at least `minBlocks` new L2 blocks AND at least
- * `minWaitMs` elapsed time, whichever is longer.
- */
-async function waitForNextL2Block(
-  node: { getBlockNumber(): Promise<number> },
-  logger: { info(msg: string): void; warn(msg: string): void },
-  options?: { pollIntervalMs?: number; maxWaitMs?: number; minWaitMs?: number; minBlocks?: number },
-): Promise<number> {
-  const pollIntervalMs = options?.pollIntervalMs ?? 15_000
-  const maxWaitMs = options?.maxWaitMs ?? 25 * 60 * 1000
-  const minWaitMs = options?.minWaitMs ?? 2 * 60 * 1000 // 2 min minimum
-  const minBlocks = options?.minBlocks ?? 2 // wait for at least 2 new blocks
-  const startTime = Date.now()
-  const sinceBlock = await node.getBlockNumber()
-  const targetBlock = sinceBlock + minBlocks
-
-  logger.info(`Waiting for L2 block >= ${targetBlock} (since=${sinceBlock}, +${minBlocks} blocks, min ${minWaitMs / 1000}s)...`)
-
-  while (Date.now() - startTime < maxWaitMs) {
-    const elapsedMs = Date.now() - startTime
-    const elapsedSec = Math.round(elapsedMs / 1000)
-    try {
-      const currentBlock = await node.getBlockNumber()
-      const blocksReady = currentBlock >= targetBlock
-      const minTimeReady = elapsedMs >= minWaitMs
-
-      if (blocksReady && minTimeReady) {
-        logger.info(`L2 block ${currentBlock} reached target after ${elapsedSec}s. Message should be consumable.`)
-        return currentBlock
-      }
-
-      if (blocksReady && !minTimeReady) {
-        const remainingSec = Math.round((minWaitMs - elapsedMs) / 1000)
-        logger.info(`  Block target reached (${currentBlock} >= ${targetBlock}), waiting ${remainingSec}s more for message propagation`)
-      } else {
-        logger.info(`  Block wait: ${elapsedSec}s elapsed, current=${currentBlock}, waiting for >=${targetBlock}`)
-      }
-    } catch (err) {
-      logger.warn(`  Block poll failed (${elapsedSec}s): ${err}`)
-    }
-    await wait(pollIntervalMs)
-  }
-
-  const finalBlock = await node.getBlockNumber().catch(() => sinceBlock)
-  logger.warn(`Block wait timed out after ${maxWaitMs / 60_000} min (block=${finalBlock}). Proceeding to claim with retries.`)
-  return finalBlock
+// Wait until an L1→L2 message is actually consumable, not merely scheduled.
+// getL1ToL2MessageCheckpoint returns a CheckpointNumber (a different scale from the L2
+// block number) as soon as the message is queued; consuming it too early makes the
+// claim's public phase revert with an empty "Assertion failed:". waitForL1ToL2MessageReady
+// checks presence at the chain tip the claim tx anchors to ('latest').
+async function waitForL1ToL2Ready(
+  node: any,
+  messageHash: Fr,
+  logger: Logger,
+  label = 'message',
+): Promise<void> {
+  logger.info(`[L1→L2] Waiting for ${label} to be consumable...`)
+  const ready = await waitForL1ToL2MessageReady(node, messageHash, {
+    timeoutSeconds: 20 * 60,
+    chainTip: 'latest',
+  })
+  if (!ready) throw new Error(`L1→L2 ${label} not consumable within timeout`)
+  logger.info(`[L1→L2] ${label} is consumable`)
 }
 
 /**
@@ -503,6 +469,11 @@ const FORCE_REDEPLOY_SWAPS = FORCE_REDEPLOY_ALL || process.env.FORCE_REDEPLOY_SW
 const FORCE_SEED = FORCE_REDEPLOY_ALL || process.env.FORCE_SEED === 'true'
 const SKIP_ETH_AZTEC = process.env.SKIP_ETH_AZTEC === 'true'
 const SKIP_TO_FUEL_TESTS = process.env.SKIP_TO_FUEL_TESTS === 'true'
+// START_AT_TEST=<id> — skip all tests before <id> (ids: 1,1a,1b,1c,1d,1e,2,3,4,4a,5,6,7,8,9,10,11,12)
+const START_AT_TEST = (process.env.START_AT_TEST || '').trim()
+// RUN_ONLY=<id,id,...> — run exactly these tests, in suite order (takes precedence over START_AT_TEST).
+// Exit tests need prior public/private balance, so pair a deposit with the exit, e.g. RUN_ONLY=1a,4a
+const RUN_ONLY = (process.env.RUN_ONLY || '').split(',').map(s => s.trim()).filter(Boolean)
 
 // ─── L2 Grumpkin key derivation ──────────────────────────────────────────────
 
@@ -1918,23 +1889,11 @@ async function testPublicFuelFlow(
       if (requiredUnits > 0n) logger.warn(`      If claim fails, increase fuel to ${requiredUnits} units (${Number(requiredUnits) / 1e6} USDC)`)
     }
 
-    // Wait for BOTH L1→L2 messages to sync
+    // Wait for BOTH L1→L2 messages to be consumable
     for (const [label, msgHash] of [['token', pfTokenKey], ['fuel', pfFuelKey]] as const) {
       if (!msgHash || msgHash === '0x0') continue
-      const msgFr = Fr.fromString(msgHash)
-      logger.info(`Polling for ${label} L1→L2 message sync...`)
-      const start = Date.now()
-      while (Date.now() - start < 20 * 60 * 1000) {
-        try {
-          const blk = await node.getL1ToL2MessageCheckpoint(msgFr)
-          if (blk !== undefined) { logger.info(`${label} message ready (block=${blk})`); break }
-          logger.info(`   ${label} message not yet synced. Waiting 2 min...`)
-        } catch (e) { logger.warn(`   Poll failed: ${e}`) }
-        await wait(120_000)
-      }
+      await waitForL1ToL2Ready(node, Fr.fromString(msgHash), logger, `${label} message`)
     }
-    // Wait for sequencer to produce a new L2 block that includes the L1→L2 messages
-    await waitForNextL2Block(node, logger)
 
     // Create FeeJuicePaymentMethodWithClaim (same as frontend public fuel path)
     const publicFuelPayment = new FeeJuicePaymentMethodWithClaim(ownerAztecAddress, {
@@ -2152,23 +2111,11 @@ async function testPrivateFuelFlow(
       pvTokenAmount = pvPortalAmountAfterFee
     }
 
-    // Wait for BOTH L1→L2 messages
+    // Wait for BOTH L1→L2 messages to be consumable
     for (const [label, msgHash] of [['token', pvTokenKey], ['fuel', pvFuelKey]] as const) {
       if (!msgHash || msgHash === '0x0') continue
-      const msgFr = Fr.fromString(msgHash)
-      logger.info(`Polling for ${label} L1→L2 message sync...`)
-      const start = Date.now()
-      while (Date.now() - start < 20 * 60 * 1000) {
-        try {
-          const blk = await node.getL1ToL2MessageCheckpoint(msgFr)
-          if (blk !== undefined) { logger.info(`${label} message ready (block=${blk})`); break }
-          logger.info(`   ${label} message not yet synced. Waiting 2 min...`)
-        } catch (e) { logger.warn(`   Poll failed: ${e}`) }
-        await wait(120_000)
-      }
+      await waitForL1ToL2Ready(node, Fr.fromString(msgHash), logger, `${label} message`)
     }
-    // Wait for sequencer to produce a new L2 block that includes the L1→L2 messages
-    await waitForNextL2Block(node, logger)
 
     // 3. Query base fees → build explicit gasSettings (same as frontend)
     // Use tight limits, not REASONABLE_GAS_LIMITS (6.54M): mint_and_pay_fee asserts
@@ -2408,23 +2355,11 @@ async function testPrivateDepositFuelWithAttestation(
       tokenAmount = pdPortalAmountAfterFee
     }
 
-    // Wait for BOTH L1→L2 messages to sync
+    // Wait for BOTH L1→L2 messages to be consumable
     for (const [msgLabel, msgHash] of [['token', tokenKey], ['fuel', fuelKey]] as const) {
       if (!msgHash || msgHash === '0x0') continue
-      const msgFr = Fr.fromString(msgHash)
-      logger.info(`Polling for ${msgLabel} L1→L2 message sync...`)
-      const start = Date.now()
-      while (Date.now() - start < 20 * 60 * 1000) {
-        try {
-          const blk = await node.getL1ToL2MessageCheckpoint(msgFr)
-          if (blk !== undefined) { logger.info(`${msgLabel} message ready (block=${blk})`); break }
-          logger.info(`   ${msgLabel} message not yet synced. Waiting 2 min...`)
-        } catch (e) { logger.warn(`   Poll failed: ${e}`) }
-        await wait(120_000)
-      }
+      await waitForL1ToL2Ready(node, Fr.fromString(msgHash), logger, `${msgLabel} message`)
     }
-    // Wait for sequencer to produce a new L2 block that includes the L1→L2 messages
-    await waitForNextL2Block(node, logger)
 
     // Private deposit → claim_private on L2 (not claim_public)
     logger.info(`[L2] Claiming tokens privately (private deposit from ${label} fuel flow)`)
@@ -2556,24 +2491,8 @@ async function testPublicBridgeFlow(
   const { key: messageHash, index: leafIndex, amount: amountAfterFee, fee } = depositEvent.args
   logger.info(`[L1] Event: amountAfterFee=${amountAfterFee}, fee=${fee}, messageHash=${messageHash}, leafIndex=${leafIndex}`)
 
-  // Poll for L1→L2 message sync
   const messageHashFr = Fr.fromString(messageHash)
-  logger.info(`[L1→L2] Polling for message sync...`)
-  const maxWaitMs = 20 * 60 * 1000
-  const startWait = Date.now()
-  while (Date.now() - startWait < maxWaitMs) {
-    try {
-      const messageBlock = await node.getL1ToL2MessageCheckpoint(messageHashFr)
-      if (messageBlock !== undefined) {
-        logger.info(`[L1→L2] Message synced at block ${messageBlock}`)
-        break
-      }
-    } catch (e) { /* retry */ }
-    logger.info(`[L1→L2] Waiting 2 min...`)
-    await wait(120_000)
-  }
-  // Wait for sequencer to produce a new L2 block that includes the L1→L2 messages
-  await waitForNextL2Block(node, logger)
+  await waitForL1ToL2Ready(node, messageHashFr, logger)
 
   // Claim on L2 (retries if message not yet consumable)
   logger.info(`[L2] Claiming tokens publicly`)
@@ -2876,23 +2795,8 @@ async function testPrivateDepositAndClaimFlow(
   const { amount: amountAfterFee, fee, key: messageHash, index: leafIndex } = depositEvent.args
   logger.info(`[L1] Event: amountAfterFee=${amountAfterFee}, fee=${fee}, messageHash=${messageHash}, leafIndex=${leafIndex}`)
 
-  // Poll for L1→L2 message sync
   const messageHashFr = Fr.fromString(messageHash)
-  logger.info(`[L1→L2] Polling for message sync...`)
-  const maxWaitMs = 20 * 60 * 1000
-  const startWait = Date.now()
-  while (Date.now() - startWait < maxWaitMs) {
-    try {
-      const messageBlock = await node.getL1ToL2MessageCheckpoint(messageHashFr)
-      if (messageBlock !== undefined) {
-        logger.info(`[L1→L2] Message synced at block ${messageBlock}`)
-        break
-      }
-    } catch (e) { /* retry */ }
-    logger.info(`[L1→L2] Waiting 2 min...`)
-    await wait(120_000)
-  }
-  await waitForNextL2Block(node, logger)
+  await waitForL1ToL2Ready(node, messageHashFr, logger)
 
   // Claim on L2 (private)
   logger.info(`[L2] Claiming tokens privately`)
@@ -3163,23 +3067,8 @@ async function testNegativeCrossClaim(
 
   logger.info(`[L1] Deposit confirmed: amountAfterFee=${amountAfterFee}, leafIndex=${leafIndex}`)
 
-  // Poll for L1→L2 message sync
   const messageHashFr = Fr.fromString(messageHash)
-  logger.info(`[L1→L2] Polling for message sync...`)
-  const maxWaitMs = 20 * 60 * 1000
-  const startWait = Date.now()
-  while (Date.now() - startWait < maxWaitMs) {
-    try {
-      const messageBlock = await node.getL1ToL2MessageCheckpoint(messageHashFr)
-      if (messageBlock !== undefined) {
-        logger.info(`[L1→L2] Message synced at block ${messageBlock}`)
-        break
-      }
-    } catch (e) { /* retry */ }
-    logger.info(`[L1→L2] Waiting 2 min...`)
-    await wait(120_000)
-  }
-  await waitForNextL2Block(node, logger)
+  await waitForL1ToL2Ready(node, messageHashFr, logger)
 
   // Now try the WRONG claim type
   const l2BridgeContract = TokenBridgeContract.at(
@@ -3281,23 +3170,8 @@ async function testWrongRecipientCantClaimPublic(
   if (!evt) throw new Error('DepositToAztecPublic event not found')
   const { key: messageHash, index: leafIndex, amount: amountAfterFee } = evt.args
 
-  // Wait for message sync
   const messageHashFr = Fr.fromString(messageHash)
-  logger.info(`[L1→L2] Polling for message sync...`)
-  const maxWaitMs = 20 * 60 * 1000
-  const startWait = Date.now()
-  while (Date.now() - startWait < maxWaitMs) {
-    try {
-      const messageBlock = await node.getL1ToL2MessageCheckpoint(messageHashFr)
-      if (messageBlock !== undefined) {
-        logger.info(`[L1→L2] Message synced at block ${messageBlock}`)
-        break
-      }
-    } catch (e) { /* retry */ }
-    logger.info(`[L1→L2] Waiting 2 min...`)
-    await wait(120_000)
-  }
-  await waitForNextL2Block(node, logger)
+  await waitForL1ToL2Ready(node, messageHashFr, logger)
 
   const l2BridgeContract = TokenBridgeContract.at(
     AztecAddress.fromStringUnsafe(deployed.l2BridgeContract),
@@ -3394,23 +3268,8 @@ async function testWrongSecretCantClaimPrivate(
   if (!evt) throw new Error('DepositToAztecPrivate event not found')
   const { key: messageHash, index: leafIndex, amount: amountAfterFee } = evt.args
 
-  // Wait for message sync
   const messageHashFr = Fr.fromString(messageHash)
-  logger.info(`[L1→L2] Polling for message sync...`)
-  const maxWaitMs = 20 * 60 * 1000
-  const startWait = Date.now()
-  while (Date.now() - startWait < maxWaitMs) {
-    try {
-      const messageBlock = await node.getL1ToL2MessageCheckpoint(messageHashFr)
-      if (messageBlock !== undefined) {
-        logger.info(`[L1→L2] Message synced at block ${messageBlock}`)
-        break
-      }
-    } catch (e) { /* retry */ }
-    logger.info(`[L1→L2] Waiting 2 min...`)
-    await wait(120_000)
-  }
-  await waitForNextL2Block(node, logger)
+  await waitForL1ToL2Ready(node, messageHashFr, logger)
 
   const l2BridgeContract = TokenBridgeContract.at(
     AztecAddress.fromStringUnsafe(deployed.l2BridgeContract),
@@ -3869,12 +3728,14 @@ async function waitForProofAndWithdrawL1(
   // from the L2 block number. node.getBlockNumber('proven') returns the proven L2
   // block number directly and is the correct thing to compare against blockNumber.
   logger.info(`[L1] Polling for proven block (need block ${blockNumber})...`)
-  const maxWaitMs = 50 * 60 * 1000
+  const maxWaitMs = 90 * 60 * 1000
   const startWait = Date.now()
+  let proven = false
   while (Date.now() - startWait < maxWaitMs) {
     const provenBlock = await node.getBlockNumber('proven')
     if (provenBlock >= blockNumber) {
       logger.info(`[L1] Block ${blockNumber} proven (proven=${provenBlock})`)
+      proven = true
       break
     }
     logger.info(`[L1] Not proven yet (proven=${provenBlock}). Waiting 2 min...`)
@@ -3884,10 +3745,29 @@ async function waitForProofAndWithdrawL1(
   const txHash = typeof l2TxReceipt.txHash === 'string'
     ? TxHash.fromString(l2TxReceipt.txHash)
     : l2TxReceipt.txHash
+
+  // The L2 burn already happened; the L2->L1 message is durable. If proving
+  // stalled past our window, fail loudly instead of computing a witness against
+  // an unproven block (which returns null and looks like a missing message).
+  if (!proven) {
+    const provenBlock = await node.getBlockNumber('proven')
+    throw new Error(
+      `L2 exit tx ${txHash} mined in block ${blockNumber} but not proven within ${maxWaitMs / 60_000} min ` +
+      `(proven=${provenBlock}). The burn succeeded — re-run once proven>=${blockNumber} to complete the L1 withdraw.`
+    )
+  }
+
   logger.info(`[L1] Computing witness for txHash=${txHash}`)
 
-  const witness = await node.getL2ToL1MembershipWitness(txHash, msgLeaf)
-  if (!witness) throw new Error(`L2->L1 message not found for txHash ${txHash}`)
+  // Membership witness can lag a few seconds behind the proven pointer while the
+  // outbox root propagates; retry briefly before giving up.
+  let witness = await node.getL2ToL1MembershipWitness(txHash, msgLeaf)
+  for (let i = 0; !witness && i < 10; i++) {
+    logger.info(`[L1] Witness not available yet, retrying in 30s (${i + 1}/10)...`)
+    await wait(30_000)
+    witness = await node.getL2ToL1MembershipWitness(txHash, msgLeaf)
+  }
+  if (!witness) throw new Error(`L2->L1 message not found for txHash ${txHash} (block ${blockNumber} is proven)`)
 
   const siblingPathHex = witness.siblingPath
     .toBufferArray()
@@ -4264,10 +4144,24 @@ async function main() {
       wallet
     )
 
+    // START_AT_TEST=<id> skips all tests before <id> (e.g. '4a'). Safe because L2
+    // balances persist across runs, so exit tests don't require same-run deposits.
+    let gateOpen = !START_AT_TEST
+    const gate = (id: string): boolean => {
+      if (RUN_ONLY.length) {
+        const run = RUN_ONLY.includes(id)
+        if (!run) logger.info(`⏭️  Skipping Test ${id} (RUN_ONLY=${RUN_ONLY.join(',')})`)
+        return run
+      }
+      if (!gateOpen && id === START_AT_TEST) gateOpen = true
+      if (!gateOpen) logger.info(`⏭️  Skipping Test ${id} (START_AT_TEST=${START_AT_TEST})`)
+      return gateOpen
+    }
+
     // ════════════════════════════════════════════════════════════════════════════
     // Test 1: L1 Public Deposit (POCH) → L2 Public Claim
     // ════════════════════════════════════════════════════════════════════════════
-    await testPublicBridgeFlow(
+    if (gate('1')) await testPublicBridgeFlow(
       'poch', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       l1ContractAddresses, sponsoredPaymentMethod, node, rollupVersion, logger
     )
@@ -4275,7 +4169,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 1a: L1 Public Deposit (Passport) → L2 Public Claim
     // ════════════════════════════════════════════════════════════════════════════
-    await testPublicBridgeFlow(
+    if (gate('1a')) await testPublicBridgeFlow(
       'passport', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       l1ContractAddresses, sponsoredPaymentMethod, node, rollupVersion, logger
     )
@@ -4283,7 +4177,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 1b: Public Fuel — SwapBridgeRouter + FeeJuicePaymentMethodWithClaim
     // ════════════════════════════════════════════════════════════════════════════
-    await testPublicFuelFlow(
+    if (gate('1b')) await testPublicFuelFlow(
       deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       l1ContractAddresses, sponsoredPaymentMethod, node, l2BridgeContract, l2TokenContract, logger
     )
@@ -4291,7 +4185,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 1c: Private Fuel — SwapBridgeRouter + PrivateMintAndPayFeePaymentMethod
     // ════════════════════════════════════════════════════════════════════════════
-    await testPrivateFuelFlow(
+    if (gate('1c')) await testPrivateFuelFlow(
       deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       l1ContractAddresses, sponsoredPaymentMethod, node, l2BridgeContract, l2TokenContract, logger
     )
@@ -4299,7 +4193,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 1d: Private Deposit Fuel + POCH Attestation (isPrivate=true)
     // ════════════════════════════════════════════════════════════════════════════
-    await testPrivateDepositFuelWithAttestation(
+    if (gate('1d')) await testPrivateDepositFuelWithAttestation(
       'poch', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       l1ContractAddresses, sponsoredPaymentMethod, node, l2BridgeContract, l2TokenContract, logger
     )
@@ -4307,7 +4201,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 1e: Private Deposit Fuel + Passport Attestation (isPrivate=true)
     // ════════════════════════════════════════════════════════════════════════════
-    await testPrivateDepositFuelWithAttestation(
+    if (gate('1e')) await testPrivateDepositFuelWithAttestation(
       'passport', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       l1ContractAddresses, sponsoredPaymentMethod, node, l2BridgeContract, l2TokenContract, logger
     )
@@ -4315,25 +4209,29 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 2: L1 Private Deposit (POCH) → L2 Private Claim
     // ════════════════════════════════════════════════════════════════════════════
-    const pochResult = await testPrivateDepositAndClaimFlow(
-      'poch', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
-      l1ContractAddresses, sponsoredPaymentMethod, node, logger
-    )
-    logger.info(`POCH deposit+claim result: amountAfterFee=${pochResult.amountAfterFee}`)
+    if (gate('2')) {
+      const pochResult = await testPrivateDepositAndClaimFlow(
+        'poch', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
+        l1ContractAddresses, sponsoredPaymentMethod, node, logger
+      )
+      logger.info(`POCH deposit+claim result: amountAfterFee=${pochResult.amountAfterFee}`)
+    }
 
     // ════════════════════════════════════════════════════════════════════════════
     // Test 3: L1 Private Deposit (Passport) → L2 Private Claim
     // ════════════════════════════════════════════════════════════════════════════
-    const passportResult = await testPrivateDepositAndClaimFlow(
-      'passport', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
-      l1ContractAddresses, sponsoredPaymentMethod, node, logger
-    )
-    logger.info(`Passport deposit+claim result: amountAfterFee=${passportResult.amountAfterFee}`)
+    if (gate('3')) {
+      const passportResult = await testPrivateDepositAndClaimFlow(
+        'passport', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
+        l1ContractAddresses, sponsoredPaymentMethod, node, logger
+      )
+      logger.info(`Passport deposit+claim result: amountAfterFee=${passportResult.amountAfterFee}`)
+    }
 
     // ════════════════════════════════════════════════════════════════════════════
     // Test 4: L2 Public Exit (POCH) → L1 Withdraw
     // ════════════════════════════════════════════════════════════════════════════
-    await testPublicExitFlow(
+    if (gate('4')) await testPublicExitFlow(
       'poch', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       l1ContractAddresses, sponsoredPaymentMethod, node, rollupVersion,
       l2BridgeContract, l2TokenContract, logger
@@ -4342,7 +4240,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 4a: L2 Public Exit (Passport) → L1 Withdraw
     // ════════════════════════════════════════════════════════════════════════════
-    await testPublicExitFlow(
+    if (gate('4a')) await testPublicExitFlow(
       'passport', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       l1ContractAddresses, sponsoredPaymentMethod, node, rollupVersion,
       l2BridgeContract, l2TokenContract, logger
@@ -4351,7 +4249,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 5: L2 Private Exit (POCH) → L1 Withdraw
     // ════════════════════════════════════════════════════════════════════════════
-    await testPrivateExitFlow(
+    if (gate('5')) await testPrivateExitFlow(
       'poch', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       l1ContractAddresses, sponsoredPaymentMethod, node, rollupVersion,
       l2BridgeContract, l2TokenContract, logger
@@ -4360,7 +4258,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 6: L2 Private Exit (Passport) → L1 Withdraw
     // ════════════════════════════════════════════════════════════════════════════
-    await testPrivateExitFlow(
+    if (gate('6')) await testPrivateExitFlow(
       'passport', deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       l1ContractAddresses, sponsoredPaymentMethod, node, rollupVersion,
       l2BridgeContract, l2TokenContract, logger
@@ -4369,7 +4267,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 7: Negative — Public Deposit → Private Claim (should FAIL)
     // ════════════════════════════════════════════════════════════════════════════
-    await testNegativeCrossClaim(
+    if (gate('7')) await testNegativeCrossClaim(
       'public_deposit_private_claim', deployed, wallet, ownerAztecAddress,
       l1Client, ownerEthAddress, sponsoredPaymentMethod, node, logger
     )
@@ -4377,7 +4275,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 8: Negative — Private Deposit → Public Claim (should FAIL)
     // ════════════════════════════════════════════════════════════════════════════
-    await testNegativeCrossClaim(
+    if (gate('8')) await testNegativeCrossClaim(
       'private_deposit_public_claim', deployed, wallet, ownerAztecAddress,
       l1Client, ownerEthAddress, sponsoredPaymentMethod, node, logger
     )
@@ -4385,7 +4283,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 9: Negative — Wrong Aztec address can't claim_public
     // ════════════════════════════════════════════════════════════════════════════
-    await testWrongRecipientCantClaimPublic(
+    if (gate('9')) await testWrongRecipientCantClaimPublic(
       deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       sponsoredPaymentMethod, node, logger
     )
@@ -4393,7 +4291,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 10: Negative — Wrong secret can't claim_private
     // ════════════════════════════════════════════════════════════════════════════
-    await testWrongSecretCantClaimPrivate(
+    if (gate('10')) await testWrongSecretCantClaimPrivate(
       deployed, wallet, ownerAztecAddress, l1Client, ownerEthAddress,
       sponsoredPaymentMethod, node, logger
     )
@@ -4401,7 +4299,7 @@ async function main() {
     // ════════════════════════════════════════════════════════════════════════════
     // Test 11: Negative — Non-holder can't exit_to_l1_public
     // ════════════════════════════════════════════════════════════════════════════
-    await testNonHolderCantExit(
+    if (gate('11')) await testNonHolderCantExit(
       deployed, wallet, ownerAztecAddress, l2BridgeContract, l2TokenContract,
       sponsoredPaymentMethod, logger
     )
@@ -4411,7 +4309,7 @@ async function main() {
     // (missing attestations, reused cleanHands/passport nonce, expired passport,
     //  over-limit passport, router-forwarded attestations, exit revert paths)
     // ════════════════════════════════════════════════════════════════════════════
-    {
+    if (gate('12')) {
       const negDeployment = loadActiveDeployment()
       const negSwapRouter = negDeployment?.swapBridgeRouterAddress as `0x${string}` | undefined
       await testPublicComplianceNegatives(

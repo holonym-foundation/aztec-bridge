@@ -29,6 +29,7 @@
     "@aztec/foundation": "5.0.1",
     "@aztec/l1-artifacts": "5.0.1",
     "@aztec/noir-contracts.js": "5.0.1",
+    "@aztec/protocol-contracts": "5.0.1",
     "@aztec/pxe": "5.0.1",
     "@aztec/stdlib": "5.0.1",
     "@aztec/wallet-sdk": "5.0.1",

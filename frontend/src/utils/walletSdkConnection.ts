@@ -31,9 +31,13 @@ export function getChainInfo(): ChainInfo {
 
 export function discoverWallets(opts?: {
   timeout?: number
+  webWalletUrls?: string[]
   onWalletDiscovered?: (provider: WalletProvider) => void
 }): DiscoverySession {
-  const manager = WalletManager.configure({ extensions: { enabled: true } })
+  const manager = WalletManager.configure({
+    extensions: { enabled: true },
+    webWallets: { urls: opts?.webWalletUrls ?? [] },
+  })
   return manager.getAvailableWallets({
     chainInfo: getChainInfo(),
     appId: APP_ID,

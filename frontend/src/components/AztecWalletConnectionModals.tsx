@@ -27,6 +27,8 @@ export function AztecWalletConnectionModals() {
     selectAccount,
     showWalletInstallPrompt,
     setShowWalletInstallPrompt,
+    webWalletUrl,
+    setWebWalletUrl,
   } = useWalletStore()
 
   return (
@@ -38,6 +40,8 @@ export function AztecWalletConnectionModals() {
           isDiscovering={false}
           onSelectWallet={() => {}}
           onClose={() => setShowWalletInstallPrompt(false)}
+          webWalletUrl={webWalletUrl}
+          onConnectWebWallet={setWebWalletUrl}
         />
       )}
       {(walletConnectionPhase === 'discovering' || walletConnectionPhase === 'selecting') && (
@@ -47,6 +51,8 @@ export function AztecWalletConnectionModals() {
           isDiscovering={walletConnectionPhase === 'discovering'}
           onSelectWallet={selectWallet}
           onClose={cancelWalletConnection}
+          webWalletUrl={webWalletUrl}
+          onConnectWebWallet={setWebWalletUrl}
         />
       )}
       {walletConnectionPhase === 'verifying' && verificationEmojis && (

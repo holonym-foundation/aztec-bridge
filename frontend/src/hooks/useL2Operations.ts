@@ -90,7 +90,8 @@ export const useL2TokenBalance = () => {
   })
 }
 
-const FEE_JUICE_ADDRESS = '0x0000000000000000000000000000000000000000000000000000000000000005'
+// v5 canonical FeeJuice protocol-contract address (was 0x5 in v4)
+const FEE_JUICE_ADDRESS = '0x0000000000000000000000000000000000000000000000000000000000000003'
 const FEE_JUICE_DECIMALS = 18
 
 export const useL2FeeJuiceBalance = () => {

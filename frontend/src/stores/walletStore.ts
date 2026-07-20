@@ -39,6 +39,7 @@ declare global {
 }
 
 const AZTEC_WALLET_KEY = 'aztecLoginMethod'
+const WEB_WALLET_URL_KEY = 'aztecWebWalletUrl'
 
 const DISCOVERY_TIMEOUT_MS = 60000
 const DISCONNECT_GRACE_MS = 1000
@@ -77,6 +78,9 @@ interface WalletState {
   pendingConnection: PendingConnection | null
   discoveredWallets: Array<{ name: string; provider: WalletProvider }>
 
+  // User-supplied web (iframe) wallet URL, probed alongside extension discovery.
+  webWalletUrl: string
+
   // Account selection state
   aztecAlias: string | null
   availableAccounts: Array<{ alias: string; address: string }>
@@ -101,6 +105,7 @@ interface WalletState {
   initializeAztecWallet: () => Promise<void>
 
   // Wallet SDK connection flow actions
+  setWebWalletUrl: (url: string) => void
   startWalletDiscovery: () => Promise<void>
   selectWallet: (provider: WalletProvider) => Promise<void>
   confirmWalletConnection: () => Promise<any>
@@ -157,6 +162,11 @@ const getInitialWalletType = (): AztecLoginMethod | null => {
   return stored ? (stored as AztecLoginMethod) : null
 }
 
+const getInitialWebWalletUrl = (): string => {
+  if (typeof window === 'undefined') return ''
+  return localStorage.getItem(WEB_WALLET_URL_KEY) ?? ''
+}
+
 // WAAP_METHOD enum equivalent for WaaP
 export const WAAP_METHOD = {
   eth_requestAccounts: 'eth_requestAccounts',
@@ -195,6 +205,7 @@ const initialState = {
   verificationEmojis: null,
   pendingConnection: null,
   discoveredWallets: [],
+  webWalletUrl: getInitialWebWalletUrl(),
 
   // Account selection state
   aztecAlias: null,
@@ -245,6 +256,30 @@ const walletStore = create<WalletState>((set, get) => ({
 
   // ─── Wallet SDK connection flow ────────────────────────────────────
 
+  setWebWalletUrl: (url: string) => {
+    const trimmed = url.trim()
+    if (trimmed) {
+      localStorage.setItem(WEB_WALLET_URL_KEY, trimmed)
+    } else {
+      localStorage.removeItem(WEB_WALLET_URL_KEY)
+    }
+    set({ webWalletUrl: trimmed })
+
+    // Web wallet URLs are only read when discovery is configured, so an
+    // in-flight discovery must be torn down and restarted to probe the new URL.
+    if (activeDiscoverySession) {
+      try {
+        activeDiscoverySession.cancel()
+      } catch {
+        /* ignore */
+      }
+      activeDiscoverySession = null
+    }
+    isDiscoveryInProgress = false
+    set({ discoveredWallets: [], showWalletInstallPrompt: false })
+    void get().startWalletDiscovery()
+  },
+
   startWalletDiscovery: async () => {
     if (isDiscoveryInProgress) return
 
@@ -275,8 +310,11 @@ const walletStore = create<WalletState>((set, get) => ({
 
     const collectedWallets: Array<{ name: string; provider: WalletProvider }> = []
 
+    const { webWalletUrl } = get()
+
     activeDiscoverySession = discoverWallets({
       timeout: DISCOVERY_TIMEOUT_MS,
+      webWalletUrls: webWalletUrl ? [webWalletUrl] : [],
       onWalletDiscovered: (provider) => {
         const entry = { name: provider.name ?? 'Aztec Wallet', provider }
         collectedWallets.push(entry)
@@ -409,18 +447,25 @@ const walletStore = create<WalletState>((set, get) => ({
         verificationEmojis: null,
       })
 
-      // Request scoped capabilities (preferred flow for external wallets).
-      // This shows a single comprehensive dialog where the user selects
-      // accounts AND grants permissions for simulations/transactions.
-      // Fall back to getAccounts if requestCapabilities is not supported.
+      // Account access is granted only through the accounts capability
+      // (canGet) in the manifest; getAccounts is authorized as a side effect of
+      // that grant. So capabilities must be requested first, and accounts read
+      // from the grant. getAccounts is kept only as a fallback for wallets that
+      // authorize it independently of the capability model.
       let rawAccounts: Array<{ item?: unknown; address?: unknown; alias?: string } | unknown> = []
+      const manifest = buildCapabilityManifest()
+      console.info(
+        '[walletStore] requesting capabilities:',
+        JSON.stringify(manifest.capabilities.map((c) => ({ type: c.type, canGet: (c as { canGet?: boolean }).canGet }))),
+      )
       try {
         const capabilities = await Promise.race([
-          wallet.requestCapabilities(buildCapabilityManifest()),
+          wallet.requestCapabilities(manifest),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('requestCapabilities timed out')), 15_000),
           ),
         ])
+        console.info('[walletStore] requestCapabilities granted:', JSON.stringify(capabilities?.granted?.map((c: { type: string }) => c.type)), capabilities)
         const accountsCap = capabilities.granted.find((c: { type: string }) => c.type === 'accounts') as
           | {
               type: 'accounts'
@@ -433,13 +478,17 @@ const walletStore = create<WalletState>((set, get) => ({
           | undefined
         rawAccounts = accountsCap?.accounts ?? []
       } catch (capErr) {
-        console.warn('[walletStore] requestCapabilities failed/timed out, falling back to getAccounts:', capErr)
+        console.warn('[walletStore] requestCapabilities failed/timed out:', capErr)
       }
 
-      // Fall back to getAccounts if requestCapabilities didn't yield accounts
       if (rawAccounts.length === 0) {
-        const fallbackAccounts = await wallet.getAccounts()
-        rawAccounts = fallbackAccounts ?? []
+        try {
+          const directAccounts = await wallet.getAccounts()
+          console.info('[walletStore] getAccounts fallback returned:', directAccounts?.length, directAccounts)
+          rawAccounts = directAccounts ?? []
+        } catch (accErr) {
+          console.warn('[walletStore] getAccounts fallback failed:', accErr)
+        }
       }
 
       if (!rawAccounts || rawAccounts.length === 0) {

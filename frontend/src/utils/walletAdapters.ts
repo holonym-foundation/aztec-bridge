@@ -52,7 +52,8 @@ async function getContractArtifact(type: ContractType) {
   return TokenContractArtifact
 }
 
-const FEE_JUICE_L2_ADDRESS = '0x0000000000000000000000000000000000000000000000000000000000000005'
+// v5 canonical FeeJuice protocol-contract address (was 0x5 in v4)
+const FEE_JUICE_L2_ADDRESS = '0x0000000000000000000000000000000000000000000000000000000000000003'
 
 /**
  * Verify an Aztec TxReceipt was mined and executed successfully.
@@ -111,7 +112,9 @@ class WalletAdapter {
       { addr: (t as any).l2ProxyContract ?? '', type: 'proxy' as const },
     ]).filter(({ addr }) => !!addr)
 
-    // Register deployed contracts (token, bridge) via node lookup
+    // Register deployed contracts via node lookup. Failures are logged (not
+    // swallowed) — a silent catch here previously hid capability/artifact
+    // registration errors that only surfaced later as balance-load failures.
     await Promise.all(
       deployedContracts.map(async ({ addr, type }) => {
         try {
@@ -119,12 +122,26 @@ class WalletAdapter {
           const [instance, artifact] = await Promise.all([aztecNode.getContract(address), getContractArtifact(type)])
           if (instance) {
             await this.wallet.registerContract(instance, artifact)
+          } else {
+            console.warn(`[walletAdapter] no instance found on node for ${type} ${addr}`)
           }
-        } catch {
-          // Contract may already be registered
+        } catch (err) {
+          console.warn(`[walletAdapter] registerContract failed for ${type} ${addr}:`, err)
         }
       }),
     )
+
+    // FeeJuice (0x5) is a canonical protocol contract — node.getContract does
+    // not return it, and an external wallet's PXE has no instance for it until
+    // registered. getCanonicalFeeJuice() derives the instance+artifact
+    // deterministically (no node lookup) so balance_of_public can be simulated.
+    try {
+      const { getCanonicalFeeJuice } = await import('@aztec/protocol-contracts/fee-juice/lazy')
+      const { instance, artifact } = await getCanonicalFeeJuice()
+      await this.wallet.registerContract(instance, artifact)
+    } catch (err) {
+      console.warn('[walletAdapter] FeeJuice registration skipped:', err)
+    }
 
     // Register BridgedFPC separately — it's a registered-not-deployed contract,
     // so the node doesn't know about it. We compute the deterministic instance

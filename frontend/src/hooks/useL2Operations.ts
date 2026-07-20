@@ -464,7 +464,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             })
             notify(
               'info',
-              `Waiting for L2 block to be proven on L1 (${Math.round(event.elapsedMs / 60_000)} min elapsed)...`,
+              `Waiting for L2 block to be proven on L1 (proven: ${event.provenBlock}, need: ${event.neededBlock}, ${Math.round(event.elapsedMs / 60_000)} min elapsed)...`,
               { toastId: 'l2-to-l1-progress', autoClose: 15000 },
             )
             break

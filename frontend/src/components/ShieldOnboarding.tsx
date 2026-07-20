@@ -14,7 +14,7 @@ type Screen = {
   title: string
   body: ReactNode
   cta: string
-  visual: 'bridge' | 'shield' | 'identity' | 'zk'
+  visual: 'cryptex' | 'shield' | 'identity' | 'zk'
 }
 
 const SCREENS: Screen[] = [
@@ -25,7 +25,7 @@ const SCREENS: Screen[] = [
       <p>Shield is a private bridge between Ethereum and Aztec. Move your funds privately.</p>
     ),
     cta: 'Get started',
-    visual: 'bridge',
+    visual: 'cryptex',
   },
   {
     eyebrow: 'Why Aztec',
@@ -78,8 +78,8 @@ function PaperField({ still }: { still: boolean }) {
   return (
     <div className="ob-field" aria-hidden="true">
       <MeshGradient
-        colors={['#fff6fa', '#fde7f3', '#f462a6', '#81133b']}
-        speed={still ? 0 : 0.22}
+        colors={['#fff6fa', '#fde7f3', '#fcd4ea', '#fa8fc4']}
+        speed={still ? 0 : 0.16}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
       />
       <div className="ob-veil" />
@@ -91,42 +91,145 @@ function PaperField({ still }: { still: boolean }) {
   )
 }
 
-/* ETH ⇄ Aztec bridge animation — a coin crosses and gains a privacy shield. */
-function BridgeVisual({ still }: { still: boolean }) {
+/* Cryptex hero mark — concentric dial rings framing the headline. A point spirals from
+   the outer ring (public, light) to the private core (dark, occluded) and back out,
+   endlessly shielding and unshielding. No text, no logos — state is read through light
+   and shadow alone. */
+const CX_SIZE = 320
+const CX_CENTER = CX_SIZE / 2
+const CX_OUTER = 148
+const CX_CORE = 30
+const CX_STEPS = 48
+const CX_SPIRAL_TURNS = 2.5
+
+const CX_RINGS = [
+  { r: 148, dash: '1.5 15', duration: 46, dir: 1 },
+  { r: 114, dash: '1.5 12', duration: 34, dir: -1 },
+  { r: 80, dash: '1.5 10', duration: 26, dir: 1 },
+  { r: 48, dash: '1.5 8', duration: 19, dir: -1 },
+]
+
+function cxPoint(radius: number, angleDeg: number) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180
+  return { x: CX_CENTER + radius * Math.cos(rad), y: CX_CENTER + radius * Math.sin(rad) }
+}
+
+// t: 0 -> 1 is one full shield (inward) + unshield (outward) cycle.
+function cxRadiusAt(t: number) {
+  const half = t <= 0.5 ? t / 0.5 : (1 - t) / 0.5
+  return CX_CORE + (CX_OUTER - CX_CORE) * half
+}
+
+function cxToneAt(t: number) {
+  const half = t <= 0.5 ? t / 0.5 : (1 - t) / 0.5 // 1 = at outer edge (public), 0 = at core (private)
+  const fill = half > 0.66 ? '#f462a6' : half > 0.33 ? '#b23a72' : '#3d0e21'
+  const opacity = 0.35 + half * 0.65
+  const glow = Math.max(0, half - 0.4) * 0.9
+  return { fill, opacity, glow }
+}
+
+const CX_SPIRAL = Array.from({ length: CX_STEPS + 1 }, (_, i) => {
+  const t = i / CX_STEPS
+  const radius = cxRadiusAt(t)
+  const angle = t * CX_SPIRAL_TURNS * 360
+  const { x, y } = cxPoint(radius, angle)
+  const { fill, opacity, glow } = cxToneAt(t)
+  return { x, y, fill, opacity, glow }
+})
+const CX_X = CX_SPIRAL.map((p) => p.x)
+const CX_Y = CX_SPIRAL.map((p) => p.y)
+const CX_FILL = CX_SPIRAL.map((p) => p.fill)
+const CX_OPACITY = CX_SPIRAL.map((p) => p.opacity)
+const CX_GLOW = CX_SPIRAL.map((p) => p.glow)
+
+function CryptexVisual({ still }: { still: boolean }) {
   return (
-    <div className="ob-bridge">
-      <div className="ob-node">
-        <img src="/assets/svg/ethLogo.svg" alt="" width={30} height={30} onError={(e) => ((e.currentTarget.style.display = 'none'))} />
-        <span>Ethereum</span>
-      </div>
-      <div className="ob-wire">
-        <div className="ob-wire-line" />
-        {!still && (
-          <motion.div
-            className="ob-coin"
-            animate={{ left: ['4%', '92%', '4%'] }}
-            transition={{ duration: 4.4, repeat: Infinity, ease: 'easeInOut' }}
+    <svg className="ob-cryptex-svg" viewBox={`0 0 ${CX_SIZE} ${CX_SIZE}`} aria-hidden="true">
+      <defs>
+        <radialGradient id="cx-core" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#3d0e21" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#3d0e21" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      <circle cx={CX_CENTER} cy={CX_CENTER} r={CX_CORE + 8} fill="url(#cx-core)" />
+
+      {CX_RINGS.map((ring, i) =>
+        still ? (
+          <circle
+            key={ring.r}
+            cx={CX_CENTER}
+            cy={CX_CENTER}
+            r={ring.r}
+            fill="none"
+            stroke={i === 0 ? '#e79cbe' : i === CX_RINGS.length - 1 ? '#5a1f36' : '#c96f97'}
+            strokeWidth={1.4}
+            strokeDasharray={ring.dash}
+            opacity={0.5}
+          />
+        ) : (
+          <motion.g
+            key={ring.r}
+            style={{ transformOrigin: `${CX_CENTER}px ${CX_CENTER}px` }}
+            animate={{ rotate: ring.dir * 360 }}
+            transition={{ duration: ring.duration, repeat: Infinity, ease: 'linear' }}
           >
-            <motion.span
-              className="ob-coin-ring"
-              animate={{ opacity: [0, 0, 1, 1, 0], scale: [0.7, 0.7, 1, 1, 0.7] }}
-              transition={{ duration: 4.4, repeat: Infinity, ease: 'easeInOut' }}
+            <motion.circle
+              cx={CX_CENTER}
+              cy={CX_CENTER}
+              r={ring.r}
+              fill="none"
+              strokeWidth={1.4}
+              strokeDasharray={ring.dash}
+              animate={{
+                stroke: ['#f2b7d3', '#5a1f36', '#f2b7d3'],
+                opacity: [0.28, 0.72, 0.28],
+              }}
+              transition={{
+                duration: 9,
+                repeat: Infinity,
+                ease: 'easeInOut',
+                delay: i * 0.55,
+              }}
             />
-          </motion.div>
-        )}
-      </div>
-      <div className="ob-node">
-        <img src="/assets/svg/shield-symbol-maroon.svg" alt="" width={26} height={32} />
-        <span>Aztec · private</span>
-      </div>
-    </div>
+          </motion.g>
+        )
+      )}
+
+      {!still && (
+        <>
+          <motion.circle
+            r={11}
+            animate={{ cx: CX_X, cy: CX_Y, fill: CX_FILL, opacity: CX_GLOW }}
+            transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
+            style={{ filter: 'blur(5px)' }}
+          />
+          <motion.circle
+            r={4}
+            animate={{ cx: CX_X, cy: CX_Y, fill: CX_FILL, opacity: CX_OPACITY }}
+            transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
+          />
+        </>
+      )}
+
+      {still && (
+        <>
+          <circle cx={cxPoint(CX_OUTER, 40).x} cy={cxPoint(CX_OUTER, 40).y} r={4.5} fill="#f462a6" />
+          <circle cx={cxPoint(CX_CORE + 4, 220).x} cy={cxPoint(CX_CORE + 4, 220).y} r={3.5} fill="#3d0e21" opacity={0.7} />
+        </>
+      )}
+    </svg>
   )
 }
 
+/* A quiet echo of the cryptex mark — a faint dashed ring behind the glyph, no motion. */
 function StaticGlyph({ kind }: { kind: 'shield' | 'identity' | 'zk' }) {
   const label = kind === 'shield' ? 'Private on Aztec' : kind === 'identity' ? 'Human · verified' : 'Zero-knowledge'
   return (
     <div className={`ob-glyph ob-glyph-${kind}`}>
+      <svg className="ob-glyph-ring" viewBox="0 0 120 120" aria-hidden="true">
+        <circle cx="60" cy="60" r="52" fill="none" stroke="#e79cbe" strokeWidth="1.2" strokeDasharray="1.5 11" opacity="0.55" />
+      </svg>
       <img src="/assets/svg/shield-symbol-maroon.svg" alt="" width={64} height={80} />
       <span>{label}</span>
     </div>
@@ -205,11 +308,23 @@ export default function ShieldOnboarding() {
                 exit={{ opacity: 0, y: -22 }}
                 transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
               >
-                <div className="ob-visual">
-                  {screen.visual === 'bridge' ? <BridgeVisual still={reduce} /> : <StaticGlyph kind={screen.visual} />}
-                </div>
-                <p className="ob-eyebrow">{screen.eyebrow}</p>
-                <h1 className="ob-title">{screen.title}</h1>
+                {screen.visual === 'cryptex' ? (
+                  <div className="ob-cryptex-frame">
+                    <CryptexVisual still={reduce} />
+                    <div className="ob-headline">
+                      <p className="ob-eyebrow">{screen.eyebrow}</p>
+                      <h1 className="ob-title">{screen.title}</h1>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="ob-visual">
+                      <StaticGlyph kind={screen.visual} />
+                    </div>
+                    <p className="ob-eyebrow">{screen.eyebrow}</p>
+                    <h1 className="ob-title">{screen.title}</h1>
+                  </>
+                )}
                 <div className="ob-body">{screen.body}</div>
               </motion.div>
             </AnimatePresence>
@@ -253,7 +368,7 @@ export default function ShieldOnboarding() {
           background: #fff6fa; color: #1c1116; }
         .ob-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
         .ob-field canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
-        .ob-veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,246,250,0.30), rgba(255,246,250,0.66)); }
+        .ob-veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,246,250,0.38), rgba(255,246,250,0.78)); }
         .ob-grain { position: absolute; inset: 0; opacity: 0.05; mix-blend-mode: multiply; pointer-events: none; }
         .ob-progress { position: relative; z-index: 3; height: 4px; width: 100%; background: rgba(129,19,59,0.12); }
         .ob-progress-fill { height: 100%; background: linear-gradient(90deg, ${BRAND}, #f462a6); }
@@ -285,18 +400,17 @@ export default function ShieldOnboarding() {
         .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
         .ob-secured strong { color: #5a4650; font-weight: 620; }
         .ob-dot { opacity: 0.5; }
-        /* bridge visual */
-        .ob-bridge { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; max-width: 460px; }
-        .ob-node { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 0 0 auto; width: 92px; }
-        .ob-node span { font-size: 12px; color: #5a4650; font-weight: 550; text-align: center; }
-        .ob-wire { position: relative; flex: 1; height: 40px; }
-        .ob-wire-line { position: absolute; top: 50%; left: 0; right: 0; height: 2px; transform: translateY(-50%);
-          background: linear-gradient(90deg, rgba(129,19,59,0.15), ${BRAND}, rgba(129,19,59,0.15)); border-radius: 2px; }
-        .ob-coin { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%;
-          background: ${BRAND}; box-shadow: 0 0 12px rgba(129,19,59,0.5); }
-        .ob-coin-ring { position: absolute; inset: -6px; border-radius: 50%; border: 2px solid #f462a6; }
+        /* cryptex hero — concentric dial rings framing the headline */
+        .ob-cryptex-frame { position: relative; width: 100%; max-width: 340px; aspect-ratio: 1 / 1;
+          margin: 4px auto 4px; display: flex; align-items: center; justify-content: center; }
+        .ob-cryptex-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+        .ob-headline { position: relative; z-index: 1; padding: 0 34px; text-align: center; }
+        .ob-headline .ob-title { max-width: 12ch; }
         /* static glyphs */
-        .ob-glyph { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+        .ob-glyph { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+        .ob-glyph-ring { position: absolute; top: 50%; left: 50%; width: 132px; height: 132px;
+          transform: translate(-50%, -50%); z-index: 0; }
+        .ob-glyph img, .ob-glyph span { position: relative; z-index: 1; }
         .ob-glyph span { font-size: 13px; color: ${BRAND}; font-weight: 600; letter-spacing: 0.02em; }
         .ob-glyph img { filter: drop-shadow(0 8px 24px rgba(129,19,59,0.22)); }
         /* handoff splash */
@@ -305,7 +419,8 @@ export default function ShieldOnboarding() {
         .ob-handoff-mark { display: grid; place-items: center; }
         @media (max-width: 640px) {
           .ob-visual { height: 140px; margin-bottom: 20px; }
-          .ob-node { width: 78px; }
+          .ob-cryptex-frame { max-width: 260px; }
+          .ob-headline { padding: 0 20px; }
           .ob-title { font-size: 27px; }
           .ob-body { font-size: 15.5px; }
         }
@@ -314,7 +429,7 @@ export default function ShieldOnboarding() {
           .ob-grain { mix-blend-mode: screen; opacity: 0.06; }
           .ob-veil { background: linear-gradient(180deg, rgba(21,10,15,0.34), rgba(21,10,15,0.68)); }
           .ob-body { color: #cba7b6; } .ob-body strong { color: #f6ecf1; }
-          .ob-node span { color: #cba7b6; } .ob-back { color: #cba7b6; border-color: #3a2530; }
+          .ob-back { color: #cba7b6; border-color: #3a2530; }
           .ob-secured strong { color: #cba7b6; }
           .ob-handoff { background: radial-gradient(#2a141f, #150a0f); }
         }

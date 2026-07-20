@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AztecAddress } from '@aztec/stdlib/aztec-address'
 import { Fr } from '@aztec/aztec.js/fields'
+import { isL1ToL2MessageReady } from '@aztec/aztec.js/messaging'
 import RootStyle from '@/components/RootStyle'
 import BridgeHeader from '@/components/BridgeHeader'
 import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModals'
@@ -85,14 +86,16 @@ export default function ClaimFuelPage() {
   }, [])
 
   // Without this probe the claim simulation would revert with an opaque "sibling path" error
-  // when the L1→L2 message hasn't propagated yet.
+  // when the L1→L2 message hasn't propagated yet. isL1ToL2MessageReady checks consumability at
+  // the 'latest' chain tip — a checkpoint merely existing (message seen from L1) is not enough;
+  // consuming before the tip advances to the message's checkpoint reverts the claim's public phase.
   const probeReadiness = useCallback(async () => {
     if (!payload) return
     try {
       const messageHashFr = Fr.fromString(payload.fuelMessageHash)
-      const checkpoint = await aztecNode.getL1ToL2MessageCheckpoint(messageHashFr)
+      const ready = await isL1ToL2MessageReady(aztecNode, messageHashFr, 'latest')
       setLastProbeAt(Date.now())
-      setReadiness(checkpoint !== undefined ? 'ready' : 'pending')
+      setReadiness(ready ? 'ready' : 'pending')
     } catch (err) {
       console.warn('[ClaimFuel] readiness probe failed:', err)
       setLastProbeAt(Date.now())

@@ -1,5 +1,8 @@
 import React from 'react'
 import DocsLayout, { Callout, Code, P, UL, Table, Th, Td, type DocsSection } from '@/components/DocsLayout'
+import { getBridgeMaxDepositUsd } from '@/lib/attestation'
+
+const maxDepositUsd = getBridgeMaxDepositUsd()
 
 export const metadata = {
   title: 'User Guide · Aztec Bridge Docs',
@@ -143,9 +146,9 @@ const sections: DocsSection[] = [
           </thead>
           <tbody>
             <tr>
-              <Td>Alpha cumulative cap</Td>
-              <Td>$10 per user</Td>
-              <Td>Total across all deposits during Alpha. Shown as &quot;Alpha Deposit Limit Reached&quot; once used up.</Td>
+              <Td>Alpha daily cap</Td>
+              <Td>${maxDepositUsd} per user / day</Td>
+              <Td>Total deposits per rolling 24h window. Shown as &quot;Alpha Deposit Limit Reached&quot; once used up; budget frees up as deposits age past 24h.</Td>
             </tr>
             <tr>
               <Td>Per-transaction (Passport)</Td>
@@ -331,8 +334,8 @@ const sections: DocsSection[] = [
             busy; bridging is paused or slow. Wait and retry — a banner appears automatically.
           </li>
           <li>
-            <strong>&quot;Alpha Deposit Limit Reached&quot;.</strong> You&apos;ve used the $10 per-user cumulative cap
-            for this Alpha period.
+            <strong>&quot;Alpha Deposit Limit Reached&quot;.</strong> You&apos;ve used the ${maxDepositUsd} per-user daily cap
+            (rolling 24h). Budget frees up as your earlier deposits age past 24 hours.
           </li>
           <li>
             <strong>An RPC/batch error toast.</strong> Some free RPC endpoints reject batched requests. Use a paid RPC

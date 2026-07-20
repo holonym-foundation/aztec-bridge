@@ -76,7 +76,7 @@ export function getPassportMaxAmount(): bigint {
 }
 
 /**
- * Alpha Mainnet cumulative-per-user deposit cap in USD.
+ * Alpha Mainnet per-user, per-day (rolling 24h) deposit cap in USD.
  * Returns 0 when unset/'0'/'' — callers treat 0 as "no limit".
  */
 export function getBridgeMaxDepositUsd(): number {

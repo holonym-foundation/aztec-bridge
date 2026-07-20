@@ -83,7 +83,7 @@ interface BridgeActionButtonProps {
   passportMaxAmount?: bigint
   passportScore?: number
   passportThreshold?: number
-  // Alpha cumulative deposit cap: USD left for this user (undefined = cap disabled)
+  // Alpha per-day (rolling 24h) deposit cap: USD left for this user (undefined = cap disabled)
   remainingDepositUsd?: number
 
   // Operation completion state
@@ -368,7 +368,7 @@ function BridgeActionButton({
 
   // --- Derived UI state ---
 
-  // Alpha cumulative deposit cap (deposits only). Block up-front so the user
+  // Alpha per-day deposit cap (deposits only). Block up-front so the user
   // can't start a bridge the attestation layer will reject. remainingDepositUsd
   // is undefined when the cap is disabled.
   const depositLimitBlocked =

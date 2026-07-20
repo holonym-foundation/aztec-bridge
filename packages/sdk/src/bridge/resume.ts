@@ -41,7 +41,7 @@ import type {
 import { BridgeEventType } from '../types'
 import { createL1PublicClient, wait, isAlreadyConsumedError, assertBlockScanRange } from './utils'
 import { getAztecscanUrl as getAztecscanBaseUrl, getEtherscanUrl as getEtherscanBaseUrl } from '../config'
-import { pollL1ToL2MessageSync, waitForBlockProven, waitForNextL2Block } from './polling'
+import { pollL1ToL2MessageSync, waitForBlockProven } from './polling'
 import { executeL2Claim } from './l1ToL2'
 import { executeL1Withdraw } from './l2ToL1'
 import { computeL2ToL1MessageLeaf, computeWitness } from './witness'
@@ -759,9 +759,15 @@ async function resumeL1ToL2(
   onStep?.(2, 'active')
   patchOperationAsync(apiClient, op.id, { currentStep: 2 })
 
-  // Poll for both main and fuel messages in parallel (matches happy path)
+  // Poll until each message is consumable on L2 (matches happy path). pollL1ToL2MessageSync
+  // now waits for full readiness (sequencer-included), not just the archiver checkpoint, so
+  // no separate block-count wait follows. emit sync_poll per poll on the main message so the
+  // resume UI shows progress during the multi-minute wait.
   const syncPromises: Promise<any>[] = [
-    pollL1ToL2MessageSync(aztecNode, messageHash!),
+    pollL1ToL2MessageSync(aztecNode, messageHash!, {
+      onPoll: elapsedSec =>
+        emit({ type: BridgeEventType.SYNC_POLL, elapsedMinutes: elapsedSec / 60, synced: false }),
+    }),
   ]
   if (fuelMessageHash) {
     syncPromises.push(pollL1ToL2MessageSync(aztecNode, fuelMessageHash))
@@ -775,17 +781,6 @@ async function resumeL1ToL2(
       `L1-to-L2 message sync timeout after ${syncResult.elapsedMinutes.toFixed(1)} minutes. You can try resuming again later.`,
     )
   }
-
-  // Wait for the sequencer to include the L1→L2 message in a new L2 block.
-  // The archiver checkpoint appears quickly, but the message is only consumable
-  // after the sequencer includes it in an L2 block (can take up to ~1 epoch on testnet).
-  console.log('[SDK Resume L1→L2] Waiting for sequencer to include message in L2 block...')
-  // emit l2_block_wait per poll so the resume UI can show progress
-  // during the multi-minute sequencer wait.
-  await waitForNextL2Block(aztecNode, {
-    onPoll: (elapsedSec, currentBlock, targetBlock) =>
-      emit({ type: BridgeEventType.L2_BLOCK_WAIT, elapsedSec, currentBlock, targetBlock }),
-  })
 
   onStep?.(2, 'completed')
 
@@ -1201,6 +1196,22 @@ async function resumeL2ToL1(
         rollupVersion,
         chainId: op.chainIdL1 ?? config.l1ChainId,
       })
+
+      // Wait until the block is proven before computing the witness — the node returns
+      // no witness until the epoch is proven, which is indistinguishable from a missing
+      // message and would otherwise fail with a spurious "witness not found".
+      const provenBeforeWitness = await waitForBlockProven({
+        aztecNode,
+        blockNumberForProof: blockNum,
+        onPoll: (provenBlock, neededBlock, elapsedMs) =>
+          emit({ type: BridgeEventType.PROVEN_POLL, provenBlock, neededBlock, elapsedMs }),
+        onFallback: (fixedWaitMs) => emit({ type: BridgeEventType.PROVEN_FALLBACK, fixedWaitMs }),
+      })
+      if (!provenBeforeWitness.proven && provenBeforeWitness.usedPoll) {
+        throw new Error(
+          `L2 block ${blockNum} is not yet proven on L1. The burn succeeded — resume from the Activity page once it is proven.`,
+        )
+      }
 
       const witnessResult = await computeWitness(aztecNode, blockNum, msgLeaf, op.l2TxHash!)
       l2ToL1MessageIndex = witnessResult.leafIndex

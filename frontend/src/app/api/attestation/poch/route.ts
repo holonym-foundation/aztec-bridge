@@ -81,9 +81,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3b. Alpha cumulative deposit cap (L1→L2 only). POCH has no on-chain
-    // amount binding, so this refuses to issue a signature once the user is
-    // over budget — the honest-client / UI guardrail.
+    // 3b. Alpha per-day (rolling 24h) deposit cap (L1→L2 only). POCH has no
+    // on-chain amount binding, so this refuses to issue a signature once the user
+    // is over budget — the honest-client / UI guardrail.
     if (data.direction === 'L1_TO_L2') {
       const limit = await evaluateDepositLimit({
         userId: authResult.user.id,
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       if (limit.enabled && limit.overLimit) {
         return NextResponse.json(
           {
-            error: `Alpha deposit limit reached ($${limit.limitUsd.toFixed(0)} per user). You have $${limit.confirmedUsd.toFixed(2)} of $${limit.limitUsd.toFixed(2)} used.`,
+            error: `Alpha deposit limit reached ($${limit.limitUsd.toFixed(0)} per user / day). You have $${limit.confirmedUsd.toFixed(2)} of $${limit.limitUsd.toFixed(2)} used in the last 24h.`,
             reason: 'deposit_limit',
           },
           { status: 403 },

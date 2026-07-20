@@ -3,16 +3,19 @@
  */
 
 import { Fr } from '@aztec/aztec.js/fields'
+import { isL1ToL2MessageReady } from '@aztec/aztec.js/messaging'
 import { wait } from './utils'
 
 /**
- * Poll aztecNode.getL1ToL2MessageCheckpoint() until the message is synced on L2.
+ * Poll until the L1→L2 message is consumable on L2.
  *
- * Uses the 4.2 API (getL1ToL2MessageCheckpoint) instead of the deprecated
- * getL1ToL2MessageBlock.
- *
- * Does NOT include the final buffer wait — the caller should add
- * that if needed (so the caller can update progress between poll and wait).
+ * Uses isL1ToL2MessageReady, which returns true only once the 'latest' chain tip
+ * has advanced to the message's checkpoint — i.e. the sequencer has included the
+ * message and a claim can actually consume it. A bare getL1ToL2MessageCheckpoint
+ * lookup returns a value as soon as the archiver indexes the message from L1
+ * (message "seen"), which is earlier; consuming at that point reverts the claim's
+ * public phase with an empty "Assertion failed:". This single poll therefore
+ * covers the whole wait — no separate block-count heuristic is needed afterward.
  */
 export async function pollL1ToL2MessageSync(
   aztecNode: any,
@@ -23,7 +26,7 @@ export async function pollL1ToL2MessageSync(
     onPoll?: (elapsedSec: number, pollCount: number) => void
   },
 ): Promise<{ synced: boolean; elapsedMinutes: number }> {
-  const pollIntervalMs = options?.pollIntervalMs ?? 30_000
+  const pollIntervalMs = options?.pollIntervalMs ?? 15_000
   const maxWaitMs = options?.maxWaitMs ?? 40 * 60 * 1000
   const messageHashFr = Fr.fromString(messageHash)
   const startWait = Date.now()
@@ -33,9 +36,7 @@ export async function pollL1ToL2MessageSync(
     pollCount++
     const elapsedSec = Math.round((Date.now() - startWait) / 1000)
     try {
-      const messageCheckpoint =
-        await aztecNode.getL1ToL2MessageCheckpoint(messageHashFr)
-      if (messageCheckpoint !== undefined) {
+      if (await isL1ToL2MessageReady(aztecNode, messageHashFr, 'latest')) {
         return {
           synced: true,
           elapsedMinutes: (Date.now() - startWait) / 60_000,
@@ -55,13 +56,12 @@ export async function pollL1ToL2MessageSync(
 }
 
 /**
- * Poll aztecNode.getProvenBlockNumber() until our L2 block is proven.
+ * Poll until our L2 block is proven.
  *
- * NOTE: Do NOT use the L1 Rollup contract's getProvenCheckpointNumber() here.
- * That function returns a checkpoint counter — a sequential index that resets
- * to 0 on each rollup redeployment — which is a different scale from the L2
- * block number. aztecNode.getProvenBlockNumber() returns the proven L2 block
- * number directly and is the correct thing to compare against blockNumberForProof.
+ * Uses node.getBlockNumber('proven'), which returns the proven L2 block number
+ * directly. Do NOT use node.getProvenBlockNumber() (not a method on the v5 client)
+ * or the L1 Rollup's getProvenCheckpointNumber() (a checkpoint counter that resets
+ * on redeployment — a different scale from the L2 block number).
  *
  * Falls back to a fixed wait if the node call fails.
  */
@@ -78,7 +78,7 @@ export async function waitForBlockProven(params: {
     aztecNode,
     blockNumberForProof,
     pollIntervalMs = 120_000,
-    maxWaitMs = 50 * 60 * 1000,
+    maxWaitMs = 90 * 60 * 1000,
     fixedFallbackMs = 40 * 60 * 1000,
     onPoll,
     onFallback,
@@ -91,7 +91,7 @@ export async function waitForBlockProven(params: {
     usedPoll = true
     const startWait = Date.now()
     while (Date.now() - startWait < maxWaitMs) {
-      const provenBlock = await aztecNode.getProvenBlockNumber()
+      const provenBlock = await aztecNode.getBlockNumber('proven')
       if (provenBlock >= blockNumberForProof) {
         blockProven = true
         break
@@ -124,58 +124,3 @@ export async function waitForBlockProven(params: {
   return { proven: blockProven, usedPoll }
 }
 
-/**
- * Wait for the L2 sequencer to include the L1→L2 message in the state tree.
- *
- * The archiver checkpoint appears quickly, but the message is only consumable
- * after the sequencer includes it in an L2 block — which can take up to one
- * epoch (~19 min on testnet: 32 slots × 36s).
- *
- * Strategy: wait for at least `minBlocks` new L2 blocks AND at least `minWaitMs`
- * elapsed time, whichever is longer. This ensures the sequencer has processed
- * the L1 state containing the message before we attempt to claim.
- *
- * @param sinceBlock - L2 block number when the checkpoint was first observed.
- *   If omitted, queries the current block and waits for it to advance.
- */
-export async function waitForNextL2Block(
-  aztecNode: any,
-  options?: {
-    sinceBlock?: number
-    pollIntervalMs?: number
-    maxWaitMs?: number
-    minWaitMs?: number
-    minBlocks?: number
-    onPoll?: (elapsedSec: number, currentBlock: number, targetBlock: number) => void
-  },
-): Promise<number> {
-  const pollIntervalMs = options?.pollIntervalMs ?? 15_000
-  const maxWaitMs = options?.maxWaitMs ?? 25 * 60 * 1000
-  const minWaitMs = options?.minWaitMs ?? 2 * 60 * 1000
-  const minBlocks = options?.minBlocks ?? 2
-  const startTime = Date.now()
-
-  const sinceBlock =
-    options?.sinceBlock ?? (await aztecNode.getBlockNumber())
-  const targetBlock = sinceBlock + minBlocks
-
-  while (Date.now() - startTime < maxWaitMs) {
-    const elapsedMs = Date.now() - startTime
-    const elapsedSec = Math.round(elapsedMs / 1000)
-    try {
-      const currentBlock = await aztecNode.getBlockNumber()
-      options?.onPoll?.(elapsedSec, currentBlock, targetBlock)
-      const blocksReady = currentBlock >= targetBlock
-      const minTimeReady = elapsedMs >= minWaitMs
-      if (blocksReady && minTimeReady) {
-        return currentBlock
-      }
-    } catch {
-      // transient — retry
-    }
-    await wait(pollIntervalMs)
-  }
-
-  // Timed out — return current block so the caller can proceed to retry-based claiming.
-  return await aztecNode.getBlockNumber().catch(() => sinceBlock)
-}

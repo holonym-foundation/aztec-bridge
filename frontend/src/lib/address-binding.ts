@@ -59,19 +59,27 @@ export async function enforceAddressBinding(l1Address: string, l2Address: string
   return `L2 address ${l2Address} is already bound to a different L1 address`
 }
 
+/** Rolling window (ms) over which per-user deposits are summed for the cap. */
+export const DEPOSIT_CAP_WINDOW_MS = 24 * 60 * 60 * 1000
+
 /**
- * Sum a user's confirmed (funds-locked) L1→L2 deposits, in USD.
+ * Sum a user's confirmed (funds-locked) L1→L2 deposits within the rolling
+ * per-day window, in USD.
  *
- * Used by the attestation endpoints to enforce the Alpha cumulative deposit
- * cap. USDC (the only Alpha-mainnet token) is USD-pegged, so the hardcoded
+ * Used by the attestation endpoints to enforce the Alpha per-day deposit cap.
+ * The cap is per-user, per-24h (rolling): only deposits with createdAt within
+ * DEPOSIT_CAP_WINDOW_MS of now are counted, so budget frees up as old deposits
+ * age out. USDC (the only Alpha-mainnet token) is USD-pegged, so the hardcoded
  * fallback price (USDC=$1) is exact and no live price feed is needed.
  */
 export async function getConfirmedDepositUsd(userId: string): Promise<number> {
+  const since = new Date(Date.now() - DEPOSIT_CAP_WINDOW_MS)
   const rows = await prisma.bridgeActivity.findMany({
     where: {
       fkUserId: userId,
       direction: BridgeDirection.L1_TO_L2,
       status: { in: LOCKED_DEPOSIT_STATUSES },
+      createdAt: { gte: since },
     },
     select: { amountL1: true, tokenDecimalsL1: true, tokenSymbolL1: true },
   })
@@ -106,7 +114,7 @@ export interface DepositLimitResult {
 }
 
 /**
- * Evaluate the Alpha cumulative deposit cap for a user's L1→L2 deposit.
+ * Evaluate the Alpha per-day (rolling 24h) deposit cap for a user's L1→L2 deposit.
  * Only meaningful for deposits — callers must not gate withdrawals with this.
  */
 export async function evaluateDepositLimit(params: {

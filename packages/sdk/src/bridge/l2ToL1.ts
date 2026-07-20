@@ -533,7 +533,36 @@ export async function withdrawL2ToL1(
       }),
     )
 
-    // 120s wait after block number polling (lets L2 block propagate to wallet's node)
+    // ── Step 2 (cont.): wait for the L2 block to be proven on L1 ──
+    // getL2ToL1MembershipWitness returns null until the epoch containing this block is
+    // proven — indistinguishable from a missing message. Prove FIRST, then compute the
+    // witness; computing it against an unproven block caused spurious "witness not found".
+    const provenResult = await waitForBlockProven({
+      aztecNode,
+      blockNumberForProof: l2BlockNumber,
+      onPoll: (provenBlock, neededBlock, elapsedMs) => {
+        emit({ type: BridgeEventType.PROVEN_POLL, provenBlock, neededBlock, elapsedMs })
+      },
+      onFallback: (fixedWaitMs) => {
+        emit({ type: BridgeEventType.PROVEN_FALLBACK, fixedWaitMs })
+      },
+    })
+    if (!provenResult.proven && provenResult.usedPoll) {
+      throw new Error(
+        `L2 block ${l2BlockNumber} was not proven on L1 after waiting. ` +
+        'You can resume this withdrawal later from the Activity page.'
+      )
+    }
+    if (!provenResult.proven) {
+      console.warn('[SDK L2→L1] Block proven status unknown (polling unavailable). Proceeding — witness/withdraw may fail.')
+    }
+
+    onStep?.(2, 'completed')
+
+    // ── Step 3: Compute withdrawal witness (sibling path) ──
+    onStep?.(3, 'active')
+
+    // Let the proven L2 block + outbox root propagate to the wallet's node before witness.
     await wait(120_000)
 
     // Compute witness — use the snapshotted rollupVersion from when the burn happened,
@@ -648,38 +677,7 @@ export async function withdrawL2ToL1(
       epoch: Number(resolvedEpoch ?? witnessResult.epoch),
     })
 
-    onStep?.(2, 'completed')
-
-    // ── Step 3: Wait for block proven ──
-    onStep?.(3, 'active')
-
-    // Check return value — don't proceed to L1 withdraw if block isn't proven
-    const provenResult = await waitForBlockProven({
-      aztecNode,
-      blockNumberForProof: l2BlockNumber,
-      onPoll: (provenBlock, neededBlock, elapsedMs) => {
-        emit({ type: BridgeEventType.PROVEN_POLL, provenBlock, neededBlock, elapsedMs })
-      },
-      onFallback: (fixedWaitMs) => {
-        emit({ type: BridgeEventType.PROVEN_FALLBACK, fixedWaitMs })
-      },
-    })
-
-    // If polling was used and the block is not proven, hard-fail — we know it's not ready.
-    // If polling was NOT available (no rollupAddress), proceed anyway after the fallback
-    // wait — the L1 withdraw will revert if the block isn't actually proven, and the
-    // user can retry from the Activity page. This matches the pre-SDK behavior.
-    if (!provenResult.proven && provenResult.usedPoll) {
-      throw new Error(
-        `L2 block ${l2BlockNumber} was not proven on L1 after waiting. ` +
-        'You can resume this withdrawal later from the Activity page.'
-      )
-    }
-    if (!provenResult.proven) {
-      console.warn('[SDK L2→L1] Block proven status unknown (polling unavailable). Proceeding — L1 withdraw may revert.')
-    }
-
-    // Final wait before sending L1 withdraw tx (keep step 3 active during wait)
+    // Final wait before sending L1 withdraw tx (lets the outbox root settle)
     await wait(30_000)
 
     onStep?.(3, 'completed')

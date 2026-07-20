@@ -87,9 +87,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3b. Alpha cumulative deposit cap (L1→L2 only). Unlike POCH, the Passport
-    // maxAmount is enforced on-chain, so we both refuse when over budget AND cap
-    // the signed maxAmount to the remaining budget for cryptographic enforcement.
+    // 3b. Alpha per-day (rolling 24h) deposit cap (L1→L2 only). Unlike POCH, the
+    // Passport maxAmount is enforced on-chain, so we both refuse when over budget
+    // AND cap the signed maxAmount to the remaining budget for cryptographic enforcement.
     let maxAmount = getPassportMaxAmount()
     if (data.direction === 'L1_TO_L2') {
       const limit = await evaluateDepositLimit({
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
         if (limit.overLimit || limit.remainingUsd <= 0) {
           return NextResponse.json(
             {
-              error: `Alpha deposit limit reached ($${limit.limitUsd.toFixed(0)} per user). You have $${limit.confirmedUsd.toFixed(2)} of $${limit.limitUsd.toFixed(2)} used.`,
+              error: `Alpha deposit limit reached ($${limit.limitUsd.toFixed(0)} per user / day). You have $${limit.confirmedUsd.toFixed(2)} of $${limit.limitUsd.toFixed(2)} used in the last 24h.`,
               reason: 'deposit_limit',
             },
             { status: 403 },

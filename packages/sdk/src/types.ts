@@ -105,7 +105,6 @@ export type BridgeEvent =
   | { type: 'l1_withdraw_sent'; l1TxHash: string; l1TxUrl: string }
   // Polling progress
   | { type: 'sync_poll'; elapsedMinutes: number; synced: boolean }
-  | { type: 'l2_block_wait'; elapsedSec: number; currentBlock: number; targetBlock: number }
   | { type: 'proven_poll'; provenBlock: number; neededBlock: number; elapsedMs: number }
   | { type: 'proven_fallback'; fixedWaitMs: number }
   // Token registration in the wallet (post-claim) — observability for "token doesn't show up" reports
@@ -152,7 +151,6 @@ export const BridgeEventType = {
   L1_WITHDRAW_SENT: 'l1_withdraw_sent',
   // Polling progress
   SYNC_POLL: 'sync_poll',
-  L2_BLOCK_WAIT: 'l2_block_wait',
   PROVEN_POLL: 'proven_poll',
   PROVEN_FALLBACK: 'proven_fallback',
   // Token registration (post-claim)

@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     // Fetch Gitcoin Passport score
     const { score, passing } = await fetchPassportScore(l1Address)
 
-    // Reflect the Alpha cumulative cap: the displayed per-tx max is the lesser
+    // Reflect the Alpha per-day (rolling 24h) cap: the displayed per-tx max is the lesser
     // of the global Passport max and the user's remaining deposit budget.
     let maxAmount = getPassportMaxAmount()
     const limit = await evaluateDepositLimit({ userId: authResult.user.id })

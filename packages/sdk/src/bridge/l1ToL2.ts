@@ -206,7 +206,7 @@ async function signPermit2Transfer(params: {
 }
 import { createL1PublicClient, serializeNodeInfo, wait, extractErrorString, assertPassportDeadlineBuffer } from './utils'
 import { getEtherscanUrl as getEtherscanBaseUrl, getAztecscanUrl as getAztecscanBaseUrl } from '../config'
-import { pollL1ToL2MessageSync, waitForNextL2Block } from './polling'
+import { pollL1ToL2MessageSync } from './polling'
 import { pushDeposit, updateDeposit } from '../storage'
 import { fetchAttestationsForDeposit, assertNonEmptyDepositAttestation } from '../attestation'
 import { BRIDGED_FPC_DOMAIN_SEPARATOR } from '../contracts/constants'
@@ -286,6 +286,7 @@ export async function executeL2Claim(
         const errMsg = err instanceof Error ? err.message : String(err)
         const errLower = errMsg.toLowerCase()
         const errCode = (err as any)?.code
+        console.error(`[SDK Claim] attempt ${attempt}/${maxAttempts} failed:`, errMsg, err)
         const isUserRejection =
           errCode === 4001 ||
           errLower.includes('user rejected') ||
@@ -1185,9 +1186,15 @@ export async function bridgeL1ToL2(
     // ── Step 2: Poll for L1→L2 message sync ──
     onStep?.(2, 'active')
 
-    // Poll for both messages in parallel when fuel is enabled
+    // Poll until each message is consumable on L2. pollL1ToL2MessageSync now waits for
+    // full readiness (sequencer-included), not just the archiver checkpoint, so no
+    // separate block-count wait is needed afterward. emit sync_poll per poll on the main
+    // message so the UI shows progress during this multi-minute wait (silent otherwise).
     const syncPromises: Promise<any>[] = [
-      pollL1ToL2MessageSync(aztecNode, messageHashStr),
+      pollL1ToL2MessageSync(aztecNode, messageHashStr, {
+        onPoll: elapsedSec =>
+          emit({ type: BridgeEventType.SYNC_POLL, elapsedMinutes: elapsedSec / 60, synced: false }),
+      }),
     ]
     if (fuelMessageHashStr) {
       syncPromises.push(pollL1ToL2MessageSync(aztecNode, fuelMessageHashStr))
@@ -1210,16 +1217,6 @@ export async function bridgeL1ToL2(
         `Fuel message sync timeout after ${fuelSyncResult.elapsedMinutes.toFixed(1)} minutes. You can try resuming later.`,
       )
     }
-
-    // Wait for the sequencer to include the L1→L2 message in a new L2 block.
-    // The archiver checkpoint appears quickly, but the message is only consumable
-    // after the sequencer includes it in an L2 block (can take up to ~1 epoch on testnet).
-    // emit l2_block_wait per poll so the frontend can show progress during
-    // this multi-minute wait. Without it the UI is silent for ~19 min.
-    await waitForNextL2Block(aztecNode, {
-      onPoll: (elapsedSec, currentBlock, targetBlock) =>
-        emit({ type: BridgeEventType.L2_BLOCK_WAIT, elapsedSec, currentBlock, targetBlock }),
-    })
 
     onStep?.(2, 'completed')
 

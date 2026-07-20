@@ -76,21 +76,6 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
               autoClose: 15000,
             })
             break
-          case BridgeEventType.L2_BLOCK_WAIT:
-            logInfo('L1→L2 resume sequencer block wait', {
-              direction: 'L1_TO_L2_RESUME',
-              elapsedSec: event.elapsedSec,
-              currentBlock: event.currentBlock,
-              targetBlock: event.targetBlock,
-              l1Address,
-              userAction: DatadogUserAction.RESUME_L1_TO_L2_SEQUENCER_WAIT,
-            })
-            notify(
-              'info',
-              `Waiting for L2 sequencer to include message (${Math.round(event.elapsedSec / 60)}m elapsed)...`,
-              { toastId: 'resume-l1-to-l2-progress', autoClose: 15000 },
-            )
-            break
           case BridgeEventType.TOKEN_REGISTERED:
             logInfo('Token added to wallet after resume', {
               direction: 'L1_TO_L2_RESUME',

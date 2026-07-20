@@ -24,7 +24,7 @@ export const NUMERIC_STRING_REGEX = /^\d+$/
 
 // ─── Zod Schemas ──────────────────────────────────────────────────────
 
-/** Bridge metadata used by the Alpha cumulative deposit cap. Optional so
+/** Bridge metadata used by the Alpha per-day deposit cap. Optional so
  *  existing callers/tests keep working; only the deposit (L1_TO_L2) path is
  *  gated. `amount` is the requested deposit in token base units. */
 const DepositLimitFields = {

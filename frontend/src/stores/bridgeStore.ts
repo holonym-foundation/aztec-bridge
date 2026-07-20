@@ -187,12 +187,12 @@ const initialStepState: StepState = {
     },
     {
       id: 2,
-      label: 'Getting proof for withdrawal',
+      label: 'Waiting for proof on Ethereum',
       status: 'pending' as const,
     },
     {
       id: 3,
-      label: 'Waiting for Ethereum confirmation',
+      label: 'Getting proof for withdrawal',
       status: 'pending' as const,
     },
     {

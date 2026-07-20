@@ -65,7 +65,9 @@ export function useL1TokenBalance() {
       },
     ])
 
-    const balanceFormat = formatUnits(BigInt(balance as string), L1_TOKENS[0]?.decimals ?? 6)
+    const raw = balance as string
+    // eth_call returns "0x" (empty data) when the call reverts or the token has no code on this chain
+    const balanceFormat = formatUnits(!raw || raw === '0x' ? 0n : BigInt(raw), L1_TOKENS[0]?.decimals ?? 6)
     return balanceFormat
   }
 
@@ -630,26 +632,6 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                   }
                 },
               },
-            )
-            break
-          // sequencer wait between sync and claim — used to be silent for ~19 min.
-          case BridgeEventType.L2_BLOCK_WAIT:
-            logInfo('L1→L2 sequencer block wait', {
-              direction: 'L1_TO_L2',
-              elapsedSec: event.elapsedSec,
-              currentBlock: event.currentBlock,
-              targetBlock: event.targetBlock,
-              l1Address,
-              l2Address: aztecAddress,
-              userAction: DatadogUserAction.BRIDGE_L1_TO_L2_SEQUENCER_WAIT,
-            })
-            notify(
-              'info',
-              {
-                heading: 'Waiting for Aztec sequencer',
-                message: `Your L1 deposit is included; the Aztec sequencer is now picking it up. This step typically takes ~5–15 minutes — keep this tab open. (${Math.round(event.elapsedSec / 60)}m elapsed)`,
-              },
-              { toastId: 'l1-to-l2-progress', autoClose: 15000 },
             )
             break
           // token registration observability.

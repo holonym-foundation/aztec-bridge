@@ -15,7 +15,7 @@ export interface HumanTechBridgeConfig {
   deployment?: string
   /** The dapp's domain used for encryption key derivation. Auto-detected from window.location.origin in browsers. Required in Node.js. */
   domain?: string
-  /** Backend API URL. Defaults to "https://bridge.human.tech". Use "" for same-origin. */
+  /** Backend API URL. Defaults to "https://shield.human.tech". Use "" for same-origin. */
   apiUrl?: string
   /** L1 (Ethereum) JSON-RPC URL. Required — the SDK does not bundle a default RPC endpoint. */
   l1RpcUrl: string

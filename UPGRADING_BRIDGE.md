@@ -224,6 +224,8 @@ forge build
 
 This generates the `out/` directory with contract artifacts (SwapBridgeRouter, UniswapFuelSwap, TokenPortal, etc.).
 
+> On a version bump both L1 and L2 contracts change. Prefer `cd bridge-script && pnpm build` — it runs `compile` + `compile:l1` + `codegen` + `sync:artifacts`, so the frontend and SDK pick up the new Noir artifacts and TokenPortal ABI. Skipping the sync is a common cause of stale-artifact bugs (frontend registers the wrong contract, or the SDK builds the tx with an old ABI). See the *Artifact & ABI Sync* section in `bridge-script/README.md`.
+
 ## 8) Deploy contracts
 
 ### Testnet (compliant — with attestation/compliance)

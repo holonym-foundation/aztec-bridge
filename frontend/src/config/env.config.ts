@@ -75,7 +75,7 @@ export const SANCTIONS_SCREENING_ENABLED = (process.env.SANCTIONS_SCREENING_ENAB
  * attacker present a SIWE message signed for evil.com and have the server
  * accept it. localhost connections still pass (dev exception).
  */
-export const AUTH_EXPECTED_DOMAIN = process.env.AUTH_EXPECTED_DOMAIN ?? 'bridge.human.tech'
+export const AUTH_EXPECTED_DOMAIN = process.env.AUTH_EXPECTED_DOMAIN ?? 'shield.human.tech'
 
 // ─── PostHog (client) ───────────────────────────────────────────────
 

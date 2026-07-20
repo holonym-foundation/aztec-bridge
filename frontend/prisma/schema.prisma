@@ -131,7 +131,7 @@ model BridgeActivity {
 
   // --- Key derivation: same deterministic message/signature needed to decrypt ---
   keyDerivationMessage   String  // Deterministic message user signed (same for all ops per wallet+domain)
-  keyDerivationDomain    String  // e.g. "https://bridge.human.tech/"
+  keyDerivationDomain    String  // e.g. "https://shield.human.tech/"
 
   // --- Plaintext metadata (for querying only) ---
   // l1Address/l2Address: use activity.user.l1Address, activity.user.l2Address (User relation)

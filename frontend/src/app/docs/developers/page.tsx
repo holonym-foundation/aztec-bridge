@@ -46,7 +46,7 @@ const bridge = new HumanTechBridge({
   l1RpcUrl: 'https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY', // required
   deployment: ACTIVE_DEPLOYMENT_ID, // optional, defaults to the active deployment
   domain: window.location.origin,   // optional in the browser, required in Node.js
-  apiUrl: 'https://bridge.human.tech', // optional, this is the default
+  apiUrl: 'https://shield.human.tech', // optional, this is the default
   // l2NodeUrl: '...'               // optional, overrides the deployment default
 })`}</CodeBlock>
         <Callout tone="info">

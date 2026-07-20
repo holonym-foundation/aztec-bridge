@@ -75,15 +75,20 @@ const REGISTRY_FILE = join(DEPLOYMENTS_DIR, 'registry.json');
 const FRONTEND_DEPLOYMENTS = resolve('..', 'frontend', 'src', 'constants', 'deployments.json');
 const SDK_DEPLOYMENTS = resolve('..', 'packages', 'sdk', 'src', 'contracts', 'deployments.json');
 const FRONTEND_ARTIFACTS_DIR = resolve('..', 'frontend', 'src', 'constants', 'aztec', 'artifacts');
+const SDK_ABIS_DIR = resolve('..', 'packages', 'sdk', 'src', 'contracts', 'abis');
 
-// Source artifact paths (compiled Noir contracts + codegen)
+// Source artifact paths (compiled Noir contracts). These two are loaded by the frontend
+// (walletAdapters.getContractArtifact) to registerContract on L2 — the Token artifact is pulled
+// from the aztec-standards npm package, not from here.
 const ARTIFACT_SOURCES = [
-  // Token artifact (Wonderland compliant token — from bridge-script codegen)
-  { src: resolve('constants', 'aztec', 'artifacts', 'token-Token.json'), dest: 'token-Token.json' },
-  // TokenBridge artifact (custom contract — from aztec-contracts build)
   { src: resolve('..', 'aztec-contracts', 'token_bridge', 'target', 'token_bridge_contract-TokenBridge.json'), dest: 'token_bridge_contract-TokenBridge.json' },
-  // TokenMinterProxy artifact (custom contract — from aztec-contracts build)
   { src: resolve('..', 'aztec-contracts', 'token_minter_proxy', 'target', 'token_minter_proxy-TokenMinterProxy.json'), dest: 'token_minter_proxy-TokenMinterProxy.json' },
+];
+
+// L1 ABI paths (Forge build output → SDK). The SDK builds the actual bridge tx from these,
+// so they must be resynced whenever the Solidity contracts are rebuilt.
+const ABI_SOURCES = [
+  { src: resolve('..', 'l1-contracts', 'out', 'TokenPortal.sol', 'TokenPortal.json'), destDir: SDK_ABIS_DIR, dest: 'TokenPortal.json' },
 ];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -115,6 +120,49 @@ function readJson<T>(path: string): T | null {
 
 function writeJson(path: string, data: unknown) {
   writeFileSync(path, JSON.stringify(data, null, 2), 'utf8');
+}
+
+// ─── Artifact / ABI sync ─────────────────────────────────────────────────────
+
+/**
+ * Copy compiled Noir artifacts into the frontend's artifact dir.
+ * Shared by the standalone sync script and by copyToFrontend (deploy path).
+ */
+function syncFrontendArtifacts(): void {
+  ensureDir(FRONTEND_ARTIFACTS_DIR);
+  for (const { src, dest } of ARTIFACT_SOURCES) {
+    if (existsSync(src)) {
+      copyFileSync(src, join(FRONTEND_ARTIFACTS_DIR, dest));
+      console.log(`📦 Synced artifact → frontend: ${dest}`);
+    } else {
+      console.warn(`⚠️  Artifact not found, skipping: ${src}`);
+    }
+  }
+}
+
+/**
+ * Copy Forge L1 ABIs into the SDK (replaces the standalone `sync:abi` npm script).
+ */
+function syncSdkAbis(): void {
+  for (const { src, destDir, dest } of ABI_SOURCES) {
+    if (existsSync(src)) {
+      ensureDir(destDir);
+      copyFileSync(src, join(destDir, dest));
+      console.log(`📦 Synced ABI → SDK: ${dest}`);
+    } else {
+      console.warn(`⚠️  ABI not found, skipping: ${src}`);
+    }
+  }
+}
+
+/**
+ * Single entry point to sync every build output to its consumer: Noir artifacts → frontend,
+ * L1 ABIs → SDK. Run after `compile`/`compile:l1`/`codegen` (see the `build` npm script) and
+ * standalone via `pnpm run sync:artifacts`.
+ */
+export function syncArtifacts(): void {
+  syncFrontendArtifacts();
+  syncSdkAbis();
 }
 
 // ─── Registry ───────────────────────────────────────────────────────────────
@@ -291,16 +339,7 @@ export function copyToFrontend(env: string = getEnv()): void {
   writeJson(FRONTEND_DEPLOYMENTS, bundle);
   console.log(`📋 Synced ${bundle.deployments.length} ${env} deployment(s) to frontend: ${FRONTEND_DEPLOYMENTS}`);
 
-  // Sync contract artifacts to frontend
-  ensureDir(FRONTEND_ARTIFACTS_DIR);
-  for (const { src, dest } of ARTIFACT_SOURCES) {
-    if (existsSync(src)) {
-      copyFileSync(src, join(FRONTEND_ARTIFACTS_DIR, dest));
-      console.log(`📦 Synced artifact: ${dest}`);
-    } else {
-      console.warn(`⚠️  Artifact not found, skipping: ${src}`);
-    }
-  }
+  syncFrontendArtifacts();
 }
 
 /**

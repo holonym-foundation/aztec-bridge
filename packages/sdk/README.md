@@ -27,7 +27,7 @@ const bridge = new HumanTechBridge({
 | `l1RpcUrl` | Yes | — | Ethereum JSON-RPC URL |
 | `deployment` | No | Active deployment | Deployment ID from `deployments.json` |
 | `domain` | No | `window.location.origin` | Domain for encryption key derivation (required in Node.js) |
-| `apiUrl` | No | `"https://bridge.human.tech"` | Backend API URL. Use `""` for same-origin |
+| `apiUrl` | No | `"https://shield.human.tech"` | Backend API URL. Use `""` for same-origin |
 | `l2NodeUrl` | No | From deployment config | Override Aztec node URL |
 
 ## Authentication (SIWE)

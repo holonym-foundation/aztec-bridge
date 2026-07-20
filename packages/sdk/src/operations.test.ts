@@ -18,7 +18,7 @@ const FULL_L1_TO_L2 = {
   portalAddressL1: '0xportal',
   bridgeAddressL2: '0xbridge',
   encryptedCiphertext: 'ciphertext',
-  keyDerivationDomain: 'https://bridge.human.tech/',
+  keyDerivationDomain: 'https://shield.human.tech/',
   isPrivacyModeEnabled: false,
 } as const
 
@@ -27,7 +27,7 @@ const FULL_L2_TO_L1 = {
   portalAddressL1: '0xportal',
   bridgeAddressL2: '0xbridge',
   encryptedCiphertext: 'ciphertext',
-  keyDerivationDomain: 'https://bridge.human.tech/',
+  keyDerivationDomain: 'https://shield.human.tech/',
   isPrivacyModeEnabled: true,
   l2BlockNumberBeforeTx: '1234',
   rollupVersion: 5,

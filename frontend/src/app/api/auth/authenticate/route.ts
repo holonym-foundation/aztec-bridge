@@ -7,29 +7,53 @@ import { consumeNonce } from '@/lib/siweNonceStore'
 import { AuthenticateSchema } from '@/lib/validation'
 import { AUTH_EXPECTED_DOMAIN } from '@/config/env.config'
 
-// Must stay in sync with `L2_RESOURCE_PREFIX` in packages/sdk/src/auth.ts.
-// Inlined here on purpose: importing the constant via the SDK barrel
-// pulls @aztec/aztec.js transitively, which does readFileSync on a .wasm
-// at module-load time and fails under Next.js server bundling
-// (vendor-chunks/noirc_abi_wasm_bg.wasm not copied to .next/dev/server).
-// Client and server MUST produce/parse the same string — divergence
-// breaks SIWE address extraction.
-const L2_RESOURCE_PREFIX = 'https://bridge.human.tech/aztec/address/'
-
 /** Aztec address: 0x followed by 64 hex chars */
 const AZTEC_ADDRESS_REGEX = /^0x[a-fA-F0-9]{64}$/
+const DEFAULT_ALLOWED_SIWE_DOMAINS = ['shield.human.tech', 'testnet.shield.human.tech']
+
+/**
+ * Build the allow-list of SIWE domains this deployment accepts.
+ * `AUTH_EXPECTED_DOMAIN` may be a single host or a comma-separated list.
+ * localhost is always allowed for local development.
+ */
+function getAllowedSiweDomains(requestHost: string): Set<string> {
+  const domains = new Set(DEFAULT_ALLOWED_SIWE_DOMAINS)
+  for (const part of AUTH_EXPECTED_DOMAIN.split(',')) {
+    const trimmed = part.trim()
+    if (trimmed) domains.add(trimmed)
+  }
+
+  if (requestHost.startsWith('localhost') || requestHost.startsWith('127.0.0.1')) {
+    domains.add(requestHost)
+  }
+
+  return domains
+}
 
 /**
  * Extract and validate the L2 (Aztec) address from SIWE resources.
  * Returns lowercase address or null if invalid.
  */
-function extractL2Address(resources: string[] | undefined): string | null {
+function extractL2Address(resources: string[] | undefined, allowedOrigins: Set<string>): string | null {
   if (!resources || resources.length === 0) return null
-  const resource = resources[0]
-  if (!resource.startsWith(L2_RESOURCE_PREFIX)) return null
-  const address = resource.slice(L2_RESOURCE_PREFIX.length)
-  if (!AZTEC_ADDRESS_REGEX.test(address)) return null
-  return address.toLowerCase()
+
+  for (const resource of resources) {
+    try {
+      const url = new URL(resource)
+      if (!allowedOrigins.has(url.origin)) continue
+
+      const match = url.pathname.match(/^\/aztec\/address\/(0x[a-fA-F0-9]{64})$/)
+      if (!match) continue
+
+      const address = match[1]
+      if (!AZTEC_ADDRESS_REGEX.test(address)) continue
+      return address.toLowerCase()
+    } catch {
+      continue
+    }
+  }
+
+  return null
 }
 
 /**
@@ -78,15 +102,18 @@ export async function POST(request: NextRequest) {
     // attacker send Host: evil.com would otherwise verify a SIWE message
     // signed for evil.com. localhost is still allowed for dev convenience.
     const requestHost = request.headers.get('host') ?? ''
-    const isLocalhost = requestHost.startsWith('localhost') || requestHost.startsWith('127.0.0.1')
-    const expectedDomain = isLocalhost ? requestHost : AUTH_EXPECTED_DOMAIN
+    const allowedDomains = getAllowedSiweDomains(requestHost)
+    if (!allowedDomains.has(siweMessage.domain)) {
+      return NextResponse.json({ error: `Invalid SIWE domain: ${siweMessage.domain}` }, { status: 401 })
+    }
+
     try {
       await siweMessage.verify({
         signature: data.signature as string,
         nonce: messageNonce,
-        domain: expectedDomain,
+        domain: siweMessage.domain,
       })
-    } catch (err) {
+    } catch {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
@@ -102,10 +129,19 @@ export async function POST(request: NextRequest) {
     const normalizedL1 = siweMessage.address.toLowerCase()
 
     // L2 address: from resources field (validated format)
-    const normalizedL2 = extractL2Address(siweMessage.resources)
+    const allowedResourceOrigins = new Set<string>()
+    try {
+      allowedResourceOrigins.add(new URL(siweMessage.uri).origin)
+    } catch {
+      return NextResponse.json({ error: 'Invalid SIWE uri' }, { status: 400 })
+    }
+    allowedResourceOrigins.add('https://shield.human.tech')
+    allowedResourceOrigins.add('https://testnet.shield.human.tech')
+
+    const normalizedL2 = extractL2Address(siweMessage.resources, allowedResourceOrigins)
     if (!normalizedL2) {
       return NextResponse.json(
-        { error: 'L2 address required in resources (must be valid Aztec address format)' },
+        { error: 'L2 address required in resources (must be a valid Aztec address URL for this origin)' },
         { status: 400 },
       )
     }
@@ -171,6 +207,10 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('[auth/authenticate]', error)
+    const message = error instanceof Error ? error.message : 'Authentication failed'
+    if (message.includes('JWT_SECRET')) {
+      return NextResponse.json({ error: 'Authentication server misconfigured' }, { status: 500 })
+    }
     return NextResponse.json({ error: 'Authentication failed' }, { status: 500 })
   }
 }

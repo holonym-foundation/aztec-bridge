@@ -117,10 +117,11 @@ Both scripts automatically skip tokens that are already in the active deployment
 ### Other Scripts
 
 ```bash
-pnpm build              # Compile L1 + L2 contracts and generate TypeScript artifacts
+pnpm build              # compile + compile:l1 + codegen + sync:artifacts (full rebuild)
 pnpm compile            # Compile L2 Noir contracts only
-pnpm compile:l1         # Compile L1 Solidity contracts only
+pnpm compile:l1         # Compile L1 Solidity contracts only (forge build --force)
 pnpm codegen            # Generate TypeScript bindings from compiled artifacts
+pnpm sync:artifacts     # Copy compiled artifacts + ABIs to the frontend and SDK (see below)
 pnpm fees               # Fee management script
 pnpm deploy-contract    # Deploy a single contract
 pnpm deploy-account     # Deploy a Schnorr account
@@ -185,6 +186,22 @@ PRIVATE_KEY=0x... ERC20_TOKEN=<usdc-address> \
 ## Deployment Files
 
 Deployments are saved to `deployments/<version>_<date>.json` and tracked via `deployments/registry.json`. The active deployment is automatically synced to `../frontend/src/constants/deployments.json`.
+
+## Artifact & ABI Sync
+
+Compiled contract outputs are consumed by the frontend and SDK as committed files, not read from `out/`/`target/` at runtime. `pnpm sync:artifacts` (defined in `utils/save_contracts.ts` → `syncArtifacts()`) copies them to where each consumer imports them. Run it after any contract rebuild — it is the last step of `pnpm build`, so a full `pnpm build` already does it.
+
+| Source (build output) | → Destination | Consumer |
+|---|---|---|
+| `aztec-contracts/token_bridge/target/token_bridge_contract-TokenBridge.json` | `frontend/src/constants/aztec/artifacts/` | `walletAdapters.getContractArtifact` → `registerContract` |
+| `aztec-contracts/token_minter_proxy/target/token_minter_proxy-TokenMinterProxy.json` | `frontend/src/constants/aztec/artifacts/` | `walletAdapters.getContractArtifact` → `registerContract` |
+| `l1-contracts/out/TokenPortal.sol/TokenPortal.json` | `packages/sdk/src/contracts/abis/` | SDK `CustomTokenPortalAbi` (builds the bridge tx) |
+
+Notes:
+- The L2 **Token** artifact is loaded from the `@aztec-foundation/aztec-standards` npm package, not synced from here — only the two custom Noir contracts (TokenBridge, TokenMinterProxy) need syncing.
+- The **build order matters**: `sync:artifacts` must run *after* `compile:l1` and `codegen` produce the source files. `pnpm build` sequences this correctly.
+- `copyToFrontend()` (called at the end of a deploy run) also refreshes the frontend artifacts via the same helper, so a deploy stays self-contained. The SDK ABI, however, only lands via `sync:artifacts`/`build` — so **build before you deploy** whenever the Solidity changed.
+- To sync the SDK/frontend after a rebuild without a full compile: `pnpm sync:artifacts`. To rebuild everything from source: `pnpm build`.
 
 Both the standard and compliant scripts write to the **same** deployment file, matched by token symbol. If both scripts deploy the same symbol (e.g. USDC), the later one overwrites the earlier entry.
 

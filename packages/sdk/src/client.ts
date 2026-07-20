@@ -29,7 +29,7 @@ import type {
   SessionStatus,
 } from './types'
 
-const DEFAULT_API_URL = 'https://bridge.human.tech'
+const DEFAULT_API_URL = 'https://shield.human.tech'
 
 // Some L2 RPC providers cap JSON-RPC batch size (drpc free tier rejects batches > 3 with
 // code 31). The L2→L1 witness computation fires 4+ concurrent node calls, which the client

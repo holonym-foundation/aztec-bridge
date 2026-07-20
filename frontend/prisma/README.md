@@ -5,40 +5,36 @@ PostgreSQL via [Neon](https://neon.tech), managed with Prisma ORM.
 ## Setup
 
 1. Copy `.env.example` to `.env` and set `DATABASE_URL`.
-2. Run `pnpm run db:migrate` to apply all migrations locally.
+2. Run `pnpm run db:push` to sync your local DB to `schema.prisma`.
 
-## How migrations work
+## How schema management works
 
-- Migration files live in `prisma/migrations/` and are committed to git.
-- The **build script** (`prisma migrate deploy`) auto-applies pending migrations on every deploy — no manual DB commands needed in production.
-- `prisma migrate deploy` is safe: it only applies unapplied migrations and will fail rather than drop data.
+- The schema is the single source of truth in `prisma/schema.prisma`; there are no migration files.
+- Apply schema changes with `prisma db push`, which syncs the database to match the schema.
+- The build script only runs `prisma generate` — it does not touch the database.
 
 ## Modifying the schema
 
 1. Edit `prisma/schema.prisma`.
-2. Generate a migration:
+2. Apply it to your database:
    ```bash
-   pnpm run db:migrate -- --name describe-the-change
+   pnpm run db:push
    ```
-   This creates a SQL file in `prisma/migrations/` and applies it to your local DB.
-3. Commit the migration file and schema changes.
-4. Deploy — migrations are applied automatically during build.
+3. Commit the schema change.
+4. Run `pnpm run db:push` against the target database when deploying schema updates — the build does not do this for you.
 
 ## Available scripts
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| `db:migrate` | `prisma migrate dev` | Create & apply a new migration (local dev) |
-| `db:migrate:deploy` | `prisma migrate deploy` | Apply pending migrations (production) |
-| `db:migrate:reset` | `prisma migrate reset` | Drop & recreate DB (destroys all data) |
-| `db:push` | `prisma db push` | Sync schema without migrations (prototyping only) |
-| `db:pull` | `prisma db    pull` | Pull schema from existing DB |
+| `db:push` | `prisma db push` | Sync the database to match `schema.prisma` |
+| `db:pull` | `prisma db pull` | Pull schema from an existing DB |
 | `db:generate` | `prisma generate` | Regenerate Prisma Client |
 | `db:studio` | `prisma studio` | Open Prisma Studio GUI |
 | `db:validate` | `prisma validate` | Validate schema file |
+| `db:reset` | `prisma migrate reset --force --skip-seed && prisma db push` | Drop & recreate DB (destroys all data) |
 
 ## Rules
 
-- **Never** use `db:push` in production — it can silently drop columns/data.
-- **Never** use `db:migrate:reset` on production — it wipes everything.
-- Always create migrations locally with `db:migrate`, commit the SQL files, and let the deploy pipeline handle the rest.
+- `db:push` can drop columns/data if the schema removes them — review the diff Prisma prints before confirming on a shared database.
+- **Never** use `db:reset` on production — it wipes everything.

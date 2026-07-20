@@ -5,7 +5,7 @@
   "scripts": {
     "predev": "pnpm --filter @human.tech/clean.sdk build",
     "dev": "next dev --webpack",
-    "build": "prisma generate && prisma migrate deploy && next build --webpack && node ./scripts/check-bb-wasm-trace.mjs",
+    "build": "prisma generate && next build --webpack && node ./scripts/check-bb-wasm-trace.mjs",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint",

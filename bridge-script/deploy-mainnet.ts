@@ -104,6 +104,7 @@ import {
   loadActiveDeployment,
   loadExistingTokens,
   copyToFrontend,
+  copyToSdk,
   type DeployedToken,
 } from './utils/save_contracts.js'
 import {
@@ -874,6 +875,7 @@ async function main() {
   }
 
   copyToFrontend()
+  copyToSdk()
 
   // ── Summary ──
   logger.info('\n=== Mainnet Deployment Summary ===')

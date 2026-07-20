@@ -4,6 +4,7 @@ import BannerAztecNodeError from '@/components/BannerAztecNodeError'
 import BannerAztecTestnet from '@/components/BannerAztecTestnet'
 import Footer from '@/components/Footer'
 import Header from '@/components/Header'
+import ShieldOnboarding from '@/components/ShieldOnboarding'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { motion } from 'framer-motion'
 import { usePathname } from 'next/navigation'
@@ -18,6 +19,7 @@ export default function ClientLayout({
   const showPrivacyBackground = isPrivacyModeEnabled && !(pathname?.startsWith('/docs') ?? false)
   return (
     <div className="relative min-h-screen flex flex-col w-full min-w-0" style={{ minHeight: '100vh', minWidth: 0 }}>
+      <ShieldOnboarding />
       {/* Gradient background */}
       <motion.div
         className="absolute inset-0 z-0"

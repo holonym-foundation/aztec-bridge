@@ -357,7 +357,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
                 if (!isPrivacyModeEnabled) {
                   setTimeout(() => {
                     notify('privacy-mode', {
-                      message: 'Transactions are masked and untraceable, unlike public mode',
+                      message: 'Your balance, counterparties, and history stay private on Aztec',
                       heading: 'Private mode activated',
                     })
                   }, 1500)
@@ -448,7 +448,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
                 if (!isPrivacyModeEnabled) {
                   setTimeout(() => {
                     notify('privacy-mode', {
-                      message: 'Transactions are masked and untraceable, unlike public mode',
+                      message: 'Your balance, counterparties, and history stay private on Aztec',
                       heading: 'Private mode activated',
                     })
                   }, 1500)

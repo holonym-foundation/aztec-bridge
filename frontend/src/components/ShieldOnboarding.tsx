@@ -21,7 +21,7 @@ type Screen = {
 const SCREENS: Screen[] = [
   {
     eyebrow: 'Private bridge\nEthereum ⇄ Aztec',
-    title: 'Private transactions have arrived on Ethereum',
+    title: 'Private transactions have arrived for Ethereum funds',
     body: (
       <p>Move your funds between Ethereum and Aztec with privacy.</p>
     ),
@@ -88,7 +88,7 @@ const SCREENS: Screen[] = [
           </InfoTooltip>
         </p>
         <p>
-          <strong>2M+ people</strong> and <strong>50M+ credentials</strong> already run on
+          <strong>2M+ users</strong> and <strong>44M+ credentials</strong> already run on
           human.tech&apos;s ZK stack. It follows a strict data minimization standard. We verify
           what&apos;s needed and store nothing more.
         </p>

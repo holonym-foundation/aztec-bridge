@@ -556,7 +556,7 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
         <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)}`} />
         <span
           className={`text-xs font-semibold ${navText(isDark)}`}
-          title="Human Points — earned by verified humans using Shield. Open for details."
+          title="Human Points — rewards for verified humans, not bots. Open for details."
         >
           {points.toLocaleString()}
         </span>
@@ -602,15 +602,23 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
           </div>
           <div className={`flex flex-col gap-1.5 pt-2 border-t ${panelDivider(isDark)}`}>
             <div className="flex items-center justify-between">
-              <span className={`text-xs font-medium ${subtleText(isDark)}`}>Points</span>
+              <span className={`flex items-center gap-1.5 text-xs font-medium ${subtleText(isDark)}`}>
+                <HumanPointsIcon className="w-3.5 h-3.5" />
+                Human Points
+              </span>
               <span className={`text-sm font-semibold ${navText(isDark)}`}>{points.toLocaleString()}</span>
             </div>
-            {/* PLACEHOLDER copy — reconcile against covenant/passport's real
-                Human Points wording before launch. Kept general on purpose:
-                no specific per-action point values or reward mechanics are
-                claimed, since none are wired in this app yet. */}
+            {/* Points has no live source in this app yet (see PLACEHOLDER_POINTS)
+                — the value is a stub. Copy stays general on purpose: no
+                per-action point values or reward tiers are claimed, since none
+                are wired here and neither covenant nor passport define concrete
+                earning mechanics to mirror. Framing follows the human.tech
+                proof-of-personhood voice (verified humans, not bots) and names
+                only the real Shield actions — proving personhood + private
+                bridging — that a future points source would credit. */}
             <p className={`text-[11px] leading-snug ${subtleText(isDark)}`}>
-              Human Points reward verified humans for using Shield. Prove your personhood and bridge privately to earn them.
+              Human Points reward real, verified humans — not bots — across human.tech. In Shield, you earn them by proving
+              your personhood and bridging privately.
             </p>
           </div>
         </div>

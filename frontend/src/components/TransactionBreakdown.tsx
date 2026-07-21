@@ -13,6 +13,11 @@ interface TransactionBreakdownProps {
   tokenSymbol?: string
 }
 
+// Motion values mirrored from the human-tech design system (docs/tokens.css):
+// --dur-normal / --ease-default for the inline detail accordion reveal.
+const DS_DUR_NORMAL = 0.28
+const DS_EASE_DEFAULT: [number, number, number, number] = [0.4, 0, 0.2, 1]
+
 // True in-place accordion — the header stays put and the detail expands/collapses
 // below it, so the From/To section above never has to unmount to make room.
 const TransactionBreakdown: React.FC<TransactionBreakdownProps> = ({
@@ -49,7 +54,7 @@ const TransactionBreakdown: React.FC<TransactionBreakdownProps> = ({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: 'easeInOut' }}
+            transition={{ duration: shouldReduceMotion ? 0 : DS_DUR_NORMAL, ease: DS_EASE_DEFAULT }}
             className='overflow-hidden'
           >
             <div className='px-3 pb-3 space-y-[14px]'>

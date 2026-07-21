@@ -8,6 +8,14 @@ import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { EXPLAINER_STEPS } from '@/components/model/HowItWorksModal'
 
+// Motion values mirrored from the human-tech design system (docs/tokens.css).
+// --dur-normal / --ease-default for inline content reveals; --dur-enter /
+// --ease-slide for the panel that slides out from the card edge.
+const DS_DUR_NORMAL = 0.28
+const DS_DUR_ENTER = 0.32
+const DS_EASE_DEFAULT: [number, number, number, number] = [0.4, 0, 0.2, 1]
+const DS_EASE_SLIDE: [number, number, number, number] = [0.32, 0.72, 0, 1]
+
 type StepStatus = 'done' | 'active' | 'upcoming'
 
 const BridgeStepsRail: React.FC = () => {
@@ -201,7 +209,7 @@ const BridgeStepsRail: React.FC = () => {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: prefersReducedMotion ? 0 : 0.22, ease: 'easeInOut' }}
+              transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_NORMAL, ease: DS_EASE_DEFAULT }}
               className="overflow-hidden"
             >
               <div className="mt-2 rounded-[16px] border border-[#D4D4D4] bg-white p-4">
@@ -229,7 +237,7 @@ const BridgeStepsRail: React.FC = () => {
             marginRight: desktopOpen ? 12 : 0,
             opacity: desktopOpen ? 1 : 0,
           }}
-          transition={{ duration: prefersReducedMotion ? 0 : 0.28, ease: 'easeOut' }}
+          transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
           className="overflow-hidden"
         >
           <div

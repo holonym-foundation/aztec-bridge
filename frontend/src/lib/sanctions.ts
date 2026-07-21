@@ -95,8 +95,6 @@ export async function screenAddress(address: string): Promise<ScreeningResult> {
   }
 
   const data = (await resp.json()) as SanctionsIoResponse
-  // TEMP debug — remove once behaviour is verified end-to-end.
-  console.log('[sanctions] response for', address, JSON.stringify(data))
   const hits = Array.isArray(data.results) ? data.results : []
   const hasMatch = hits.length > 0
 

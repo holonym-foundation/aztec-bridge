@@ -40,6 +40,7 @@ export type {
   AttestationStatus,
   PochCheckResult,
   PassportCheckResult,
+  L1EligibilityResult,
   L1TokenBalance,
   MintTokensResult,
   SessionStatus,

@@ -5,6 +5,8 @@ import BannerAztecTestnet from '@/components/BannerAztecTestnet'
 import Footer from '@/components/Footer'
 import Header from '@/components/Header'
 import ShieldOnboarding from '@/components/ShieldOnboarding'
+import BridgeStepsRail from '@/components/BridgeStepsRail'
+import ActivityDrawer from '@/components/ActivityDrawer'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { motion } from 'framer-motion'
@@ -27,6 +29,16 @@ export default function ClientLayout({
   // up into the card region's bottom padding). Other routes (docs, activity) scroll normally,
   // so the footer keeps its default position there.
   const isNoScrollRoute = pathname === '/' || pathname === '/progress'
+  // The Tutorial + Activity drawers live here (not in any page) so they persist
+  // across the app's main screens instead of disappearing on navigation. Shown on
+  // the bridge, progress and activity flows; hidden on docs/complete/claim-fuel
+  // where they'd be noise. The centered card owns no part of this — the dock is a
+  // fixed, self-contained overlay, so card centering and the no-scroll budget are
+  // untouched.
+  const showDrawers =
+    pathname === '/' ||
+    (pathname?.startsWith('/progress') ?? false) ||
+    (pathname?.startsWith('/activity') ?? false)
   return (
     <div className="relative min-h-screen flex flex-col w-full min-w-0 overflow-x-hidden" style={{ minHeight: '100vh', minWidth: 0 }}>
       {/* Onboarding is skipped on docs so the guides render without connecting a wallet. */}
@@ -84,6 +96,20 @@ export default function ClientLayout({
             longer scrolling pages keep the footer in its normal flow position. */}
         <Footer className={isNoScrollRoute ? '-mt-8' : ''} />
       </div>
+      {/* Persistent binder dock: both drawer tabs stacked on the RIGHT edge,
+          vertically centered. Fixed + pointer-events-none so it never adds page
+          width/scroll and clicks pass through the gaps; each drawer re-enables its
+          own pointer events. Tutorial sits above Activity; each opens its panel
+          leftward and, being in normal flow within the column, pushes the other
+          tab rather than overlapping it. Desktop/tablet only (md+): the centered
+          360px card leaves no gutter on phones, so the tab would sit over the card
+          edge — on mobile the same Tutorial/Activity live in the Header nav. */}
+      {showDrawers && (
+        <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
+          <BridgeStepsRail />
+          <ActivityDrawer />
+        </div>
+      )}
       <HowItWorksModal />
     </div>
   )

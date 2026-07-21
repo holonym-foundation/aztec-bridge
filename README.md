@@ -49,7 +49,7 @@ Links: [npm](https://www.npmjs.com/package/@human.tech/clean.sdk) · [User Guide
 ## 🏗️ Architecture
 
 ```
-aztec-ui/
+shield.human.tech/
 ├── frontend/           # Next.js React application
 ├── bridge-script/      # Bridge automation scripts
 ├── l1-contracts/       # L1 smart contracts (Foundry)
@@ -76,8 +76,8 @@ aztec-ui/
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd aztec-ui
+git clone https://github.com/holonym-foundation/shield.human.tech.git
+cd shield.human.tech
 
 # Install frontend dependencies
 cd frontend

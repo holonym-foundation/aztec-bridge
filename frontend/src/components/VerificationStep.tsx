@@ -76,10 +76,8 @@ const VerificationStep: React.FC<VerificationStepProps> = ({ onClose }) => {
 
             {/* Option 1: POCH */}
             <div className="mt-4 rounded-[12px] border border-[#D4D4D4] p-3">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <p className="text-[13px] font-semibold text-[#0A0A0A]">
-                  Proof of Clean Hands <span className="font-normal text-[#989898]">(using ZKPassport)</span>
-                </p>
+              <div className="flex items-center gap-2">
+                <p className="text-[13px] font-semibold text-[#0A0A0A]">Proof of Clean Hands</p>
                 <span className="rounded-full bg-[#E5EFFF] px-1.5 py-0.5 text-[10px] font-semibold text-[#17235E]">
                   recommended
                 </span>

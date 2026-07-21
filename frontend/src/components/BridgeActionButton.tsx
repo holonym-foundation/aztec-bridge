@@ -76,6 +76,10 @@ interface BridgeActionButtonProps {
   setShowSBTModal: (show: boolean) => void
   setCurrentSBTChain: (chain: 'Ethereum' | 'Aztec') => void
 
+  // Claim-gas guard: the L2 claim would be paid from standing FeeJuice the user
+  // doesn't have. When true, the button becomes an "enable gas top-up" CTA.
+  needsClaimGas?: boolean
+  onAddClaimGas?: () => void
   // Compliance attestation
   pochEligible?: boolean
   pochLoading?: boolean
@@ -131,6 +135,8 @@ function BridgeActionButton({
   hasL2SBT,
   setShowSBTModal,
   setCurrentSBTChain,
+  needsClaimGas = false,
+  onAddClaimGas,
   pochEligible,
   pochLoading = false,
   pochReason,
@@ -292,6 +298,14 @@ function BridgeActionButton({
       return
     }
 
+    // Step 5b: Claim-gas guard — the L2 claim would have no FeeJuice to pay for
+    // itself. Steer the user into enabling gas top-up rather than letting them
+    // start a bridge that strands the funds at the claim step.
+    if (needsClaimGas) {
+      onAddClaimGas?.()
+      return
+    }
+
     // Step 6: Validate amount
     // Step 6a: Passport amount limit check (applies to both public and private)
     if (attestationMethod === 'passport' && passportMaxAmount != null) {
@@ -438,6 +452,9 @@ function BridgeActionButton({
     // Attestation requirement applies to both public and private modes.
     if (pochLoading) return 'Checking eligibility...'
     if (!pochEligible) return 'Verify to continue'
+
+    // The L2 claim has no FeeJuice to pay for itself — turn on gas top-up first.
+    if (needsClaimGas) return 'Add gas to claim on Aztec'
 
     return getOperationLabel(direction)
   }

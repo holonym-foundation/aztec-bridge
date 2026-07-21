@@ -111,8 +111,7 @@ const SCREENS: Screen[] = [
         </p>
         <p>
           <strong>2M+ users</strong> and <strong>44M+ credentials</strong> already run on
-          human.tech&apos;s ZK stack. It follows a strict data minimization standard. We verify
-          what&apos;s needed and store nothing more.
+          human.tech&apos;s ZK stack.
         </p>
         <ZkPulse />
       </>

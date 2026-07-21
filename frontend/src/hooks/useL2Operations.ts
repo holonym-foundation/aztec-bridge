@@ -8,6 +8,7 @@ import { formatUnits, parseUnits } from 'viem'
 import { useToast, useToastMutation } from './useToast'
 import { exportWithdrawalData, copyToClipboard, decryptStorageEntry, verifyEncryptionDomain } from '@/utils'
 import { useL2ErrorHandler } from '@/utils/l2ErrorHandler'
+import { estimateClaimFeeLimit } from '@/utils/fuelGasEstimate'
 import { requestWaapWallet, WAAP_METHOD, useWalletStore } from '@/stores/walletStore'
 import { useWalletAdapter } from './useWalletAdapter'
 import { useBridge } from '@/hooks/useBridge'
@@ -188,6 +189,18 @@ export const useL2PrivateFeeJuiceBalance = () => {
     queryFn,
     enabled: !!aztecAddress && !!walletAdapter && !!BRIDGED_FPC_ADDRESS,
     refetchInterval: 30_000,
+  })
+}
+
+// Worst-case FeeJuice needed to pay for the L2 claim (the final bridge step).
+// Network-wide (not user-specific), so it runs without a wallet. Base fees move
+// slowly, so a 60s refresh keeps the figure live without hammering the node.
+export const useClaimFeeEstimate = (fuelType: 'public' | 'private' = 'public') => {
+  return useQuery<bigint, Error>({
+    queryKey: ['claimFeeEstimate', fuelType],
+    queryFn: () => estimateClaimFeeLimit(fuelType),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
 }
 

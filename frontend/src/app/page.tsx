@@ -26,6 +26,7 @@ import {
   useL2WithdrawTokensToL1,
   useL1ContractAddresses,
   useL2NodeIsReady,
+  useClaimFeeEstimate,
 } from '@/hooks/useL2Operations'
 import { showToast, useToast } from '@/hooks/useToast'
 import { extractErrorMessage, truncateDecimals } from '@/utils'
@@ -246,6 +247,41 @@ export default function Home() {
   } = useL2PrivateFeeJuiceBalance()
   const { data: hasL2SBT } = useL2HasSoulboundToken()
   const { mutate: mintL2SBT, isPending: mintL2SBTPending } = useL2MintSoulboundToken(mintL2SBTOnSuccess)
+
+  // Claim-gas guard: the final L2 claim needs FeeJuice. It self-funds only when
+  // fuel is enabled and directed to the bridger; otherwise the claim is paid from
+  // the bridger's standing FJ. We can only *read* public FJ (claim_public), so we
+  // hard-block just the provable stuck case: public deposit, no self-directed
+  // fuel, zero FJ, then steer the user into enabling gas top-up.
+  const { data: claimFeeLimitWei } = useClaimFeeEstimate(fuelType)
+  const claimPaidFromStandingFj =
+    bridgeConfig.direction === BridgeDirection.L1_TO_L2 && (!fuelEnabled || !!fuelRecipientOverride)
+  const noClaimGas =
+    claimPaidFromStandingFj &&
+    !isPrivacyModeEnabled &&
+    Number(bridgeConfig.amount) > 0 &&
+    feeJuiceBalance != null &&
+    Number(feeJuiceBalance) === 0
+  // Auto-enable trigger: the balance for the active mode won't cover the claim estimate.
+  // Public mode reads the user's own FJ; private mode reads the BridgedFPC balance (the
+  // readable "can pay a private claim" figure), so this works with privacy on too.
+  const claimGasBalance = isPrivacyModeEnabled ? privateFeeJuiceBalance : feeJuiceBalance
+  const insufficientClaimGas =
+    claimPaidFromStandingFj &&
+    Number(bridgeConfig.amount) > 0 &&
+    claimGasBalance != null &&
+    claimFeeLimitWei != null &&
+    Number(claimGasBalance) < Number(claimFeeLimitWei) / 1e18
+
+  // Auto-enable gas top-up when the claim would be underfunded. One-time latch so we
+  // never re-flip it back on after the user deliberately turns it off.
+  const autoFuelRef = useRef(false)
+  useEffect(() => {
+    if (insufficientClaimGas && !fuelEnabled && !autoFuelRef.current) {
+      autoFuelRef.current = true
+      setFuelEnabled(true)
+    }
+  }, [insufficientClaimGas, fuelEnabled, setFuelEnabled])
 
   // Bridge success callback (runs after L1→L2 bridge or L2→L1 withdrawal)
   const handleBridgeSuccess = useCallback(
@@ -547,6 +583,7 @@ export default function Home() {
                   fuelEnabled={fuelEnabled}
                   fuelAmount={fuelAmount}
                   bridgeAmount={bridgeConfig.amount}
+                  youWillReceive={youWillReceiveAmount}
                   tokenSymbol={bridgeConfig.from.token?.symbol ?? 'USDC'}
                   tokenDecimals={bridgeConfig.from.token?.decimals ?? 6}
                   tokenAddress={bridgeConfig.from.token?.l1TokenContract ?? ''}
@@ -628,6 +665,8 @@ export default function Home() {
                 setShowSBTModal={setShowSBTModal}
                 setCurrentSBTChain={setCurrentSBTChain}
                 // Compliance attestation
+                needsClaimGas={noClaimGas}
+                onAddClaimGas={() => setFuelEnabled(true)}
                 pochEligible={attestationData?.eligible}
                 pochLoading={attestationLoading}
                 pochReason={attestationData?.reason}

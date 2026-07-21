@@ -14,7 +14,7 @@ import {
   usePortalFeeBps,
 } from '@/hooks/useL1Operations'
 import { useTokenPrices } from '@/utils/coinGeckoPrice'
-import { computePortalFee, getTokenPriceUsd } from '@/utils/fuelPricing'
+import { computePortalFee, getTokenPriceUsd, formatFjAmount } from '@/utils/fuelPricing'
 import { parseUnits, formatUnits } from 'viem'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import {
@@ -78,6 +78,12 @@ export default function Home() {
   const [selectToken, setSelectToken] = useState<boolean>(false)
   const [isFromSection, setIsFromSection] = useState<boolean>(true)
   const [showBreakdown, setShowBreakdown] = useState(false)
+  // Lifted so the bridge card runs a single mutually-exclusive accordion: opening the
+  // Transaction breakdown collapses the fuel detail (and vice-versa), yielding space so the
+  // card fits within its no-scroll budget instead of scrolling internally.
+  const [fuelDetailOpen, setFuelDetailOpen] = useState(false)
+  // Live FJ output for the current fuel amount, surfaced by FuelToggle for the breakdown summary.
+  const [fuelFjOutput, setFuelFjOutput] = useState<bigint | null>(null)
   const [showVerification, setShowVerification] = useState(false)
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -133,10 +139,11 @@ export default function Home() {
       return 0n
     }
   }
-  const { feeRaw: portalFeeRaw, receiveRaw: portalReceiveRaw } = computePortalFee({
+  const depositFuelEnabled = bridgeConfig.direction === BridgeDirection.L1_TO_L2 && fuelEnabled
+  const { baseRaw: portalBaseRaw, feeRaw: portalFeeRaw, receiveRaw: portalReceiveRaw } = computePortalFee({
     amount: parseTokenAmount(bridgeConfig.amount),
     fuelAmount: parseTokenAmount(fuelAmount),
-    fuelEnabled: bridgeConfig.direction === BridgeDirection.L1_TO_L2 && fuelEnabled,
+    fuelEnabled: depositFuelEnabled,
     feeBps: portalFeeBps ?? 0n,
   })
   const portalFeeKnown = portalFeeBps != null
@@ -144,7 +151,16 @@ export default function Home() {
   const portalFeeUsd = portalFeeKnown
     ? (Number(formatUnits(portalFeeRaw, feeTokenDecimals)) * getTokenPriceUsd(feeTokenSymbol, tokenPrices)).toFixed(2)
     : undefined
+  // Fee as a percentage of the fee base (amount net of any fuel carve-out) — computed from the
+  // actual fee, so integer-division rounding in the portal is reflected. e.g. 2.54 USDC / 100 → "2.54".
+  const bridgeFeePercent =
+    portalFeeKnown && portalBaseRaw > 0n
+      ? ((Number(portalFeeRaw) / Number(portalBaseRaw)) * 100).toFixed(2)
+      : undefined
   const youWillReceiveAmount = `${truncateDecimals(formatUnits(portalReceiveRaw, feeTokenDecimals), 6)}`
+  // Fee-juice carve summary for the breakdown (deposit + fuel only).
+  const fuelReserveToken = depositFuelEnabled && Number(fuelAmount) > 0 ? fuelAmount : undefined
+  const fuelReserveFj = fuelReserveToken && fuelFjOutput != null ? formatFjAmount(fuelFjOutput) : undefined
 
   // Get wallet state from useWalletStore. Modal-driving fields (walletConnectionPhase,
   // discoveredWallets, verificationEmojis, etc.) are consumed inside <AztecWalletConnectionModals />
@@ -609,6 +625,13 @@ export default function Home() {
                   selfAztecAddress={aztecAddress ?? ''}
                   fuelRecipientOverride={fuelRecipientOverride}
                   onFuelRecipientOverrideChange={setFuelRecipientOverride}
+                  detailOpen={fuelDetailOpen}
+                  onDetailOpenChange={(open) => {
+                    setFuelDetailOpen(open)
+                    // Mutual exclusivity: opening the fuel detail collapses the breakdown.
+                    if (open) setShowBreakdown(false)
+                  }}
+                  onFuelQuoteChange={setFuelFjOutput}
                 />
               )}
             {bridgeConfig.direction === BridgeDirection.L2_TO_L1 && (
@@ -623,11 +646,22 @@ export default function Home() {
             )}
             <TransactionBreakdown
               isOpen={showBreakdown}
-              onToggle={() => setShowBreakdown((prev) => !prev)}
+              onToggle={() =>
+                setShowBreakdown((prev) => {
+                  const next = !prev
+                  // Mutual exclusivity: opening the breakdown collapses the fuel detail so the
+                  // card yields space instead of scrolling.
+                  if (next) setFuelDetailOpen(false)
+                  return next
+                })
+              }
               bridgeFee={portalFeeToken}
               bridgeFeeUsd={portalFeeUsd}
+              bridgeFeePercent={bridgeFeePercent}
               receiveAmount={youWillReceiveAmount}
               tokenSymbol={feeTokenSymbol}
+              fuelReserveToken={fuelReserveToken}
+              fuelReserveFj={fuelReserveFj}
             />
           </div>
 

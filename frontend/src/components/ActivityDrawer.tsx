@@ -275,12 +275,13 @@ const ActivityDrawer: React.FC = () => {
   // A slim binder tab pinned to the viewport's right edge, stacked below the
   // Tutorial tab by the dock in ClientLayout. Hover or click peeks the recent
   // activity panel out to the LEFT of the tab — same direction as Tutorial, so
-  // the two read as one binder. The dock is fixed, so it never adds page scroll
-  // and persists across every app screen.
+  // the two read as one binder. The panel is absolutely positioned so opening it
+  // never reflows (splits apart) the sibling tabs (#114). The dock is fixed, so
+  // it never adds page scroll and persists across every app screen.
   return (
     <div
       ref={drawerRef}
-      className="pointer-events-auto flex items-start justify-end"
+      className="pointer-events-auto relative flex items-center justify-end"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -288,11 +289,11 @@ const ActivityDrawer: React.FC = () => {
         {open && (
           <motion.div
             key="panel"
-            initial={{ width: 0, opacity: 0, marginRight: 0 }}
-            animate={{ width: 280, opacity: 1, marginRight: 12 }}
-            exit={{ width: 0, opacity: 0, marginRight: 0 }}
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 280, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
             transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
-            className="overflow-hidden"
+            className="absolute right-[calc(100%_+_12px)] top-1/2 -translate-y-1/2 overflow-hidden"
           >
             <div
               id={panelId}

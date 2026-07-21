@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatUnits, encodeFunctionData } from 'viem'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { useToast, useToastMutation, useToastQuery } from './useToast'
+import { pushNotification } from '@/stores/useNotificationsStore'
 import { requestWaapWallet, useWalletStore, WAAP_METHOD } from '@/stores/walletStore'
 import { I_UserTokenBalance, T_AlchemyTokenBalanceResponse, T_UserTokenType } from '@/types/token.balances.types'
 import { axiosErrorMessage } from './helper'
@@ -569,6 +570,11 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               },
               { autoClose: false, toastId: TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS },
             )
+            pushNotification({
+              type: 'deposit',
+              title: 'Deposit in progress',
+              message: `Your deposit of ${amountDisplayL1} is on Ethereum and bridging to Aztec.`,
+            })
             break
           case BridgeEventType.DEPOSIT_CONFIRMED:
             logInfo('L1 deposit confirmed', {
@@ -586,6 +592,11 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             // toasts are now stale.
             notify.dismiss(TOAST_ID_L1L2_DO_NOT_RELOAD)
             notify.dismiss(TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS)
+            pushNotification({
+              type: 'deposit',
+              title: 'Deposit confirmed',
+              message: 'Your deposit is confirmed on Ethereum. Claiming your tokens on Aztec…',
+            })
             // Prompt user to backup their claim secret (matches old flow)
             notify(
               'warn',
@@ -697,6 +708,11 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               l1_tx_hash: event.l1TxHash ?? null,
               l2_tx_hash: event.l2TxHash ?? null,
             })
+            pushNotification({
+              type: 'claim',
+              title: 'Bridge complete',
+              message: 'Your tokens have been claimed on Aztec.',
+            })
             break
           }
           case BridgeEventType.ATTESTATION_FETCH:
@@ -801,6 +817,20 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             // user sees only the actionable error message, not a stack of
             // mid-flow status banners.
             for (const id of L1L2_TRANSIENT_TOAST_IDS) notify.dismiss(id)
+
+            pushNotification(
+              event.fundsAtRisk
+                ? {
+                    type: 'error',
+                    title: 'L2 claim failed — funds are safe',
+                    message: 'Your deposit confirmed on L1 but the L2 claim did not complete. Go to Activity to resume.',
+                  }
+                : {
+                    type: 'error',
+                    title: 'Deposit failed',
+                    message: event.error?.message?.slice(0, 160) ?? 'The transaction was not sent. You can safely retry.',
+                  },
+            )
 
             if (event.fundsAtRisk) {
               notify(
@@ -1096,14 +1126,21 @@ export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void)
       queryClient.invalidateQueries({ queryKey: ['l1TokenBalances', l1Address] })
       queryClient.invalidateQueries({ queryKey: ['l1TokenBalance', l1Address] })
       notify('success', 'Fee Juice added — you can complete your withdrawal now.')
+      pushNotification({
+        type: 'deposit',
+        title: 'Fee Juice added',
+        message: 'Your Fee Juice top-up is complete — you can finish your withdrawal now.',
+      })
       onTopUpSuccess?.(txHash)
     },
     onError: (error) => {
       notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
+      const msg = extractErrorMessage(error) || 'The top-up could not be completed. Your balances are unchanged.'
       notify('error', {
         heading: 'Fee Juice top-up failed',
-        message: extractErrorMessage(error) || 'The top-up could not be completed. Your balances are unchanged.',
+        message: msg,
       })
+      pushNotification({ type: 'error', title: 'Fee Juice top-up failed', message: msg })
     },
   })
 }

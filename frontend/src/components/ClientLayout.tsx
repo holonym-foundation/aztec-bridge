@@ -7,6 +7,7 @@ import Header from '@/components/Header'
 import ShieldOnboarding from '@/components/ShieldOnboarding'
 import BridgeStepsRail from '@/components/BridgeStepsRail'
 import ActivityDrawer from '@/components/ActivityDrawer'
+import NotificationsDrawer from '@/components/NotificationsDrawer'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { motion } from 'framer-motion'
@@ -101,18 +102,20 @@ export default function ClientLayout({
             longer scrolling pages keep the footer in its normal flow position. */}
         <Footer className={isNoScrollRoute ? '-mt-8' : ''} />
       </div>
-      {/* Persistent binder dock: both drawer tabs stacked on the RIGHT edge,
+      {/* Persistent binder dock: the drawer tabs stacked on the RIGHT edge,
           vertically centered. Fixed + pointer-events-none so it never adds page
           width/scroll and clicks pass through the gaps; each drawer re-enables its
-          own pointer events. Tutorial sits above Activity; each opens its panel
-          leftward and, being in normal flow within the column, pushes the other
-          tab rather than overlapping it. Desktop/tablet only (md+): the centered
-          360px card leaves no gutter on phones, so the tab would sit over the card
-          edge — on mobile the same Tutorial/Activity live in the Header nav. */}
+          own pointer events. Tutorial sits above Activity above Messages; each
+          opens its panel leftward as an absolutely-positioned overlay, so hovering
+          one never reflows (splits apart) the others (#114). Desktop/tablet only
+          (md+): the centered 360px card leaves no gutter on phones, so the tab
+          would sit over the card edge — on mobile the same Tutorial/Activity live
+          in the Header nav. */}
       {showDrawers && (
         <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
           <BridgeStepsRail />
           <ActivityDrawer />
+          <NotificationsDrawer />
         </div>
       )}
       <HowItWorksModal />

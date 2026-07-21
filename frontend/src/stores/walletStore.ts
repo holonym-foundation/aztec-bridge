@@ -1,6 +1,7 @@
 import { L1_CHAIN_ID, L1_RPC_URL } from '@/config'
 import { networkConfig, waapConfig } from '@/config/l1.config'
 import { showToast } from '@/hooks/useToast'
+import { pushNotification } from '@/stores/useNotificationsStore'
 import {
   detectWalletByProvider,
   discoveredProviders,
@@ -1085,6 +1086,13 @@ const walletStore = create<WalletState>((set, get) => ({
       showToast('info', 'Check your wallet — a signature is required to continue.', {
         toastId: 'waap-sign-request',
         autoClose: 8000,
+      })
+      // Also record it in the persistent feed — the toast auto-closes, but the
+      // request should be recoverable in the Messages tab.
+      pushNotification({
+        type: 'signature',
+        title: 'Signature required',
+        message: 'Check your wallet and approve the signature to continue.',
       })
 
       const signature = await requestWaapWallet(WAAP_METHOD.personal_sign, [message, waapAddress])

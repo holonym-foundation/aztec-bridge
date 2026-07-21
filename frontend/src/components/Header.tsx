@@ -12,7 +12,7 @@ import { usePathname } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { silkUrl } from '@/config/l1.config'
-import { L1_CHAIN_ID } from '@/config'
+import { L1_CHAIN_ID, POCH_MINT_URL } from '@/config'
 import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
@@ -48,6 +48,8 @@ if (typeof window !== 'undefined') {
     'ph:link-simple',
     'ph:check',
     'ph:warning-circle',
+    'ph:info',
+    'ph:hand-soap',
   ])
 }
 
@@ -332,12 +334,12 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
             caret out — the caret gets its own guaranteed room via the
             row's pr-4 + gap, not by squeezing against the text (see #72
             follow-up: caret was crowded against the address/balance). */}
-        <span className="flex flex-col items-start leading-tight min-w-0 flex-shrink">
-          <span className={`text-xs font-medium ${navText(isDark)} truncate max-w-[42px] sm:max-w-[78px]`} title={address || ''}>
+        <span className="flex flex-col items-start leading-tight min-w-0 flex-1">
+          <span className={`text-xs font-medium ${navText(isDark)} truncate max-w-full`} title={address || ''}>
             {displayName || (address ? truncateAddr(address) : '')}
           </span>
           {balance && walletType === WalletType.WAAP && (
-            <span className={`text-[9px] ${subtleText(isDark)} leading-none truncate max-w-[42px] sm:max-w-[78px]`}>{balance} ETH</span>
+            <span className={`text-[9px] ${subtleText(isDark)} leading-none truncate max-w-full`}>{balance} ETH</span>
           )}
         </span>
         <Icon
@@ -614,31 +616,39 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
 
   return (
     <div className="relative" ref={ref}>
+      {/* Vertical chip (#111): humanity score stacked ABOVE points, so the chip
+          reads as a compact two-line stat pill sitting flush beside the wallet/
+          account stack (its ~two-row height pairs with the stacked wallet
+          cluster) instead of a wide horizontal strip. Click still opens the same
+          expandable panel below. */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="true"
         aria-expanded={open}
-        className={`flex items-center gap-1.5 h-9 px-3 rounded-full ${glassPill(isDark, open)} cursor-pointer`}
+        className={`flex items-center gap-1.5 sm:gap-2 h-14 sm:h-16 px-2.5 sm:px-3 rounded-[18px] ${glassPill(isDark, open)} cursor-pointer`}
       >
-        {/* Verified-humanity indicator. The green pulsing glow (ported DS
-            chip--glow) is a halo around this badge — applied ONLY in the
-            verified/green state, mirroring the DS which only glows the green
-            verified chip. The wrapper is a tight rounded container so the
-            box-shadow reads as a circular halo around the bare icon. */}
-        <span className={`inline-flex items-center justify-center rounded-full ${isVerified ? 'humanity-glow' : ''}`}>
-          <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? accentPink(isDark) : isDark ? 'text-white/[0.25]' : 'text-gray-300'}`} />
-        </span>
-        <span className={`text-xs font-semibold ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
-        <span className={`w-px h-3.5 ${isDark ? 'bg-white/[0.15]' : 'bg-[#E5E5E5]'}`} aria-hidden="true" />
-        {/* HUMN Points glyph — slow continuous rotation (ported DS chip--spin-icon). */}
-        <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
-        <span
-          className={`text-xs font-semibold ${navText(isDark)}`}
-          title="HUMN Points — rewards for verified humans, not bots, across human.tech. Open for details."
-        >
-          {points.toLocaleString()}
-        </span>
+        <div className="flex flex-col justify-center gap-1.5">
+          {/* Humanity row. The green pulsing glow (ported DS chip--glow) is a
+              halo around this badge — applied ONLY in the verified/green state,
+              mirroring the DS which only glows the green verified chip. The
+              wrapper is a tight rounded container so the box-shadow reads as a
+              circular halo around the bare icon. */}
+          <span className="flex items-center gap-1.5">
+            <span className={`inline-flex items-center justify-center rounded-full ${isVerified ? 'humanity-glow' : ''}`}>
+              <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? accentPink(isDark) : isDark ? 'text-white/[0.25]' : 'text-gray-300'}`} />
+            </span>
+            <span className={`text-xs font-semibold leading-none ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
+          </span>
+          {/* Points row — HUMN Points glyph with slow continuous rotation (ported DS chip--spin-icon). */}
+          <span
+            className="flex items-center gap-1.5"
+            title="HUMN Points — rewards for verified humans, not bots, across human.tech. Open for details."
+          >
+            <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
+            <span className={`text-xs font-semibold leading-none ${navText(isDark)}`}>{points.toLocaleString()}</span>
+          </span>
+        </div>
         <Icon
           icon="ph:caret-down"
           width={11}
@@ -702,7 +712,47 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
               />
             </div>
             {isPoch && (
-              <p className={`text-[11px] ${subtleText(isDark)} mt-1.5`}>Verified via Proof of Clean Hands — no numeric score needed.</p>
+              <div className="mt-2 flex items-center gap-1.5">
+                <span
+                  className="inline-flex items-center gap-1.5 cursor-help"
+                  data-tooltip-id="poch-info-tooltip"
+                  aria-label="About Proof of Clean Hands"
+                >
+                  {/* Proof of Clean Hands badge (#127/#128). The L1 humanity
+                      result only tells us POCH is satisfied (method === 'poch');
+                      it carries NO mint date or expiry — checkCleanHands (the
+                      /attestation/sbts/clean-hands endpoint) returns only
+                      { isUnique, signature?, circuitId? } and L1EligibilityResult
+                      has no temporal fields. So this shows the PoCH mark + an
+                      explanatory tooltip, not fabricated dates.
+                      TODO(poch-meta): surface actual mint/expiry by fetching the
+                      Clean-Hands SBT / attestation metadata (a new data path —
+                      not exposed by the current eligibility route). */}
+                  <Icon icon="ph:hand-soap" width={15} height={15} className={accentPink(isDark)} />
+                  <span className={`text-[11px] font-medium ${accentPink(isDark)}`}>Proof of Clean Hands</span>
+                  <Icon icon="ph:info" width={12} height={12} className={mutedIconText(isDark)} />
+                </span>
+                <ReactTooltip
+                  id="poch-info-tooltip"
+                  place="top"
+                  clickable
+                  className="z-[100] max-w-[240px]"
+                  style={{ fontSize: '11px', padding: '6px 8px' }}
+                  render={() => (
+                    <span>
+                      <strong>Proof of Clean Hands</strong> — a privacy-preserving proof you&apos;re a real, sanctions-screened human. No numeric score needed. Mint date and expiry aren&apos;t available in this view yet.{' '}
+                      <a
+                        href={POCH_MINT_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline font-medium"
+                      >
+                        Manage
+                      </a>
+                    </span>
+                  )}
+                />
+              </div>
             )}
             {!isVerified && (
               <p className={`text-[11px] ${subtleText(isDark)} mt-1.5`}>
@@ -1028,7 +1078,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     // own hover/active background is rounded to match this container's
     // corners (top row rounds top, bottom row rounds bottom) instead of a
     // square corner poking past the pill's curve (see issue #72).
-    <div className={`flex flex-col w-[124px] sm:w-[200px] flex-shrink-0 rounded-[20px] ${glassPill(isDark)}`}>
+    <div className={`flex flex-col w-[150px] sm:w-[248px] flex-shrink-0 rounded-[20px] ${glassPill(isDark)}`}>
       {isWaapConnected ? (
         <WalletDisplay
           address={waapAddress || undefined}
@@ -1056,25 +1106,16 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         />
       )}
 
-      {/* Glassy hairline seam between the two chain rows. On light, a
-          translucent white line + faint shadow reads as a crisp glass seam.
-          That same bright white line looks like a harsh bar against the
-          dark privacy-mode background, so dark mode dials it down to a
-          low-contrast white wash — still visible as a seam, never a bright
-          bar (issue: white divider bar in dark mode). */}
+      {/* Single flush divider (#108/#109). Runs edge-to-edge across the full
+          width of the outer pill — a plain full-bleed hairline, NOT the old
+          center-weighted gradient that faded out before reaching the sides
+          (which read as a floating seam rather than one clean border between
+          the pill's two stacked sections). A subtle dark hairline on the light
+          glass / a faint white hairline on the dark privacy surface, so it
+          reads as one crisp border in either theme without becoming a bright
+          bar. */}
       <div
-        className="h-px w-full flex-shrink-0"
-        style={
-          isDark
-            ? {
-                background: 'linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.16), rgba(255,255,255,0))',
-                boxShadow: '0 1px 1px rgba(0,0,0,0.4)',
-              }
-            : {
-                background: 'linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.95), rgba(255,255,255,0))',
-                boxShadow: '0 1px 1px rgba(15,15,15,0.06)',
-              }
-        }
+        className={`h-px w-full flex-shrink-0 ${isDark ? 'bg-white/[0.12]' : 'bg-black/[0.08]'}`}
         aria-hidden="true"
       />
 
@@ -1143,26 +1184,38 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
 
   return (
     <header className="w-full px-3 sm:px-4 pt-3 flex items-stretch gap-2 sm:gap-3 relative" style={{ containerType: 'inline-size' }}>
-      {/* Brand pill — Shield lockup, ported from the SiteTopBar brand-pill slot.
-          No fixed height: `items-stretch` on the header row matches it to the
-          main pill's natural (content-driven) height, whatever that is. */}
-      <Link
-        href="/"
-        onClick={(e) => {
-          // Preserve the state-loss guard: while a transfer is in progress,
-          // returning to the splash tears down the live /progress view, so
-          // confirm first and bail if the user cancels.
-          if (isTransferInProgress && !window.confirm(TRANSFER_LEAVE_CONFIRM)) {
-            e.preventDefault()
-            return
-          }
-          // Not just route home — re-show the onboarding splash (#103).
-          requestShowSplash()
-        }}
-        className={`flex-shrink-0 flex items-center justify-center min-h-12 sm:min-h-14 px-3 sm:px-5 rounded-full ${glassPill(isDark)}`}
+      {/* Brand pill — Shield lockup (ported from the SiteTopBar brand-pill slot)
+          with the version + network selector stacked directly UNDER it (#113).
+          One glass pill holds a column: the home-link logo on top, the
+          DeploymentSelector beneath. The logo image keeps its exact 100×27
+          dimensions so the brand mark's size/proportions are unchanged — the
+          pill just gains a thin second line. The selector is a bare control
+          here (no pill material of its own) so it reads as part of the brand
+          pill, not a second stacked pill. No fixed height: `items-stretch` on
+          the header row matches this column to the main pill's content-driven
+          height. */}
+      <div
+        className={`flex-shrink-0 flex flex-col items-center justify-center gap-1 min-h-12 sm:min-h-14 px-3 sm:px-5 py-2 rounded-[26px] ${glassPill(isDark)}`}
       >
-        <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={100} height={27} />
-      </Link>
+        <Link
+          href="/"
+          onClick={(e) => {
+            // Preserve the state-loss guard: while a transfer is in progress,
+            // returning to the splash tears down the live /progress view, so
+            // confirm first and bail if the user cancels.
+            if (isTransferInProgress && !window.confirm(TRANSFER_LEAVE_CONFIRM)) {
+              e.preventDefault()
+              return
+            }
+            // Not just route home — re-show the onboarding splash (#103).
+            requestShowSplash()
+          }}
+          className="flex items-center justify-center hover:opacity-80 transition-opacity duration-200"
+        >
+          <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={100} height={27} />
+        </Link>
+        <DeploymentSelector />
+      </div>
 
       {/* Main pill — secondary nav (left) + always-on cluster (right), ported
           from the SiteTopBar main-pill / bar-right structure. Height is
@@ -1177,16 +1230,13 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           {secondaryNav}
         </nav>
 
-        {/* Right cluster order: Privacy Mode (always visible) → version
-            selector → humanity/points chip (points sits nearest the wallet
-            pills) → wallet cluster. Version + the chip collapse first on
+        {/* Right cluster order: Privacy Mode (always visible) → humanity/points
+            chip → wallet cluster (chip now sits flush beside the wallet/account
+            stack, #111). The version + network selector moved out of here to
+            live under the Shield brand (#113). The chip collapses first on
             narrow widths; Privacy Mode + the wallet cluster never collapse. */}
         <div className="flex items-center gap-1.5 sm:gap-3 ml-auto min-w-0">
           {privacyToggle}
-
-          <div className="hidden sm:block flex-shrink-0">
-            <DeploymentSelector />
-          </div>
 
           <div className="hidden sm:block flex-shrink-0">
             <HumanityPointsChip
@@ -1239,8 +1289,8 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         </div>
       </div>
 
-      {/* Secondary-nav panel (credentials / How it works / Docs) — version
-          selector lives in the always-on right cluster now, not here. */}
+      {/* Secondary-nav panel (credentials / How it works / Docs) — the version
+          + network selector lives under the Shield brand pill now (#113), not here. */}
       {mobileMenuOpen && (
         <div ref={mobileMenuRef} className={`lg:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}>
           {secondaryNav}

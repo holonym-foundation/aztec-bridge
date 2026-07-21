@@ -154,9 +154,8 @@ function AlphanetBadge() {
         onFocus={() => setOpen(true)}
         onBlur={scheduleClose}
       >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-          <path d="M12 9v4M12 17h.01" />
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" />
         </svg>
         Alphanet
       </span>
@@ -818,10 +817,10 @@ export default function ShieldOnboarding() {
         .ob-mini-pin { position: absolute; top: 24px; left: 0; right: 0; height: 72px; z-index: 2;
           display: flex; align-items: center; justify-content: center; }
         .ob-visual { height: 72px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; width: 100%; }
-        .ob-alpha { position: relative; display: inline-flex; margin: 0 auto 12px; }
-        .ob-alpha-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 11px; border-radius: 999px;
-          background: rgba(195,129,29,0.12); color: #b06f16; border: 1px solid rgba(195,129,29,0.32);
-          font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: default; outline: none; }
+        .ob-alpha { position: relative; display: inline-flex; margin: 0 auto 10px; }
+        .ob-alpha-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+          background: rgba(195,129,29,0.10); color: #b0781f; border: 1px solid rgba(195,129,29,0.26);
+          font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; cursor: default; outline: none; }
         .ob-alpha-pill:focus-visible { outline: 2px solid #b06f16; outline-offset: 2px; }
         .ob-alpha-bubble { width: 250px; }
         .ob-eyebrow { font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: ${BRAND};

@@ -32,10 +32,13 @@ const SCREENS: Screen[] = [
     eyebrow: 'Opt in to privacy',
     title: 'Shield your funds',
     body: (
-      <p>
-        On Ethereum every balance and transfer is public. Bridge into Aztec to make yours private,
-        screened on the way in so the pool stays clean.
-      </p>
+      <>
+        <p>
+          On Ethereum every balance and transfer is public. Bridge into Aztec to make yours private,
+          screened on the way in so the pool stays clean.
+        </p>
+        <BridgePreview />
+      </>
     ),
     cta: 'Next',
     visual: 'shield',
@@ -72,6 +75,24 @@ const SCREENS: Screen[] = [
             </div>
           </div>
         </div>
+        <div className="ob-tier-ctas">
+          <a
+            href="https://app.passport.xyz/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ob-pill ob-pill-primary"
+          >
+            Human Passport
+          </a>
+          <a
+            href="https://id.human.tech/sandbox/clean-hands"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ob-pill ob-pill-outline"
+          >
+            Proof of Clean Hands
+          </a>
+        </div>
       </>
     ),
     cta: 'Next',
@@ -93,6 +114,7 @@ const SCREENS: Screen[] = [
           human.tech&apos;s ZK stack. It follows a strict data minimization standard. We verify
           what&apos;s needed and store nothing more.
         </p>
+        <ZkPulse />
       </>
     ),
     cta: 'Connect wallet',
@@ -376,6 +398,100 @@ function InfoTooltip({ label, children, align = 'center' }: { label: string; chi
         )}
       </AnimatePresence>
     </span>
+  )
+}
+
+/* Screen-2 bridge preview: a small mock of the bridge itself — a public balance on
+   Ethereum, a shield, and the resulting private balance on Aztec. Line art holds still at
+   rest; a soft dot travels the path on a loop to suggest funds moving through the shield. */
+function BridgePreview() {
+  const reduce = useReducedMotion() ?? false
+  return (
+    <div className="ob-bp" aria-hidden="true">
+      <div className="ob-bp-col">
+        <span className="ob-bp-chain">Ethereum</span>
+        <span className="ob-bp-amount ob-bp-amount-public">1,000 USDC</span>
+      </div>
+      <div className="ob-bp-track">
+        <span className="ob-bp-line" />
+        {!reduce && (
+          <motion.span
+            className="ob-bp-dot"
+            animate={{ left: ['4%', '96%'], opacity: [0, 1, 1, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+          />
+        )}
+        <span className="ob-bp-lock">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="5.5" y="11" width="13" height="9.5" rx="2.4" stroke={BRAND} strokeWidth="1.5" />
+            <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round" />
+            <circle cx="12" cy="15.4" r="1.3" fill={BRAND} />
+          </svg>
+          {!reduce && (
+            <motion.span
+              className="ob-bp-lock-glow"
+              animate={{ opacity: [0.15, 0.5, 0.15] }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          )}
+        </span>
+      </div>
+      <div className="ob-bp-col">
+        <span className="ob-bp-chain">Aztec · private</span>
+        <span className="ob-bp-amount ob-bp-amount-private">•••• USDC</span>
+      </div>
+    </div>
+  )
+}
+
+/* Screen-4 proof animation: three source nodes settle into a single verified check, on a
+   slow loop. Purely decorative and low-key — a quiet pulse, not a focal point. */
+const ZK_NODES: [number, number][] = [
+  [14, 26],
+  [64, 10],
+  [64, 42],
+]
+
+function ZkPulse() {
+  const reduce = useReducedMotion() ?? false
+  return (
+    <div className="ob-zk" aria-hidden="true">
+      <svg className="ob-zk-svg" viewBox="0 0 140 52" width="140" height="52">
+        <path d="M14 26L64 10M14 26L64 42M64 10L112 26M64 42L112 26" stroke={BRAND} strokeWidth="1" opacity="0.22" fill="none" />
+        {ZK_NODES.map(([cx, cy], i) =>
+          reduce ? (
+            <circle key={i} cx={cx} cy={cy} r="3.5" fill={BRAND} opacity="0.55" />
+          ) : (
+            <motion.circle
+              key={i}
+              cx={cx}
+              cy={cy}
+              r="3.5"
+              fill={BRAND}
+              animate={{ opacity: [0.3, 0.85, 0.3] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
+            />
+          )
+        )}
+        <circle cx="112" cy="26" r="6" fill="none" stroke={BRAND} strokeWidth="1.4" opacity="0.5" />
+        {reduce ? (
+          <path d="M108.5 26l2.5 2.6l5.5 -6" stroke={BRAND} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        ) : (
+          <motion.path
+            d="M108.5 26l2.5 2.6l5.5 -6"
+            stroke={BRAND}
+            strokeWidth="1.6"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: [0, 1, 1, 0], opacity: [0, 1, 1, 0] }}
+            transition={{ duration: 3.6, repeat: Infinity, times: [0, 0.4, 0.85, 1], ease: 'easeInOut' }}
+          />
+        )}
+      </svg>
+      <span className="ob-zk-caption">Proofs generate and verify locally</span>
+    </div>
   )
 }
 
@@ -693,6 +809,39 @@ export default function ShieldOnboarding() {
         .ob-tooltip-bubble-right { left: calc(100% + 12px); right: auto; bottom: auto; top: 50%; transform: translateY(-50%); }
         .ob-tooltip-bubble-right::after { top: 50%; left: -6px; right: auto; transform: translateY(-50%);
           border-width: 6px 6px 6px 0; border-color: transparent #1c1116 transparent transparent; }
+        /* tier CTAs (page 3): map straight onto the two rows above */
+        .ob-tier-ctas { display: flex; gap: 12px; width: 100%; max-width: 460px; margin: 16px auto 0; }
+        .ob-pill { flex: 1; display: flex; align-items: center; justify-content: center; height: 44px;
+          border-radius: 999px; font-size: 14px; font-weight: 610; text-decoration: none; white-space: nowrap;
+          transition: transform .15s ease, filter .15s ease, background-color .15s ease; }
+        .ob-pill-primary { background: ${BRAND}; color: #fff; }
+        .ob-pill-primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
+        .ob-pill-outline { background: transparent; border: 1px solid #eccfdc; color: ${BRAND}; }
+        .ob-pill-outline:hover { background: rgba(129,19,59,0.06); }
+        /* bridge preview card (page 2) */
+        .ob-bp { display: flex; align-items: center; width: 100%; max-width: 420px; margin: 22px auto 0;
+          padding: 16px 18px; border: 1px solid #f0d3e0; border-radius: 16px; background: rgba(255,255,255,0.55); }
+        .ob-bp-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .ob-bp-chain { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #987f8a;
+          font-weight: 620; white-space: nowrap; }
+        .ob-bp-amount { font-size: 13.5px; font-weight: 640; padding: 5px 10px; border-radius: 999px;
+          border: 1px solid #f0d3e0; background: #fff; white-space: nowrap; }
+        .ob-bp-amount-public { color: ${BRAND}; border-color: rgba(129,19,59,0.25); }
+        .ob-bp-amount-private { color: #5a4650; border-style: dashed; letter-spacing: 0.1em; }
+        .ob-bp-track { flex: none; width: 72px; height: 32px; position: relative; display: flex;
+          align-items: center; justify-content: center; }
+        .ob-bp-line { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(129,19,59,0.22); }
+        .ob-bp-dot { position: absolute; top: 50%; width: 6px; height: 6px; border-radius: 50%; background: ${BRAND};
+          transform: translate(-50%, -50%); box-shadow: 0 0 8px rgba(129,19,59,0.45); }
+        .ob-bp-lock { position: relative; z-index: 1; width: 32px; height: 32px; border-radius: 10px;
+          background: rgba(129,19,59,0.08); display: flex; align-items: center; justify-content: center; }
+        .ob-bp-lock svg { width: 18px; height: 18px; }
+        .ob-bp-lock-glow { position: absolute; inset: -6px; border-radius: 14px; z-index: -1;
+          background: radial-gradient(circle, rgba(129,19,59,0.35), transparent 70%); filter: blur(6px); }
+        /* zk proof pulse (page 4) */
+        .ob-zk { margin: 20px auto 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .ob-zk-svg { display: block; }
+        .ob-zk-caption { font-size: 12px; color: #987f8a; letter-spacing: 0.01em; }
         .ob-controls { position: relative; z-index: 3; width: 100%; display: flex; flex-direction: column;
           align-items: center; gap: 16px; }
         .ob-btns { width: 100%; max-width: 420px; display: flex; gap: 12px; }
@@ -747,6 +896,14 @@ export default function ShieldOnboarding() {
           .ob-tiers { max-width: 100%; }
           .ob-tier-row { padding: 14px 16px; gap: 12px; }
           .ob-tooltip-bubble { width: 210px; }
+          .ob-tier-ctas { max-width: 100%; margin-top: 12px; }
+          .ob-pill { height: 40px; font-size: 13px; }
+          .ob-bp { max-width: 100%; margin-top: 16px; padding: 13px 12px; }
+          .ob-bp-chain { font-size: 10px; }
+          .ob-bp-amount { font-size: 12.5px; padding: 4px 8px; }
+          .ob-bp-track { width: 52px; }
+          .ob-zk { margin-top: 14px; }
+          .ob-zk-svg { width: 120px; height: 44px; }
         }
         @media (prefers-color-scheme: dark) {
           .ob-root { background: #150a0f; color: #f6ecf1; }
@@ -766,6 +923,16 @@ export default function ShieldOnboarding() {
           .ob-tooltip-bubble a { color: ${BRAND}; }
           .ob-tooltip-bubble a:hover { color: #4d051f; }
           .ob-handoff { background: radial-gradient(#2a141f, #150a0f); }
+          .ob-pill-outline { border-color: #3a2530; color: #f2b7d3; }
+          .ob-pill-outline:hover { background: rgba(246,236,241,0.06); }
+          .ob-bp { border-color: #3a2530; background: rgba(255,255,255,0.03); }
+          .ob-bp-chain { color: #cba7b6; }
+          .ob-bp-amount { border-color: #3a2530; background: rgba(246,236,241,0.04); color: #f6ecf1; }
+          .ob-bp-amount-public { color: #f2b7d3; border-color: rgba(242,183,211,0.3); }
+          .ob-bp-amount-private { color: #cba7b6; }
+          .ob-bp-line { background: rgba(242,183,211,0.22); }
+          .ob-bp-lock { background: rgba(246,236,241,0.08); }
+          .ob-zk-caption { color: #cba7b6; }
         }
       `}</style>
     </AnimatePresence>

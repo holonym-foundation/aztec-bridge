@@ -778,7 +778,7 @@ export default function ShieldOnboarding() {
       {mode !== 'hidden' && !leaving && (
         <motion.div
           key="ob-root"
-          className="ob-root"
+          className={`ob-root${mode === 'splash' ? ' ob-splash' : ''}`}
           initial={false}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -1039,6 +1039,22 @@ export default function ShieldOnboarding() {
           .ob-bp-lock { background: rgba(246,236,241,0.08); }
           .ob-zk-caption { color: #cba7b6; }
         }
+        /* The splash is the pre-app marketing screen: it must always read as the light
+           pink branded field — same look whether Privacy Mode is default-on or off, and
+           regardless of the OS colour scheme. The privacy dark background lives at z-0,
+           far below this z-100 opaque overlay, so it can't bleed through; the darkening
+           came from the splash's OWN dark-scheme styling above. Pin every splash surface
+           to its light values (these beat the dark-scheme rules on specificity, in both
+           schemes) so the splash and its light-styled nav (#94) stay consistent and
+           readable. The first-visit flow keeps its dark-scheme support (it's fully
+           covered by this overlay, never shown against the lifted nav). */
+        .ob-root.ob-splash { background: #fff6fa; color: #1c1116; }
+        .ob-root.ob-splash .ob-veil { background: linear-gradient(180deg, rgba(255,246,250,0.38), rgba(255,246,250,0.78)); }
+        .ob-root.ob-splash .ob-grain { mix-blend-mode: multiply; opacity: 0.05; }
+        .ob-root.ob-splash .ob-body { color: #5a4650; }
+        .ob-root.ob-splash .ob-body strong { color: #1c1116; }
+        .ob-root.ob-splash .ob-secured strong { color: #5a4650; }
+        .ob-root.ob-splash .ob-dev-cta { color: ${BRAND}; }
       `}</style>
     </AnimatePresence>
   )

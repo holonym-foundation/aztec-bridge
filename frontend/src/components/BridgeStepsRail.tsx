@@ -56,8 +56,12 @@ const BridgeStepsRail: React.FC = () => {
     }
     if (index === 1) {
       if (verifying) return 'Checking your verification…'
+      // Generic guidance only — never surface the raw attestation/binding reason
+      // here (e.g. "L1 address 0x… is already bound to a different L2 address").
+      // Binding problems are communicated via the wallet-cluster notice/toast
+      // (and later a notifications tab), not the tutorial (#118/#121).
       if (attestation.data && !attestation.data.eligible) {
-        return attestation.data.reason || 'A one-time humanity check is required before your first bridge.'
+        return 'A one-time humanity check is required before your first bridge.'
       }
       return EXPLAINER_STEPS[1].body
     }

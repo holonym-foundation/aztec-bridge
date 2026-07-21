@@ -82,6 +82,17 @@ export function describeConflict(
   return { kind: 'generic', counterpart: binding.l2Address ?? binding.l1Address ?? '' }
 }
 
+/**
+ * The L2 account the SERVER says the currently-connected EVM wallet is already
+ * bound to, when the status is a conflict that discloses it (privacy-safe — the
+ * disclosed counterpart is the user's own stored pair). Returns null otherwise.
+ * This is the ONLY authoritative source of "which Aztec account is linked to
+ * this EVM wallet" — never derived from device-local storage.
+ */
+export function disclosedLinkedL2(conflict: PairingConflict | null): string | null {
+  return conflict?.kind === 'evm-linked-elsewhere' ? conflict.counterpart : null
+}
+
 /** User-facing copy for a pairing conflict, naming the stored counterpart. */
 export function conflictMessage(c: PairingConflict): string {
   const short = shortAddr(c.counterpart)

@@ -16,17 +16,15 @@ import { L1_CHAIN_ID } from '@/config'
 import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
-import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useL1Humanity } from '@/hooks/useL1Humanity'
-import { useAuthStore } from '@/stores/useAuthStore'
 import {
   useBindingStatus,
   describeConflict,
   conflictMessage,
+  disclosedLinkedL2,
   accountLabel,
   shortAddr,
 } from '@/hooks/useBindingStatus'
-import { getKnownL2ForL1, rememberBinding } from '@/utils/bindingMemory'
 
 /** Delay before auto-starting Aztec wallet discovery after WaaP connects. */
 const AZTEC_AUTO_CONNECT_DELAY_MS = 2000
@@ -144,12 +142,13 @@ function menuItemHover(isDark: boolean): string {
   return isDark ? 'hover:bg-white/[0.10]' : 'hover:bg-latest-grey-300'
 }
 
-// Humanity Score is now wired to the real proof-of-personhood result via
-// useAttestationCheck (POCH first, Passport fallback — see HumanityPointsChip
-// below). Points still has no live source in this app (no points API, hook,
-// or store exists today) — kept as a stubbed placeholder exposed as an
-// optional Header prop so a future pass can wire it without touching the nav
-// layout below.
+// Humanity Score is wired to the real L1-only proof-of-personhood result via
+// useL1Humanity (POCH first, Passport fallback — see HumanityPointsChip below).
+// TODO: Points still has NO live per-user source in this app (no points API,
+// hook, or store exists today). This stub must be replaced by a real fetch from
+// the points backend (the passport/Covenant HUMN Points service) threaded
+// through the `points` prop. Until then the chip shows this placeholder — never
+// a fabricated per-action breakdown.
 const PLACEHOLDER_POINTS = 1240
 
 // Same copy the BridgeHeader guard uses — keep them identical so the warning
@@ -202,11 +201,15 @@ type WalletDisplayProps = {
   walletType: WalletType
   loginMethod?: string | null
   /**
-   * L2 address this device remembers as the pair for the connected EVM wallet
-   * (from bindingMemory). When an account in the Switch Account list matches it,
-   * that row is marked "linked to your EVM wallet" so the user can pick it.
+   * L2 account the SERVER has disclosed as the pair for the connected EVM wallet
+   * (from the authoritative conflict/bound response — never localStorage). When
+   * an account in the Switch Account list matches it, that row is marked "Linked
+   * to your EVM wallet 0x…" so the user can pick it. Undefined when nothing is
+   * disclosed yet — the list shows no "linked" badge rather than guessing.
    */
   linkedAccountAddress?: string
+  /** Connected EVM address, used only to label the linked row ("…EVM wallet 0x…"). */
+  linkedEvmAddress?: string
   /**
    * True when this row lives inside the merged wallet-cluster pill (see
    * walletCluster in Header) — drops its own rounded/border/shadow/blur so
@@ -250,6 +253,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
   walletType,
   loginMethod,
   linkedAccountAddress,
+  linkedEvmAddress,
   flat,
   roundedEdge,
   isDark = false,
@@ -412,10 +416,15 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
                       </div>
                       {isLinked && (
                         <span
-                          className={`ml-auto flex items-center gap-1 ${accentPink(isDark)}`}
-                          title="Linked to your EVM wallet on this device"
+                          className={`ml-auto flex items-center gap-1 text-[10px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
+                          title={
+                            linkedEvmAddress
+                              ? `Linked to your EVM wallet ${shortAddr(linkedEvmAddress)}`
+                              : 'Linked to your EVM wallet'
+                          }
                         >
-                          <Icon icon="ph:link-simple" width={14} height={14} />
+                          <Icon icon="ph:link-simple" width={14} height={14} className="flex-shrink-0" />
+                          {linkedEvmAddress ? `Linked ${shortAddr(linkedEvmAddress)}` : 'Linked'}
                         </span>
                       )}
                     </div>
@@ -534,7 +543,7 @@ const ConnectWalletPill: React.FC<{ onClick: () => void; connecting?: boolean; i
 )
 
 interface HumanityPointsChipProps {
-  /** Real proof-of-personhood result from useAttestationCheck — 'poch' | 'passport' | null. */
+  /** L1-only proof-of-personhood result from useL1Humanity — 'poch' | 'passport' | null. */
   method: 'poch' | 'passport' | null
   passportScore?: number
   passportThreshold?: number
@@ -556,10 +565,11 @@ interface HumanityPointsChipProps {
  * (score · points); click/tap expands a small panel with the score bar and
  * points detail. Closes on click-outside or Escape.
  *
- * Humanity side reflects the real proof-of-personhood result from
- * useAttestationCheck (see Header below):
- *  - method === 'passport' → real numeric passportScore (with the
- *    passportScore/passportThreshold ratio detailed in the panel).
+ * Humanity side reflects the L1-only proof-of-personhood result from
+ * useL1Humanity (see Header below) — it is independent of the L1↔L2 binding and
+ * never shows a binding-conflict message:
+ *  - method === 'passport' → the real cumulative numeric passportScore (shown as
+ *    a bare number, not a fraction).
  *  - method === 'poch' → Proof of Clean Hands has no numeric score, so this
  *    shows a "Verified" state instead of a fabricated number.
  *  - no data yet / still loading / method === null / wallets not connected →
@@ -641,10 +651,21 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
         <div className={`absolute right-0 mt-2 z-50 w-[248px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-4 flex flex-col gap-3`}>
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <span className={`text-xs font-medium ${subtleText(isDark)}`}>Humanity</span>
+              <span className={`flex items-center gap-1 text-xs font-medium ${subtleText(isDark)}`}>
+                Humanity
+                <span
+                  className="inline-flex cursor-help"
+                  data-tooltip-id="humanity-info-tooltip"
+                  data-tooltip-content="Your humanity score is a cumulative proof-of-personhood score — higher means stronger proof you're a real, unique human. It comes from Proof of Clean Hands and Human Passport."
+                  aria-label="What is the humanity score?"
+                >
+                  <Icon icon="ph:info" width={13} height={13} className={mutedIconText(isDark)} />
+                </span>
+              </span>
+              {/* Cumulative score — NOT a fraction, so no "/threshold" denominator (#112/#113). */}
               <span className={`text-sm font-semibold ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>
                 {isPassport
-                  ? `${passportScore}${passportThreshold ? `/${passportThreshold}` : ''}`
+                  ? String(passportScore)
                   : isPoch
                     ? 'Verified'
                     : isFetching
@@ -652,6 +673,7 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
                       : 'Not verified'}
               </span>
             </div>
+            <ReactTooltip id="humanity-info-tooltip" place="top" className="z-[100] max-w-[220px]" style={{ fontSize: '11px', padding: '6px 8px' }} />
             <div className={`w-full h-1.5 rounded-full ${isDark ? 'bg-white/[0.10]' : 'bg-[#F5E1EA]'} overflow-hidden`}>
               <div
                 className={`h-full rounded-full transition-[width] duration-300 ${
@@ -677,30 +699,14 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
               </span>
               <span className={`text-sm font-semibold ${navText(isDark)}`}>{points.toLocaleString()}</span>
             </div>
-            {/* The value is still a stub (see PLACEHOLDER_POINTS) — no live
-                points source is wired in Shield yet. Copy + branding mirror the
-                Covenant app's HUMN Points UI: the "verified humans, not bots,
-                across human.tech" framing and the two cross-product earning
-                actions Covenant assigns concrete values to that also apply to
-                Shield — verifying personhood (HUMANITY_VERIFIED = 1,000) and
-                creating a Human Wallet (WALLET_CONNECTION_BONUS = 3,750). No
-                Shield-specific mechanic or point value is invented here;
-                Covenant's artifact/hold/swap-volume tiers are product-specific
-                and don't apply, so they're left out of this nav panel. */}
+            {/* TODO: `points` is still the PLACEHOLDER_POINTS stub — Shield has no
+                per-user points source yet. The real value must be fetched from the
+                points backend (the passport/Covenant HUMN Points service) and
+                threaded through the `points` prop. Do NOT fabricate a per-action
+                breakdown here — show only the real single balance once it's wired. */}
             <p className={`text-[11px] leading-snug ${subtleText(isDark)}`}>
               HUMN Points reward real, verified humans — not bots — across human.tech.
             </p>
-            <div className="flex flex-col gap-1.5">
-              <span className={`text-[10px] font-medium uppercase tracking-wide ${mutedIconText(isDark)}`}>Ways to earn</span>
-              <div className="flex items-center justify-between gap-2">
-                <span className={`text-[11px] ${subtleText(isDark)}`}>Verify your humanity</span>
-                <span className={`text-[11px] font-semibold ${navText(isDark)}`}>+1,000</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className={`text-[11px] ${subtleText(isDark)}`}>Create your Human Wallet</span>
-                <span className={`text-[11px] font-semibold ${navText(isDark)}`}>+3,750</span>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -715,13 +721,6 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINTS }) => {
-  // Real proof-of-personhood result (POCH first, Passport fallback). Called
-  // unconditionally per Rules of Hooks — the hook self-gates via its own
-  // `enabled` (both wallets connected + address + auth token present), so
-  // before that it just sits at isFetching/no-data and the chip renders its
-  // neutral state.
-  const { data: attestation, isFetching: isAttestationFetching } = useAttestationCheck()
-
   const {
     waapAddress,
     isWaapConnected,
@@ -739,66 +738,53 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     switchAztecAccount,
   } = useWalletStore()
 
-  const token = useAuthStore((s) => s.token)
-
-  // L1-only humanity — resolves the moment the EVM/waap wallet connects, before
-  // the Aztec wallet is linked and before any JWT exists (see useL1Humanity).
-  // Self-gates on `waapAddress`, so it's a no-op until the EVM wallet connects.
+  // Humanity is an L1-ONLY property of the EVM wallet (issue #122) — it has
+  // NOTHING to do with the L1↔L2 binding. Sourced purely from useL1Humanity so
+  // the Humanity chip can never surface a binding-conflict message; binding
+  // problems live only in the wallet-cluster notice/toast below. Self-gates on
+  // `waapAddress`, so it's a no-op until the EVM wallet connects.
   const { data: l1Humanity, isFetching: isL1HumanityFetching } = useL1Humanity(waapAddress || undefined)
 
   // Authoritative binding for the connected pair (needs both wallets + JWT).
   const { data: bindingStatus } = useBindingStatus()
 
-  // ─── Humanity source precedence (issue #105) ─────────────────────────
-  // Both wallets connected + JWT → the authoritative attestation (includes the
-  // binding). Only the EVM connected → L1-only humanity. Neither → prompt to
-  // connect the EVM wallet.
-  const bothWalletsAuthed = isWaapConnected && isAztecConnected && !!token
-  const humanitySource = bothWalletsAuthed
-    ? {
-        method: attestation?.method ?? null,
-        passportScore: attestation?.passportScore,
-        passportThreshold: attestation?.passportThreshold,
-        isFetching: isAttestationFetching,
-        reason: attestation?.reason,
-      }
-    : isWaapConnected
-      ? {
-          method: l1Humanity?.method ?? null,
-          passportScore: l1Humanity?.passportScore,
-          passportThreshold: l1Humanity?.passportThreshold,
-          isFetching: isL1HumanityFetching,
-          reason: l1Humanity?.reason,
-        }
-      : { method: null, passportScore: undefined, passportThreshold: undefined, isFetching: false, reason: undefined }
+  const humanitySource = {
+    method: l1Humanity?.method ?? null,
+    passportScore: l1Humanity?.passportScore,
+    passportThreshold: l1Humanity?.passportThreshold,
+    isFetching: isL1HumanityFetching,
+    reason: l1Humanity?.reason,
+  }
 
   const unverifiedHint = !isWaapConnected
     ? 'Connect your Ethereum wallet to verify personhood.'
     : humanitySource.reason
       ? humanitySource.reason
-      : bothWalletsAuthed
-        ? 'Complete verification to prove your personhood.'
-        : 'This wallet has not verified its humanity yet.'
+      : 'This wallet has not verified its humanity yet.'
 
-  // ─── Pairing / binding conflict (issues #98, #97, #100) ──────────────
-  // On a server-side conflict, describeConflict names the exact stored
-  // counterpart from the CURRENT pair's response (privacy-safe).
+  // ─── Pairing / binding conflict (issues #98, #97, #100, #120, #124) ──
+  // SERVER TRUTH ONLY. On a server-side conflict, describeConflict names the
+  // exact stored counterpart from the CURRENT pair's response (privacy-safe).
+  // When the connected pair matches the stored binding the status is 'bound',
+  // describeConflict returns null, and every notice/toast below clears — the
+  // conflict UI is derived entirely from this live status, so it can't go stale.
   const conflict = describeConflict(bindingStatus?.binding, waapAddress, aztecAddress)
 
-  // Device-local pre-warn: this EVM has a known L2 pair on this device that
-  // differs from the currently-selected Aztec account — surface it BEFORE the
-  // server round-trip returns a conflict.
-  const knownL2ForEvm = isWaapConnected && waapAddress ? getKnownL2ForL1(waapAddress) : null
-  const preWarnMismatch =
-    !conflict && knownL2ForEvm && isAztecConnected && aztecAddress && knownL2ForEvm.toLowerCase() !== aztecAddress.toLowerCase()
-      ? knownL2ForEvm
-      : null
+  // The Aztec account the SERVER says this EVM wallet is bound to (disclosed on
+  // an evm-linked-elsewhere conflict). This is the ONLY source of "linked" — no
+  // device-local memory. null unless the server has actually disclosed it.
+  const serverLinkedL2 = disclosedLinkedL2(conflict)
 
-  const walletNotice = conflict
-    ? conflictMessage(conflict)
-    : preWarnMismatch
-      ? `Heads up — on this device this EVM wallet is linked to Aztec account ${shortAddr(preWarnMismatch)}. Switch to it to keep the same identity.`
-      : null
+  // Is that server-disclosed linked account one of the Azguard accounts the user
+  // already has connected? If so we can auto-switch to it (see effect below).
+  const linkedAccountConnected =
+    !!serverLinkedL2 && availableAccounts.some((a) => a.address.toLowerCase() === serverLinkedL2.toLowerCase())
+
+  const walletNotice = !conflict
+    ? null
+    : serverLinkedL2 && !linkedAccountConnected
+      ? `Your EVM wallet is linked to Aztec account ${shortAddr(serverLinkedL2)} — select/connect that account to continue.`
+      : conflictMessage(conflict)
 
   const { isPrivacyModeEnabled, setPrivacyModeEnabled, getProgressSteps } = useBridgeStore()
 
@@ -854,25 +840,31 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     setMounted(true)
   }, [])
 
-  // Surface a binding CONFLICT as an actionable toast (in addition to the
-  // inline wallet-cluster alert). Stable toastId so re-renders refresh it in
-  // place instead of stacking; dismissed once the conflict clears.
+  // Auto-select the linked Aztec account (issue #120). When the server discloses
+  // that the connected EVM wallet is already bound to a specific L2 account AND
+  // that account is among the user's connected Azguard accounts, switch to it
+  // once so the pair matches and the flow can proceed — instead of leaving the
+  // user stuck on the "wrong" account. Guarded against loops: we auto-switch a
+  // given target only once (tracked in the ref) and never while already on it.
+  // The binding-conflict message is surfaced ONLY inline under the wallet
+  // cluster (see walletNotice) — no duplicate toast (#116/#115).
+  const lastAutoSwitchTarget = useRef<string | null>(null)
   useEffect(() => {
-    if (conflict) {
-      notify('error', conflictMessage(conflict), { toastId: 'binding-conflict' })
-    } else {
-      notify.dismiss('binding-conflict')
+    if (!serverLinkedL2) {
+      lastAutoSwitchTarget.current = null
+      return
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conflict?.kind, conflict?.counterpart])
-
-  // Once the server confirms the connected pair is BOUND, remember it on this
-  // device so we can pre-warn about mismatches on future connects.
-  useEffect(() => {
-    if (bindingStatus?.binding.status === 'bound' && waapAddress && aztecAddress) {
-      rememberBinding(waapAddress, aztecAddress)
-    }
-  }, [bindingStatus?.binding.status, waapAddress, aztecAddress])
+    const key = serverLinkedL2.toLowerCase()
+    if (aztecAddress && aztecAddress.toLowerCase() === key) return
+    if (lastAutoSwitchTarget.current === key) return
+    const target = availableAccounts.find((a) => a.address.toLowerCase() === key)
+    if (!target) return
+    lastAutoSwitchTarget.current = key
+    switchAztecAccount(target)
+    notify('success', `Switched to your linked Aztec account ${shortAddr(target.address)}`, {
+      toastId: 'auto-switch-linked',
+    })
+  }, [serverLinkedL2, aztecAddress, availableAccounts, switchAztecAccount, notify])
 
   // Auto-connect to Aztec when WaaP wallet is connected
   useEffect(() => {
@@ -1076,7 +1068,8 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           onDisconnect={guardTransfer(disconnectAztecWallet)}
           availableAccounts={availableAccounts}
           onSelectAccount={switchAztecAccount}
-          linkedAccountAddress={knownL2ForEvm || undefined}
+          linkedAccountAddress={serverLinkedL2 || undefined}
+          linkedEvmAddress={waapAddress || undefined}
           walletType={WalletType.AZTEC}
           flat
           roundedEdge="bottom"
@@ -1085,7 +1078,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       ) : (
         <WalletConnectPill
           icon="/assets/svg/aztec-wallet-logo.svg"
-          label={isL2Connecting ? '…' : 'Connect'}
+          label={isL2Connecting ? '…' : 'Connect Aztec Wallet'}
           onClick={isWaapConnected ? handleConnectAztecOnly : handleConnectWallet}
           disabled={isL2Connecting}
           title="Connect Aztec (L2) wallet"

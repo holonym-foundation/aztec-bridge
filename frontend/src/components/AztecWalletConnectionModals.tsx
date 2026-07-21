@@ -8,8 +8,13 @@ import StyledImage from '@/components/StyledImage'
 import EmojiVerificationModal from '@/components/model/EmojiVerificationModal'
 import WalletDiscoveryModal from '@/components/model/WalletDiscoveryModal'
 import { useWalletStore } from '@/stores/walletStore'
-import { accountLabel } from '@/hooks/useBindingStatus'
-import { getKnownL2ForL1 } from '@/utils/bindingMemory'
+import {
+  accountLabel,
+  useBindingStatus,
+  describeConflict,
+  disclosedLinkedL2,
+  shortAddr,
+} from '@/hooks/useBindingStatus'
 
 /** Accounts per page in the selector before pagination kicks in. */
 const ACCOUNTS_PER_PAGE = 4
@@ -30,8 +35,14 @@ interface PaginatedAccountModalProps {
   accounts: Account[]
   onSelect: (account: Account) => void
   onCancel: () => void
-  /** L2 address this device remembers as the connected EVM wallet's pair. */
+  /**
+   * L2 account the SERVER has disclosed as the connected EVM wallet's pair
+   * (authoritative — never localStorage). null/undefined when nothing has been
+   * disclosed yet, in which case no "linked" badge is shown (no guessing).
+   */
   linkedAddress?: string | null
+  /** Connected EVM address, used only to label the linked row. */
+  linkedEvmAddress?: string | null
   title?: string
 }
 
@@ -49,6 +60,7 @@ function PaginatedAccountModal({
   onSelect,
   onCancel,
   linkedAddress,
+  linkedEvmAddress,
   title = 'Select Account',
 }: PaginatedAccountModalProps) {
   const [page, setPage] = useState(0)
@@ -111,9 +123,13 @@ function PaginatedAccountModal({
                         {isLinked && (
                           <span
                             className='flex items-center gap-1 text-pink-90 text-[11px] font-medium flex-shrink-0'
-                            title='Linked to your EVM wallet on this device'>
+                            title={
+                              linkedEvmAddress
+                                ? `Linked to your EVM wallet ${shortAddr(linkedEvmAddress)}`
+                                : 'Linked to your EVM wallet'
+                            }>
                             <Icon icon='ph:link-simple' width={14} height={14} />
-                            Linked
+                            {linkedEvmAddress ? `Linked to EVM ${shortAddr(linkedEvmAddress)}` : 'Linked'}
                           </span>
                         )}
                       </motion.button>
@@ -198,10 +214,17 @@ export function AztecWalletConnectionModals() {
     webWalletUrl,
     setWebWalletUrl,
     waapAddress,
+    aztecAddress,
   } = useWalletStore()
 
-  // The EVM wallet's known L2 pair on this device, so the picker can mark it.
-  const linkedAddress = waapAddress ? getKnownL2ForL1(waapAddress) : null
+  // SERVER TRUTH ONLY (issue #124): the picker marks an account as "linked" only
+  // when the server has actually disclosed the connected EVM wallet's bound L2
+  // counterpart — never from device-local storage. During the initial connect
+  // flow the Aztec wallet isn't connected yet, so this query is gated off and
+  // resolves to null, meaning no "linked" badge is shown (no guessing).
+  const { data: bindingStatus } = useBindingStatus()
+  const conflict = describeConflict(bindingStatus?.binding, waapAddress, aztecAddress)
+  const linkedAddress = disclosedLinkedL2(conflict)
 
   return (
     <>
@@ -249,6 +272,7 @@ export function AztecWalletConnectionModals() {
           onSelect={selectAccount}
           onCancel={cancelWalletConnection}
           linkedAddress={linkedAddress}
+          linkedEvmAddress={waapAddress}
           title='Select Account'
         />
       )}

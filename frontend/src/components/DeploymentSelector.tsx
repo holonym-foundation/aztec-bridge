@@ -4,6 +4,24 @@ import React, { useEffect, useRef, useState } from 'react'
 import { ALL_DEPLOYMENTS, ACTIVE_DEPLOYMENT_ID, DEPLOYMENT_ID } from '@/config'
 import { useBridgeStore } from '@/stores/bridgeStore'
 
+// Mirrors the "glass pill" material the sibling nav pills use in Header.tsx
+// (the attestation/points chip, Privacy Mode, wallet cluster) so the version
+// pill reads as the same nav component instead of a stray bordered box. Header
+// ports the design-system SiteTopBar pill to Tailwind inline rather than
+// exporting it (the source ships CSS modules); these values are kept in sync
+// with Header's GLASS_PILL_* constants by hand. Off-scale alphas use the
+// bracket form — see Header.tsx for why `white/[0.85]` not `white/85`.
+const GLASS_PILL_LIGHT =
+  'backdrop-blur-md bg-white/[0.85] border border-[#E5E5E5]/80 shadow-[0_6px_18px_-6px_rgba(15,15,15,0.18),0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200'
+const GLASS_PILL_LIGHT_HOVER =
+  'hover:bg-white hover:shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
+const GLASS_PILL_LIGHT_ACTIVE = 'bg-white shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
+const GLASS_PILL_DARK =
+  'backdrop-blur-md bg-white/[0.07] border border-white/[0.14] shadow-[0_6px_18px_-6px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.35)] transition-all duration-200'
+const GLASS_PILL_DARK_HOVER =
+  'hover:bg-white/[0.12] hover:border-white/[0.22] hover:shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.35)]'
+const GLASS_PILL_DARK_ACTIVE = 'bg-white/[0.14] border-white/[0.22] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.35)]'
+
 const DeploymentSelector: React.FC = () => {
   // Privacy Mode drops the nav onto the deep-maroon background; match the rest
   // of the nav (see Header.tsx) by switching this pill to the glassy-dark
@@ -56,15 +74,11 @@ const DeploymentSelector: React.FC = () => {
     <div className='relative' ref={dropdownRef}>
       <button
         onClick={() => hasMultiple && setOpen(!open)}
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border ${
+        className={`flex items-center gap-1.5 h-9 px-3 text-xs font-medium rounded-full ${
           isDark
-            ? 'border-white/[0.14] bg-white/[0.07] backdrop-blur-md transition-all'
-            : 'border-[#D4D4D4] bg-white transition-shadow'
-        } duration-200 ${
-          hasMultiple
-            ? `cursor-pointer ${isDark ? 'hover:bg-white/[0.12] hover:border-white/[0.22]' : 'hover:shadow-sm'}`
-            : 'cursor-default'
-        }`}
+            ? `${GLASS_PILL_DARK}${hasMultiple ? ` ${GLASS_PILL_DARK_HOVER}` : ''}${open ? ` ${GLASS_PILL_DARK_ACTIVE}` : ''}`
+            : `${GLASS_PILL_LIGHT}${hasMultiple ? ` ${GLASS_PILL_LIGHT_HOVER}` : ''}${open ? ` ${GLASS_PILL_LIGHT_ACTIVE}` : ''}`
+        } ${hasMultiple ? 'cursor-pointer' : 'cursor-default'}`}
         title={hasMultiple ? 'Switch deployment version' : `Deployment: ${versionLabel}`}>
         <span className={isDark ? 'text-white/[0.65]' : 'text-gray-500'}>v</span>
         <span className={`max-w-[140px] truncate ${isDark ? 'text-white/[0.90]' : 'text-[#0A0A0A]'}`}>

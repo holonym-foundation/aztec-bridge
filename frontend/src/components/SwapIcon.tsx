@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
 interface SwapIconProps {
   onClick: () => void;
@@ -7,6 +7,9 @@ interface SwapIconProps {
 
 const SwapIcon: React.FC<SwapIconProps> = ({ onClick }) => {
   const [swapRotation, setSwapRotation] = useState(0);
+  // Match the app-wide motion convention (accordions, steps rail): honor the
+  // user's reduced-motion preference and use the same easeInOut curve.
+  const shouldReduceMotion = useReducedMotion();
 
   const handleClick = () => {
     setSwapRotation(prev => prev + 180);
@@ -14,26 +17,26 @@ const SwapIcon: React.FC<SwapIconProps> = ({ onClick }) => {
   };
 
   return (
-    <motion.div 
+    <motion.div
       className='absolute mb-0 bottom-[-30px] left-0 right-0 text-center'
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.3, ease: 'easeInOut' }}
     >
-      <motion.button 
+      <motion.button
         className='mx-auto w-11 h-11 flex items-center justify-center'
         onClick={handleClick}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+        whileHover={shouldReduceMotion ? undefined : { scale: 1.05 }}
+        whileTap={shouldReduceMotion ? undefined : { scale: 0.95 }}
       >
-        <motion.svg 
-          width="44" 
-          height="44" 
-          viewBox="0 0 44 44" 
-          fill="none" 
+        <motion.svg
+          width="44"
+          height="44"
+          viewBox="0 0 44 44"
+          fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          animate={{ rotate: swapRotation }}
-          transition={{ duration: 0.5, ease: "easeInOut" }}
+          animate={{ rotate: shouldReduceMotion ? 0 : swapRotation }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.5, ease: "easeInOut" }}
         >
           <motion.rect 
             x="1" 

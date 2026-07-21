@@ -725,6 +725,13 @@ export default function ShieldOnboarding() {
             <div className="ob-btns">
               <button className="ob-next" onClick={connectFromSplash}>{isWaapConnected ? 'Enter app' : 'Connect wallet'}</button>
             </div>
+            <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-dev-cta">
+              Build your own App with Programmable Privacy
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="m13 6 6 6-6 6" />
+              </svg>
+            </a>
             <p className="ob-secured">
               Secured by <strong>human.tech</strong>
               <span className="ob-dot">·</span>
@@ -789,6 +796,14 @@ export default function ShieldOnboarding() {
         /* Connected user on the splash: lift the real app nav bar above this overlay so
            it stays usable. Toggled by data-ob-splash="connected" on <html>. */
         html[data-ob-splash="connected"] .ob-header-elevate { z-index: 130 !important; }
+        /* The top-nav wallet "Connect" pill(s) live in the Header, not this component, and
+           carry no meaning while the splash gate is up — the splash's own CTA is the way in.
+           Rather than leave a dead button, neutralize them through the same data-ob-splash
+           hook: non-interactive, no hover affordance, visibly dimmed. Cleared the instant the
+           splash dismisses (attribute removed), so the real nav is fully live in-app. */
+        html[data-ob-splash] .ob-header-elevate button[title*="Connect" i] {
+          pointer-events: none; cursor: default; opacity: 0.5;
+        }
         /* Inner content overlay: fades in over the persistent shader shell. */
         .ob-inner { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; }
         .ob-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
@@ -909,6 +924,13 @@ export default function ShieldOnboarding() {
         .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
         .ob-secured strong { color: #5a4650; font-weight: 620; }
         .ob-dot { opacity: 0.5; }
+        /* Secondary, subordinate developer CTA on the splash — a quiet text link beneath the
+           primary "Enter app" button, deliberately far lighter than the solid maroon CTA. */
+        .ob-dev-cta { display: inline-flex; align-items: center; gap: 6px; margin: -2px auto 0; color: ${BRAND};
+          font-size: 13.5px; font-weight: 550; text-decoration: none; opacity: 0.85;
+          transition: opacity .15s ease, gap .15s ease; }
+        .ob-dev-cta:hover { opacity: 1; gap: 8px; text-decoration: underline; text-underline-offset: 3px; }
+        .ob-dev-cta svg { flex: none; }
         /* cryptex hero — concentric dial rings framing the headline. max-height keeps the
            full-size mark from overflowing the fixed region on short viewports (it scales
            down with the region rather than being clipped or shrunk at its base size). */
@@ -967,6 +989,8 @@ export default function ShieldOnboarding() {
           .ob-body { color: #cba7b6; } .ob-body strong { color: #f6ecf1; }
           .ob-back { color: #cba7b6; border-color: #3a2530; }
           .ob-secured strong { color: #cba7b6; }
+          /* #81133B is too close to the dark maroon field to read; use the palette's pink accent. */
+          .ob-dev-cta { color: #f2b7d3; }
           .ob-tiers { border-color: #3a2530; background: rgba(255,255,255,0.03); }
           .ob-tier-row + .ob-tier-row { border-top-color: #3a2530; }
           .ob-tier-icon { background: rgba(246,236,241,0.08); }

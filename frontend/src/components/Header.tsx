@@ -554,7 +554,12 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
         <span className={`text-xs font-semibold ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
         <span className={`w-px h-3.5 ${isDark ? 'bg-white/[0.15]' : 'bg-[#E5E5E5]'}`} aria-hidden="true" />
         <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)}`} />
-        <span className={`text-xs font-semibold ${navText(isDark)}`}>{points.toLocaleString()}</span>
+        <span
+          className={`text-xs font-semibold ${navText(isDark)}`}
+          title="Human Points — earned by verified humans using Shield. Open for details."
+        >
+          {points.toLocaleString()}
+        </span>
         <Icon
           icon="ph:caret-down"
           width={11}
@@ -595,9 +600,18 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
               </p>
             )}
           </div>
-          <div className={`flex items-center justify-between pt-1 border-t ${panelDivider(isDark)}`}>
-            <span className={`text-xs font-medium ${subtleText(isDark)} pt-1`}>Points</span>
-            <span className={`text-sm font-semibold ${navText(isDark)} pt-1`}>{points.toLocaleString()}</span>
+          <div className={`flex flex-col gap-1.5 pt-2 border-t ${panelDivider(isDark)}`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-medium ${subtleText(isDark)}`}>Points</span>
+              <span className={`text-sm font-semibold ${navText(isDark)}`}>{points.toLocaleString()}</span>
+            </div>
+            {/* PLACEHOLDER copy — reconcile against covenant/passport's real
+                Human Points wording before launch. Kept general on purpose:
+                no specific per-action point values or reward mechanics are
+                claimed, since none are wired in this app yet. */}
+            <p className={`text-[11px] leading-snug ${subtleText(isDark)}`}>
+              Human Points reward verified humans for using Shield. Prove your personhood and bridge privately to earn them.
+            </p>
           </div>
         </div>
       )}

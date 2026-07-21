@@ -26,6 +26,12 @@ const BridgeStepsRail: React.FC = () => {
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
 
+  const closeDesktop = () => {
+    setPinned(false)
+    setHovered(false)
+    handleRef.current?.focus()
+  }
+
   const bothConnected = isWaapConnected && isAztecConnected
   const eligible = !!attestation.data?.eligible
   const verifying = bothConnected && attestation.isFetching && !attestation.data
@@ -137,9 +143,21 @@ const BridgeStepsRail: React.FC = () => {
     </ol>
   )
 
-  const panelBody = (
+  const panelBody = (onClose?: () => void) => (
     <>
-      <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge in 4 steps</p>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge in 4 steps</p>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="-mr-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[#989898] transition-colors hover:bg-[#F0F0F0] hover:text-[#0A0A0A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#81133B]/40"
+          >
+            <Icon icon="ph:x-bold" width={13} height={13} />
+          </button>
+        )}
+      </div>
       {stepsList}
       <div className="mt-1 border-t border-[#F0F0F0] pt-3">
         <button
@@ -186,7 +204,9 @@ const BridgeStepsRail: React.FC = () => {
               transition={{ duration: prefersReducedMotion ? 0 : 0.22, ease: 'easeInOut' }}
               className="overflow-hidden"
             >
-              <div className="mt-2 rounded-[16px] border border-[#D4D4D4] bg-white p-4">{panelBody}</div>
+              <div className="mt-2 rounded-[16px] border border-[#D4D4D4] bg-white p-4">
+                {panelBody(() => setMobileOpen(false))}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -216,7 +236,7 @@ const BridgeStepsRail: React.FC = () => {
             id={panelId}
             className="w-[260px] rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
           >
-            {panelBody}
+            {panelBody(closeDesktop)}
           </div>
         </motion.div>
 

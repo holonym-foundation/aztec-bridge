@@ -539,12 +539,20 @@ export default function Home() {
 
         {showVerification && <VerificationStep onClose={() => setShowVerification(false)} />}
 
+        {/* No-scroll budget: a flex column capped at the same 90vh-5rem viewport
+            floor as the card. Header + footer are shrink-0; only the middle region
+            flexes and scrolls. Flex (not grid `1fr`) is used deliberately: a grid
+            `1fr` track under an indefinite (max-height-only) container resolves to
+            its content height, so `overflow-y-auto` inside it never engages and the
+            taller withdraw content spills/clips instead of scrolling. Flex-shrink on
+            a `flex-1 min-h-0` child bounds it correctly, so withdraw scrolls INSIDE
+            the card and the page never grows. */}
         <div
-          className={`grid grid-rows-[max-content_1fr_max-content] grid-cols-[minmax(0,1fr)] w-full h-full max-h-[calc(90vh-5rem)] overflow-hidden ${
+          className={`flex flex-col w-full max-h-[calc(90vh-5rem)] overflow-hidden ${
             MAINTENANCE_MODE ? 'pointer-events-none' : ''
           }`}
         >
-          <div className="px-5 pt-4 pb-2">
+          <div className="shrink-0 px-5 pt-4 pb-2">
             <BridgeHeader
               onClick={async () => {
                 // Explicit reset only. Never blanket-clear localStorage — encrypted
@@ -558,7 +566,7 @@ export default function Home() {
           </div>
 
           {/* Scrolls internally (never the page) if an expanded accordion can't fit. */}
-          <div className="px-5 min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto px-5">
             <BridgeSection
               bridgeConfig={bridgeConfig}
               setIsFromSection={setIsFromSection}
@@ -627,13 +635,21 @@ export default function Home() {
             />
           </div>
 
-          <div className="self-end">
+          <div className="shrink-0">
             <div className="sticky bottom-0 rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[12px] pt-[12px] pr-[10px] pb-0 pl-[10px] w-full">
               <BridgeActionButton
-                // Fuel gating only applies once both wallets are connected — otherwise it
-                // disables the Connect CTAs the button itself drives.
+                // Fuel gating is a DEPOSIT-only concern (fuel is carved out of the L1→L2
+                // bridge amount; withdrawals have no fuel carve). The FuelToggle that
+                // computes these flags only mounts in the L1_TO_L2 direction, so applying
+                // them to a withdrawal would gate it on a stale deposit-side value — the
+                // flags stay at whatever FuelToggle last reported and are never refreshed
+                // for L2_TO_L1. Scope the term to L1_TO_L2 so withdraw is symmetric and
+                // enables on first valid load without needing a deposit-direction round-trip.
+                // Also only gate once both wallets are connected — otherwise it would
+                // disable the Connect CTAs the button itself drives.
                 isDisabled={
-                  (isWaapConnected && isAztecConnected &&
+                  (bridgeConfig.direction === BridgeDirection.L1_TO_L2 &&
+                    isWaapConnected && isAztecConnected &&
                     (!fuelSufficient || !fuelRecipientValid || !fuelAmountValid)) ||
                   authFailed
                 }

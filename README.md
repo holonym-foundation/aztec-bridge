@@ -34,7 +34,7 @@ Shield enables users to:
 - Manage multiple token types (ERC20, NFTs)
 - Interact with Aztec's privacy-preserving Layer 2 network
 - Use sponsored transactions for improved UX
-- Connect multiple wallet types including MetaMask and Silk Wallet
+- Connect multiple wallet types including MetaMask and WaaP
 
 ## 📦 Clean SDK
 
@@ -170,7 +170,7 @@ forge deploy       # Deploy contracts
 - **Toast Notifications**: Real-time user feedback
 
 ### Web3 Integration
-- **Multi-Wallet Support**: MetaMask, Silk Wallet, WalletConnect
+- **Multi-Wallet Support**: MetaMask, WaaP, WalletConnect
 - **Token Management**: ERC20 and NFT support
 - **Transaction Tracking**: Real-time transaction status
 - **Gas Optimization**: Sponsored transactions support

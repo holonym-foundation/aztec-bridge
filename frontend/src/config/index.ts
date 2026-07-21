@@ -121,6 +121,16 @@ export const L1_CONTRACT_ADDRESSES = activeDeployment.l1ContractAddresses
 export const AZTECSCAN_URL = activeEnvConfig.aztecscanUrl
 export const AZTEC_EXPLORER_URL = activeEnvConfig.aztecExplorerUrl
 
+// ─── Holonym Proof-of-Clean-Hands endpoints ─────────────────────────
+// The `/sandbox` segment targets Holonym's test environment. Only mainnet
+// hits the live production path; testnet/devnet stay on sandbox.
+export const HOLONYM_POCH_PATH = IS_MAINNET
+  ? '/attestation/sbts/clean-hands'
+  : '/sandbox/attestation/sbts/clean-hands'
+export const POCH_MINT_URL = IS_MAINNET
+  ? 'https://id.human.tech/clean-hands'
+  : 'https://id.human.tech/sandbox/clean-hands'
+
 export const AZTECSCAN_URLS: Record<number, string> = {
   [L2_CHAIN_ID]: activeEnvConfig.aztecscanUrl,
 }

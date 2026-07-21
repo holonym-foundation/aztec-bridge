@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Icon } from '@iconify/react'
 import TextButton from './TextButton'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
+import { POCH_MINT_URL } from '@/config'
 
-const POCH_MINT_URL = 'https://id.human.tech/clean-hands'
 const PASSPORT_BUILD_URL = 'https://app.passport.xyz/'
 
 interface VerificationStepProps {

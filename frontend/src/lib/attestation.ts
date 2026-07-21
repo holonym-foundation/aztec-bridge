@@ -23,6 +23,7 @@ import {
   PASSPORT_API_KEY,
   PASSPORT_SCORER_ID,
 } from '@/config/env.config'
+import { HOLONYM_POCH_PATH } from '@/config'
 // 5.0.0 dropped the deriveSigningKey export; it was an alias for the IVSK_M derivation,
 // so keep using that exact function to preserve previously-derived L2 account addresses.
 import { deriveMasterIncomingViewingSecretKey as deriveSigningKey } from '@aztec/stdlib/keys'
@@ -254,7 +255,7 @@ export async function checkCleanHands(
   circuitId?: string
 }> {
   const aid = actionId ?? getDefaultActionId()
-  const url = `${HOLONYM_API_BASE}/sandbox/attestation/sbts/clean-hands?action-id=${aid}&address=${userAddress}`
+  const url = `${HOLONYM_API_BASE}${HOLONYM_POCH_PATH}?action-id=${aid}&address=${userAddress}`
   const resp = await fetch(url)
   if (!resp.ok) {
     throw new Error(`Holonym API error: ${resp.status} ${resp.statusText}`)

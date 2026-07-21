@@ -126,7 +126,7 @@ For the concepts behind Proof of Clean Hands and the zero-knowledge screening mo
 
 ## Contracts
 
-Shield's deployed contract addresses (L1 portals, router, fuel swap, and the active Aztec deployment) are published as a single source of truth in [`packages/sdk/src/contracts/deployments.json`](packages/sdk/src/contracts/deployments.json), which the SDK reads directly. The current active deployment targets Ethereum mainnet and Aztec v5.
+Shield's deployed contract addresses (L1 portals, router, fuel swap, and the active Aztec deployment) are published in human-readable form on the support site at [support.shield.human.tech/contracts](https://support.shield.human.tech/contracts) for address verification, and as the machine-readable source of truth in [`packages/sdk/src/contracts/deployments.json`](packages/sdk/src/contracts/deployments.json), which the SDK reads directly. The current active deployment targets Ethereum mainnet and Aztec v5. Always verify an address against the support page before signing.
 
 ## Audits
 
@@ -157,4 +157,4 @@ Contributions are welcome. Please open an issue to discuss substantial changes b
 
 ## License
 
-Released under the MIT License.
+Licensing is specified per source file via SPDX identifiers; the codebase currently mixes MIT, Apache-2.0, and UNLICENSED headers across packages and contracts. A canonical repository license is being finalized. Until a root `LICENSE` is added, check individual file headers.

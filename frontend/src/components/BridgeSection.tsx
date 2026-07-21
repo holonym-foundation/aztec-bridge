@@ -134,7 +134,11 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             </div> */}
             <div className="flex flex-col gap-2 w-full justify-between items-end">
               <p className="text-latest-grey-500 text-12 font-medium">Balance:</p>
-              <div className="flex gap-1 ml-auto">
+              <div
+                className="flex gap-1 ml-auto cursor-pointer hover:text-latest-black-100 transition-colors"
+                onClick={() => setInputAmount(direction === BridgeDirection.L1_TO_L2 ? l1BalanceStr : l2BalanceStr)}
+                title="Use full balance"
+              >
                 <p className="text-latest-grey-500 text-12 font-medium break-all">
                   {direction === BridgeDirection.L1_TO_L2 ? l1BalanceStr : l2BalanceStr}
                 </p>

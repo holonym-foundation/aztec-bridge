@@ -1,5 +1,5 @@
 {
-  "activeDeploymentId": "5.0.1_2026-07-17",
+  "activeDeploymentId": "5.0.0_2026-07-17",
   "deployments": [
     {
       "id": "4.2.0-rc.1_2026-04-23",
@@ -136,7 +136,7 @@
       "bridgedFpcAddress": "0x1d6d7973a39ebbac62ba7db6dd432ae138a1f210392c5202dbcd11c7a037bc14"
     },
     {
-      "id": "5.0.1_2026-07-17",
+      "id": "5.0.0_2026-07-17",
       "deployedAt": "2026-07-17T07:56:13.591Z",
       "network": {
         "name": "testnet",

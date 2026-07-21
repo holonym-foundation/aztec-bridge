@@ -62,6 +62,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'next/navigation'
 import MaintenanceOverlay from '@/components/MaintenanceOverlay'
 import FuelToggle from '@/components/FuelToggle'
+import WithdrawFuelPanel from '@/components/WithdrawFuelPanel'
 import {
   BRIDGED_FPC_ADDRESS,
   MAINTENANCE_MODE,
@@ -604,6 +605,16 @@ export default function Home() {
                   onFuelRecipientOverrideChange={setFuelRecipientOverride}
                 />
               )}
+            {bridgeConfig.direction === BridgeDirection.L2_TO_L1 && (
+              <WithdrawFuelPanel
+                feeJuiceBalance={feeJuiceBalance}
+                privateFeeJuiceBalance={privateFeeJuiceBalance}
+                feeJuiceBalanceLoading={feeJuiceBalanceLoading}
+                privateFeeJuiceBalanceLoading={privateFeeJuiceBalanceLoading}
+                isPrivacyModeEnabled={isPrivacyModeEnabled}
+                bridgeAmount={bridgeConfig.amount}
+              />
+            )}
             <TransactionBreakdown
               isOpen={showBreakdown}
               onToggle={() => setShowBreakdown((prev) => !prev)}

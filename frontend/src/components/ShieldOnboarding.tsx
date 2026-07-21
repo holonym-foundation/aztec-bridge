@@ -121,6 +121,65 @@ const SCREENS: Screen[] = [
   },
 ]
 
+/* Alphanet caution badge — sits above the hero eyebrow. Amber (not brand pink) so it
+   reads as a warning, with a hover/focus tooltip so users know this is an early network
+   before they bridge real value. */
+function AlphanetBadge() {
+  const [open, setOpen] = useState(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimer.current = setTimeout(() => setOpen(false), 240)
+  }
+  return (
+    <span
+      className="ob-alpha"
+      onMouseEnter={() => {
+        cancelClose()
+        setOpen(true)
+      }}
+      onMouseLeave={scheduleClose}
+    >
+      <span
+        className="ob-alpha-pill"
+        tabIndex={0}
+        role="note"
+        aria-label="Alphanet release warning"
+        onFocus={() => setOpen(true)}
+        onBlur={scheduleClose}
+      >
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" />
+        </svg>
+        Alphanet
+      </span>
+      <AnimatePresence>
+        {open && (
+          <motion.span
+            className="ob-tooltip-bubble ob-alpha-bubble"
+            role="tooltip"
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+          >
+            Shield runs on Aztec Alphanet, an early-stage network. Treat every transaction as final and bridge only what you can afford to lose.{' '}
+            <a href="https://aztec.network/blog/introducing-alpha-v5" target="_blank" rel="noopener noreferrer">Learn about Alpha v5</a>.
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </span>
+  )
+}
+
 /* Paper-shader field: real @paper-design MeshGradient in Shield tones, softened by a
    translucent veil so copy stays legible, plus a fine grain for paper texture. */
 function PaperField({ still }: { still: boolean }) {
@@ -604,6 +663,7 @@ export default function ShieldOnboarding() {
                   <div className="ob-cryptex-hero">
                     <CryptexMark reduce={reduce} shared />
                     <div className="ob-headline">
+                      <AlphanetBadge />
                       <p className="ob-eyebrow">{screen.eyebrow}</p>
                       <h1 className="ob-title">{screen.title}</h1>
                     </div>
@@ -651,6 +711,7 @@ export default function ShieldOnboarding() {
               <div className="ob-cryptex-hero">
                 <CryptexMark reduce={reduce} />
                 <div className="ob-headline">
+                  <AlphanetBadge />
                   <p className="ob-eyebrow">{SCREENS[0].eyebrow}</p>
                   <h1 className="ob-title">{SCREENS[0].title}</h1>
                 </div>
@@ -756,6 +817,12 @@ export default function ShieldOnboarding() {
         .ob-mini-pin { position: absolute; top: 24px; left: 0; right: 0; height: 72px; z-index: 2;
           display: flex; align-items: center; justify-content: center; }
         .ob-visual { height: 72px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; width: 100%; }
+        .ob-alpha { position: relative; display: inline-flex; margin: 0 auto 10px; }
+        .ob-alpha-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+          background: rgba(195,129,29,0.10); color: #b0781f; border: 1px solid rgba(195,129,29,0.26);
+          font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; cursor: default; outline: none; }
+        .ob-alpha-pill:focus-visible { outline: 2px solid #b06f16; outline-offset: 2px; }
+        .ob-alpha-bubble { width: 250px; }
         .ob-eyebrow { font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: ${BRAND};
           font-weight: 600; margin: 0 0 14px; white-space: pre-line; line-height: 1.7; }
         .ob-title { font-size: clamp(26px, 5vw, 40px); line-height: 1.08; letter-spacing: -0.02em; font-weight: 640;

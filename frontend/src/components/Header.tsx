@@ -656,7 +656,6 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
                 <span
                   className="inline-flex cursor-help"
                   data-tooltip-id="humanity-info-tooltip"
-                  data-tooltip-content="Your humanity score is a cumulative proof-of-personhood score — higher means stronger proof you're a real, unique human. It comes from Proof of Clean Hands and Human Passport."
                   aria-label="What is the humanity score?"
                 >
                   <Icon icon="ph:info" width={13} height={13} className={mutedIconText(isDark)} />
@@ -673,7 +672,27 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
                       : 'Not verified'}
               </span>
             </div>
-            <ReactTooltip id="humanity-info-tooltip" place="top" className="z-[100] max-w-[220px]" style={{ fontSize: '11px', padding: '6px 8px' }} />
+            <ReactTooltip
+              id="humanity-info-tooltip"
+              place="top"
+              clickable
+              className="z-[100] max-w-[220px]"
+              style={{ fontSize: '11px', padding: '6px 8px' }}
+              render={() => (
+                <span>
+                  A cumulative proof-of-personhood score — higher means stronger proof you&apos;re a real, unique human. From Proof of Clean Hands and{' '}
+                  <a
+                    href="https://app.passport.xyz"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline font-medium"
+                  >
+                    Human Passport
+                  </a>
+                  .
+                </span>
+              )}
+            />
             <div className={`w-full h-1.5 rounded-full ${isDark ? 'bg-white/[0.10]' : 'bg-[#F5E1EA]'} overflow-hidden`}>
               <div
                 className={`h-full rounded-full transition-[width] duration-300 ${

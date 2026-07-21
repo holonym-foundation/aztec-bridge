@@ -550,6 +550,32 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
                   stay funded for your next transactions.
                 </p>
               </div>
+
+              {/* Concrete sizing guidance: tie the fuel amount to the actual L2 claim requirement. */}
+              {claimFeeFj != null && (
+                <p className="text-[11px] leading-[15px] text-latest-grey-500">
+                  Aim for at least{' '}
+                  <span className="font-semibold text-[#81133B]">≈{claimFeeFj} FJ</span> to cover the L2 claim — the
+                  amount below is auto-sized to reach it.
+                </p>
+              )}
+
+              {/* Privacy mode pays the claim from private (BridgedFPC) fuel; a public claim would deanonymize. */}
+              {isPrivacyModeEnabled && (
+                <div className="flex items-start gap-1.5 rounded-[8px] bg-[#F9EEF3] px-2.5 py-1.5">
+                  <Icon icon="ph:lock-key-fill" width={13} height={13} className="mt-0.5 flex-shrink-0 text-[#81133B]" />
+                  <p className="text-[11px] leading-[15px] text-[#737373]">
+                    <span className="font-semibold text-[#81133B]">Private Fee Juice enforced.</span> Privacy mode pays L2
+                    gas from private fee juice so your claim stays anonymous.
+                  </p>
+                </div>
+              )}
+              {isPrivacyModeEnabled && fuelType === 'public' && (
+                <p className="text-[11px] font-medium text-[#D92D20]">
+                  Public fee juice reveals your claim — use Private to stay anonymous.
+                </p>
+              )}
+
               {pricesError && <p className="text-xs text-amber-600">Live prices unavailable — using fallback prices</p>}
 
               <div className="flex items-center gap-1.5 max-w-full">

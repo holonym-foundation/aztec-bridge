@@ -8,6 +8,7 @@ import TextButton from '@/components/TextButton'
 import { getDeposits, getWithdrawals } from '@human.tech/clean.sdk'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
 import { decryptOperationPayload } from '@/hooks/useBridgeOperations'
+import { parseBackup, importBackup, BackupParseError } from '@/utils'
 import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
@@ -340,32 +341,6 @@ function RecoveryEntryCard({ entry, onResume, resuming }: RecoveryEntryCardProps
   )
 }
 
-// ─── File Upload Validation ──────────────────────────────────────────
-
-const REQUIRED_FIELDS = [
-  'encryptedCiphertext',
-  'encryptedIv',
-  'encryptedTag',
-  'keyDerivationMessage',
-  'keyDerivationDomain',
-]
-
-// Also accept legacy field names
-const LEGACY_REQUIRED_FIELDS = ['ciphertext', 'iv', 'tag', 'keyDerivationMessage', 'keyDerivationDomain']
-
-function validateUploadedEntry(obj: any): string | null {
-  const hasOperationId = obj.operationId != null || obj.id != null
-  if (!hasOperationId) return 'Missing operationId or id'
-
-  const hasNewFields = REQUIRED_FIELDS.every((f) => obj[f] != null)
-  const hasLegacyFields = LEGACY_REQUIRED_FIELDS.every((f) => obj[f] != null)
-
-  if (!hasNewFields && !hasLegacyFields) {
-    return `Missing required encryption fields. Expected: ${REQUIRED_FIELDS.join(', ')}`
-  }
-  return null
-}
-
 // ─── Main Page ───────────────────────────────────────────────────────
 
 export default function LocalRecoveryPage() {
@@ -380,6 +355,7 @@ export default function LocalRecoveryPage() {
   const [entries, setEntries] = useState<LocalRecoveryEntry[]>([])
   const [resumingId, setResumingId] = useState<number | string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   // Track which operation IDs we've already attempted to fetch server status for
   const fetchedIds = useRef<Set<string>>(new Set())
@@ -389,10 +365,8 @@ export default function LocalRecoveryPage() {
     router.prefetch('/progress/resume')
   }, [router])
 
-  // Load from localStorage on mount (client-only)
-  useEffect(() => {
-    if (!l1Address || !token) return
-
+  // Read the SDK's local storage (deposits + withdrawals) into recovery entries.
+  const loadFromStorage = useCallback(() => {
     const deposits = getDeposits()
     const withdrawals = getWithdrawals()
 
@@ -421,7 +395,13 @@ export default function LocalRecoveryPage() {
     }
 
     setEntries(all)
-  }, [l1Address, token])
+  }, [])
+
+  // Load from localStorage on mount (client-only)
+  useEffect(() => {
+    if (!l1Address || !token) return
+    loadFromStorage()
+  }, [l1Address, token, loadFromStorage])
 
   // Fetch server status for each entry
   useEffect(() => {
@@ -471,63 +451,73 @@ export default function LocalRecoveryPage() {
 
   // ─── File upload ──────────────────────────────────────────────────
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setUploadError(null)
-    const file = e.target.files?.[0]
-    if (!file) return
+  const processBackupFile = useCallback(
+    (file: File) => {
+      setUploadError(null)
 
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const text = ev.target?.result as string
-        const parsed = JSON.parse(text)
-
-        const raws: any[] = Array.isArray(parsed) ? parsed : [parsed]
-        const newEntries: LocalRecoveryEntry[] = []
-
-        for (const raw of raws) {
-          const validationError = validateUploadedEntry(raw)
-          if (validationError) {
-            setUploadError(`Invalid entry: ${validationError}`)
-            return
-          }
-
-          const dir = inferDirection(raw)
-          if (!dir) {
-            setUploadError(
-              'Could not determine bridge direction. Make sure the file has a "direction", "claimSecretHash", or "l2BridgeAddress" field.',
-            )
-            return
-          }
-
-          const entry = toLocalRecoveryEntry(raw, 'jsonUpload', dir)
-          if (!entry) {
-            setUploadError('Entry is missing required fields (operationId/id).')
-            return
-          }
-
-          newEntries.push(entry)
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(ev.target?.result as string)
+        } catch {
+          setUploadError('Failed to parse JSON file. Make sure it is valid JSON.')
+          notify('error', 'Import failed: file is not valid JSON.')
+          return
         }
 
-        // Deduplicate against existing entries
-        setEntries((prev) => {
-          const existingIds = new Set(prev.map((e) => e.operationId))
-          const deduplicated = newEntries.filter((e) => !existingIds.has(e.operationId))
-          if (deduplicated.length === 0) {
-            setUploadError('All entries in this file are already in the list.')
-            return prev
-          }
-          return [...prev, ...deduplicated]
-        })
-      } catch {
-        setUploadError('Failed to parse JSON file. Make sure it is valid JSON.')
-      }
-    }
-    reader.readAsText(file)
+        try {
+          const items = parseBackup(parsed)
+          const { imported, skipped } = importBackup(items)
 
-    // Reset input so same file can be re-uploaded
-    e.target.value = ''
-  }, [])
+          // Re-read from the SDK's storage so imported entries flow through the
+          // same code path (and same source label) as browser-storage entries.
+          loadFromStorage()
+
+          if (imported === 0) {
+            setUploadError('This backup is already in your recovery list.')
+            notify('info', 'Nothing to import — already in your recovery list.')
+          } else {
+            const skippedNote = skipped > 0 ? ` (${skipped} already present)` : ''
+            notify('success', `Imported ${imported} operation${imported === 1 ? '' : 's'}${skippedNote}.`)
+          }
+        } catch (err) {
+          const msg =
+            err instanceof BackupParseError
+              ? err.message
+              : 'This file is not a valid Shield backup. Export it again from the bridge progress screen.'
+          setUploadError(msg)
+          notify('error', `Import failed: ${msg}`)
+        }
+      }
+      reader.onerror = () => {
+        setUploadError('Could not read the selected file.')
+        notify('error', 'Could not read the selected file.')
+      }
+      reader.readAsText(file)
+    },
+    [notify, loadFromStorage],
+  )
+
+  const handleFileUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      // Reset input so the same file can be re-uploaded after an error.
+      e.target.value = ''
+      if (file) processBackupFile(file)
+    },
+    [processBackupFile],
+  )
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLLabelElement>) => {
+      e.preventDefault()
+      setIsDragging(false)
+      const file = e.dataTransfer.files?.[0]
+      if (file) processBackupFile(file)
+    },
+    [processBackupFile],
+  )
 
   // ─── Resume flow ─────────────────────────────────────────────────
 
@@ -679,14 +669,42 @@ export default function LocalRecoveryPage() {
           </>
         )}
 
-        {/* File upload zone */}
+        {/* Import backup zone */}
         <div className="mt-4">
-          <p className="text-xs text-gray-500 mb-2 font-medium">Upload backup file (.json)</p>
-          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-gray-200 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors">
-            <span className="text-xs text-gray-400">Click to select or drag &amp; drop a .json file</span>
-            <input type="file" accept=".json" className="hidden" onChange={handleFileUpload} />
+          <p className="text-xs text-gray-500 mb-2 font-medium">Import backup file (.json)</p>
+          <label
+            onDragOver={(e) => {
+              e.preventDefault()
+              setIsDragging(true)
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              setIsDragging(false)
+            }}
+            onDrop={handleDrop}
+            className={`flex flex-col items-center justify-center gap-2 w-full h-24 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+              isDragging
+                ? 'border-shield bg-shield/5'
+                : 'border-shield/30 hover:border-shield hover:bg-shield/5'
+            }`}
+          >
+            <span className="text-xs text-gray-500">Drag &amp; drop your Shield backup, or</span>
+            <span className="text-xs font-semibold text-white bg-shield hover:bg-[#6a0f31] px-4 py-1.5 rounded-full">
+              Choose file
+            </span>
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              onChange={handleFileUpload}
+              aria-label="Import backup file"
+            />
           </label>
-          {uploadError && <p className="text-xs text-red-500 mt-1">{uploadError}</p>}
+          {uploadError && (
+            <p role="alert" className="text-xs text-red-500 mt-1">
+              {uploadError}
+            </p>
+          )}
         </div>
 
         <div className="mt-4 flex flex-col gap-2">

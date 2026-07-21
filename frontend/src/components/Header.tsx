@@ -195,7 +195,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
         type="button"
         className={
           flat
-            ? `flex items-center gap-1.5 pr-2 pl-2.5 py-1 h-8 w-full cursor-pointer transition-colors duration-200 ${
+            ? `flex items-center gap-1.5 pr-3.5 pl-2.5 py-1 h-8 w-full cursor-pointer transition-colors duration-200 ${
                 showDropdown ? 'bg-black/[0.05]' : 'hover:bg-black/[0.04]'
               }`
             : `flex items-center gap-1.5 pr-2 pl-1 py-1 h-8 w-full rounded-full ${GLASS_PILL} ${GLASS_PILL_HOVER} ${showDropdown ? GLASS_PILL_ACTIVE : ''} cursor-pointer`
@@ -433,7 +433,7 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 z-50 w-[220px] rounded-2xl border border-[#E5E5E5]/80 bg-white/95 backdrop-blur-md shadow-lg p-4 flex flex-col gap-3">
+        <div className="absolute right-0 mt-2 z-50 w-[220px] rounded-2xl border border-[#E5E5E5]/80 bg-white shadow-lg p-4 flex flex-col gap-3">
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-medium text-gray-500">Humanity</span>
@@ -659,14 +659,14 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   ) : (
     // Merged wallet cluster — ONE rounded glass-pill container (the
     // GLASS_PILL material lives here, once) holding the ETH row and Aztec
-    // row flush against each other, separated only by a 1px divider
-    // (`divide-y`). Each row renders `flat` (see WalletDisplay/
+    // row flush against each other, separated only by a glassy hairline
+    // divider (see below). Each row renders `flat` (see WalletDisplay/
     // WalletConnectPill above) so it has no independent rounded
     // border/shadow/blur of its own — previously each row carried its own
     // full GLASS_PILL treatment, which read as two stacked pills rather
     // than one unified control.
     <div
-      className={`flex flex-col w-[96px] sm:w-[156px] flex-shrink-0 rounded-[20px] divide-y divide-[#E5E5E5]/70 ${GLASS_PILL} ${GLASS_PILL_HOVER}`}
+      className={`flex flex-col w-[112px] sm:w-[184px] flex-shrink-0 rounded-[20px] ${GLASS_PILL} ${GLASS_PILL_HOVER}`}
     >
       {isWaapConnected ? (
         <WalletDisplay
@@ -690,6 +690,18 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           flat
         />
       )}
+
+      {/* Glassy hairline seam between the two chain rows — translucent white
+          line + faint shadow beneath it for a crisp "glass seam" edge,
+          replacing the old flat grey divide-y border. */}
+      <div
+        className="h-px w-full flex-shrink-0"
+        style={{
+          background: 'linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.95), rgba(255,255,255,0))',
+          boxShadow: '0 1px 1px rgba(15,15,15,0.06)',
+        }}
+        aria-hidden="true"
+      />
 
       {isAztecConnected ? (
         <WalletDisplay
@@ -741,7 +753,6 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         <Icon icon="ph:book-open" width={16} height={16} className="text-[#737373]" />
         Docs
       </Link>
-      <DeploymentSelector />
     </>
   )
 
@@ -770,9 +781,17 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           {secondaryNav}
         </nav>
 
-        {/* Right cluster: humanity/points chip collapses first on narrow
-            widths, Privacy Mode + the wallet cluster never collapse. */}
+        {/* Right cluster order: Privacy Mode (always visible) → version
+            selector → humanity/points chip (points sits nearest the wallet
+            pills) → wallet cluster. Version + the chip collapse first on
+            narrow widths; Privacy Mode + the wallet cluster never collapse. */}
         <div className="flex items-center gap-1.5 sm:gap-3 ml-auto min-w-0">
+          {privacyToggle}
+
+          <div className="hidden sm:block flex-shrink-0">
+            <DeploymentSelector />
+          </div>
+
           <div className="hidden sm:block flex-shrink-0">
             <HumanityPointsChip
               method={attestation?.method ?? null}
@@ -782,8 +801,6 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
               points={points}
             />
           </div>
-
-          {privacyToggle}
 
           {walletCluster}
 
@@ -802,7 +819,8 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         </div>
       </div>
 
-      {/* Secondary-nav panel (credentials / How it works / version selector) */}
+      {/* Secondary-nav panel (credentials / How it works / Docs) — version
+          selector lives in the always-on right cluster now, not here. */}
       {mobileMenuOpen && (
         <div
           ref={mobileMenuRef}

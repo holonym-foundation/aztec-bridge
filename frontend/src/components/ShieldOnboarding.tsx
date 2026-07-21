@@ -479,6 +479,14 @@ export default function ShieldOnboarding() {
       <div className="ob-stage">
         <div className="ob-stage-inner">
           <div className="ob-card-region">
+            {/* Minimized cryptex lives OUTSIDE the fading card so it stays pinned (never
+                re-fades) as you move between screens 1-3; the layoutId still morphs it in
+                from the screen-0 hero. */}
+            {index > 0 && (
+              <div className="ob-mini-pin">
+                <CryptexMark reduce={reduce} mini shared />
+              </div>
+            )}
             <AnimatePresence mode="wait">
               <motion.div
                 key={index}
@@ -498,9 +506,6 @@ export default function ShieldOnboarding() {
                   </div>
                 ) : (
                   <>
-                    <div className="ob-visual">
-                      <CryptexMark reduce={reduce} mini shared />
-                    </div>
                     <p className="ob-eyebrow">{screen.eyebrow}</p>
                     <h1 className={`ob-title ob-title-${screen.visual}`}>{screen.title}</h1>
                   </>
@@ -641,9 +646,11 @@ export default function ShieldOnboarding() {
         .ob-card-region { position: relative; width: 100%; height: clamp(430px, 60vh, 540px); }
         .ob-card { position: absolute; inset: 0; width: 100%; text-align: center; display: flex;
           flex-direction: column; align-items: center; justify-content: center; }
-        /* Non-hero screens top-align so the minimized cryptex sits at the same Y on every
-           screen instead of drifting with each screen's content height. */
-        .ob-card-top { justify-content: flex-start; padding-top: 30px; }
+        /* Non-hero screens top-align and reserve space for the pinned cryptex above, so the
+           mark sits at the same Y on every screen and the copy never overlaps it. */
+        .ob-card-top { justify-content: flex-start; padding-top: 108px; }
+        .ob-mini-pin { position: absolute; top: 24px; left: 0; right: 0; height: 72px; z-index: 2;
+          display: flex; align-items: center; justify-content: center; }
         .ob-visual { height: 72px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; width: 100%; }
         .ob-eyebrow { font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: ${BRAND};
           font-weight: 600; margin: 0 0 14px; white-space: pre-line; line-height: 1.7; }
@@ -729,6 +736,8 @@ export default function ShieldOnboarding() {
              size the region to fit it, page 1 then centers with room to spare. */
           .ob-card-region { height: clamp(420px, 66vh, 470px); }
           .ob-visual { height: 62px; margin-bottom: 14px; }
+          .ob-mini-pin { height: 60px; top: 18px; }
+          .ob-card-top { padding-top: 90px; }
           .ob-cryptex-hero { max-width: 300px; }
           .ob-cryptex-shell-mini { width: 58px; height: 58px; }
           .ob-headline { padding: 0 20px; }

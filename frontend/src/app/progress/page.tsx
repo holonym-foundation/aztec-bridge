@@ -76,9 +76,17 @@ export default function ProgressPage() {
   }, [notify, refetchL1Balance, refetchL2Balance, refetchFeeJuiceBalance, refetchPrivateFeeJuiceBalance])
 
   // Fresh bridge operations only — resume lives at /progress/resume
-  const { mutate: bridgeTokensToL2, isError: isBridgeTokensToL2Error } = useL1BridgeToL2(handleBridgeSuccess)
+  const {
+    mutate: bridgeTokensToL2,
+    isError: isBridgeTokensToL2Error,
+    error: bridgeTokensToL2Err,
+  } = useL1BridgeToL2(handleBridgeSuccess)
 
-  const { mutate: withdrawTokensToL1, isError: withdrawTokensToL1Error } = useL2WithdrawTokensToL1(handleBridgeSuccess)
+  const {
+    mutate: withdrawTokensToL1,
+    isError: withdrawTokensToL1Error,
+    error: withdrawTokensToL1Err,
+  } = useL2WithdrawTokensToL1(handleBridgeSuccess)
 
   const L1_TO_L2_TIME = 15 * 60 // seconds
   const L2_TO_L1_TIME = 50 * 60 // seconds
@@ -138,6 +146,9 @@ export default function ProgressPage() {
   }, [isBridgeTokensToL2Error, withdrawTokensToL1Error, steps, setProgressStep])
 
   const hasError = isBridgeTokensToL2Error || withdrawTokensToL1Error
+  const errorMessage =
+    (bridgeTokensToL2Err instanceof Error ? bridgeTokensToL2Err.message : null) ??
+    (withdrawTokensToL1Err instanceof Error ? withdrawTokensToL1Err.message : null)
 
   // A transfer is genuinely "in progress" once an operation step has gone active and the
   // flow hasn't reached a terminal state (all steps completed, or an errored step). This is
@@ -202,6 +213,7 @@ export default function ProgressPage() {
             fromNetwork={fromNetwork}
             toNetwork={toNetwork}
             direction={direction === BridgeDirection.L1_TO_L2 ? 'L1_TO_L2' : 'L2_TO_L1'}
+            errorMessage={errorMessage}
           />
 
           <FuelClaimLinkPanel />

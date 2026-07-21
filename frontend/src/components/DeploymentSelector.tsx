@@ -96,7 +96,7 @@ const DeploymentSelector: React.FC = () => {
   const netColor = isDark ? 'text-white/[0.65]' : 'text-gray-500'
 
   return (
-    <div className="relative flex justify-center" ref={dropdownRef}>
+    <div className={`relative flex justify-center ${open ? 'z-[120]' : ''}`} ref={dropdownRef}>
       {/* Collapsed indicator — bare control (no pill of its own; it lives inside
           the brand pill, #113). Shows the version + Aztec network, with a caret
           that reveals the full network detail on open. */}

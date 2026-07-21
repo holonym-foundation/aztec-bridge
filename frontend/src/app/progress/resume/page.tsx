@@ -58,11 +58,13 @@ export default function ResumePage() {
   const {
     mutate: resumeL1ToL2,
     isError: isResumeL1ToL2Error,
+    error: resumeL1ToL2Err,
   } = useResumeL1BridgeToL2(handleResumeSuccess)
 
   const {
     mutate: resumeL2ToL1,
     isError: isResumeL2ToL1Error,
+    error: resumeL2ToL1Err,
   } = useResumeL2WithdrawToL1(handleResumeSuccess)
 
   // On mount: reset step state and set direction
@@ -141,6 +143,9 @@ export default function ResumePage() {
 
   const steps = getProgressSteps()
   const hasError = isResumeL1ToL2Error || isResumeL2ToL1Error
+  const errorMessage =
+    (resumeL1ToL2Err instanceof Error ? resumeL1ToL2Err.message : null) ??
+    (resumeL2ToL1Err instanceof Error ? resumeL2ToL1Err.message : null)
 
   // Compute amount display
   const recoveryAmount = recoveryClaimData?.amount ?? recoveryWithdrawalData?.amount ?? '0'
@@ -171,6 +176,7 @@ export default function ResumePage() {
           fromNetwork={fromNetwork}
           toNetwork={toNetwork}
           direction={isL2ToL1Recovery ? 'L2_TO_L1' : 'L1_TO_L2'}
+          errorMessage={errorMessage}
         />
       </div>
     </RootStyle>

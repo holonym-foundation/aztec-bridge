@@ -1,6 +1,6 @@
 # Shield — human.tech's bridge to Aztec
 
-Shield is human.tech's privacy-preserving, accountable bridge to Aztec, the first app built on the Clean SDK. Live at https://shield.human.tech.
+Shield is human.tech's privacy-preserving, accountable bridge to Aztec, the first app built on the [Clean SDK](https://human.tech/clean-sdk). Live at https://shield.human.tech.
 
 A visual overview of the Aztec Bridge flow:
 

@@ -289,7 +289,7 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
         <div className="relative">
           <div
             className="w-9 h-5 rounded-full transition-colors"
-            style={{ backgroundColor: fuelEnabled ? '#3b82f6' : '#d1d5db' }}
+            style={{ backgroundColor: fuelEnabled ? '#81133B' : '#d1d5db' }}
           />
           <div
             className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"

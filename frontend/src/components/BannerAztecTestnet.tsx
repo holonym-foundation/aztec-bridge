@@ -48,7 +48,7 @@ const BannerAztecTestnet = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             transition={{ duration: 1 }}
-            className='bg-[#E5EFFF] text-[#17235E] relative flex items-center justify-center px-4 py-4 rounded-lg text-sm font-semibold w-full'>
+            className='bg-[#FDE7F3] text-[#17235E] relative flex items-center justify-center px-4 py-4 rounded-lg text-sm font-semibold w-full'>
             <div className='flex items-center gap-3'>
               <img src='/assets/svg/alert.svg' alt='Alert' className='w-6 h-6' />
               <span>

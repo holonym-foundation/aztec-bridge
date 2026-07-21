@@ -228,7 +228,7 @@ export default function ProgressCard({
             href={l2TxUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-14 font-semibold text-[#9333ea] bg-[#f3e8ff] hover:text-[#6b21a8] mt-2 block px-4 py-2 rounded-full"
+            className="text-14 font-semibold text-[#BF1254] bg-[#FDE7F3] hover:text-[#81133B] mt-2 block px-4 py-2 rounded-full"
           >
             View L2 Tx ↗
           </a>

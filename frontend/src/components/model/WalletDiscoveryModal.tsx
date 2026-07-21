@@ -89,7 +89,7 @@ export default function WalletDiscoveryModal({
                         if (e.key === 'Enter') submitWebWallet()
                       }}
                       placeholder='https://your-wallet.vercel.app'
-                      className='flex-1 min-w-0 px-3 py-2 rounded-[8px] bg-[#F5F5F5] text-14 text-latest-black-300 outline-none focus:ring-2 focus:ring-[#3b82f6]'
+                      className='flex-1 min-w-0 px-3 py-2 rounded-[8px] bg-[#F5F5F5] text-14 text-latest-black-300 outline-none focus:ring-2 focus:ring-[#81133B]'
                     />
                     <motion.button
                       onClick={submitWebWallet}

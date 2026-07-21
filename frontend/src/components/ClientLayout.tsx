@@ -25,8 +25,8 @@ export default function ClientLayout({
         className="absolute inset-0 z-0"
         animate={{
           background: showPrivacyBackground
-            ? 'radial-gradient(#6B6E88, #8B89A8)'
-            : 'radial-gradient(#E3E6FF, #FFFFFF)',
+            ? 'radial-gradient(#4D051F, #81133B)'
+            : 'radial-gradient(#FDE7F3, #FFFFFF)',
         }}
         transition={{ duration: 0.7, ease: 'easeInOut' }}
         style={{ willChange: 'background' }}

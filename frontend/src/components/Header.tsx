@@ -112,7 +112,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
         className="flex pr-[8px] justify-center items-center gap-[12px] rounded-[8px] border border-[#D4D4D4] bg-white cursor-pointer hover:shadow-md transition-shadow duration-200"
         onClick={handleClick}
       >
-        <div className="flex w-8 h-8 p-1 justify-center items-center rounded-[8px] bg-[#E5EFFF]">
+        <div className="flex w-8 h-8 p-1 justify-center items-center rounded-[8px] bg-[#FDE7F3]">
           <Image src={walletIcon} alt="Wallet" width={32} height={32} />
         </div>
         {networkIcon && <Image src={networkIcon} alt="Network" width={20} height={20} />}

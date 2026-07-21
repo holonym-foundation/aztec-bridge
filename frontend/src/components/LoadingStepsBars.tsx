@@ -42,7 +42,7 @@ const LoadingStepsBars: React.FC<LoadingStepsBarsProps> = ({
                       : isCompleted
                       ? allCompleted
                         ? 'bg-[#22C55E]'
-                        : 'bg-[#FF990A]'
+                        : 'bg-[#F462A6]'
                       : 'bg-[#9D9D9D]'
                   }`}
                   initial={{ width: 0 }}

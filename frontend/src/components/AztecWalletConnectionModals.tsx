@@ -66,7 +66,7 @@ export function AztecWalletConnectionModals() {
       )}
       {walletConnectionPhase === 'requesting' && (
         <div className='absolute inset-0 bg-latest-grey-1000 z-20 rounded-lg flex flex-col items-center justify-center gap-4'>
-          <Oval height={40} width={40} color='#3b82f6' secondaryColor='#93c5fd' strokeWidth={4} />
+          <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />
           <p className='text-latest-grey-600 text-14 font-medium'>Requesting permissions...</p>
         </div>
       )}

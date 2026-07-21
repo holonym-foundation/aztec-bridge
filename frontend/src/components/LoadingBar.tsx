@@ -17,7 +17,7 @@ interface LoadingBarProps {
 const LoadingBar: React.FC<LoadingBarProps> = ({
   steps,
   currentStep,
-  color = '#FF990A',
+  color = '#F462A6',
   showLabel = false,
 }) => {
   // Calculate progress based on completed steps

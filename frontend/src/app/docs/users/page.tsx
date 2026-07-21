@@ -20,7 +20,11 @@ const sections: DocsSection[] = [
           transaction as final.
         </P>
         <UL>
-          <li>The software is experimental and unaudited.</li>
+          <li>
+            Shield&apos;s components are independently audited, each scoped to its component: the bridge contracts by
+            Nethermind Security, the Clean Hands ZK circuits by Hexens, and the Human Network cryptography by Halborn.
+            The Aztec network it runs on is still an early (alpha) network, so undiscovered bugs are still possible.
+          </li>
           <li>There are no warranties, refunds, or insurance.</li>
           <li>
             It is non-custodial: the protocol smart contracts hold your funds in transit, not Human Tech. No one can

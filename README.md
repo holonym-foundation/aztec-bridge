@@ -31,7 +31,7 @@ Prior testnet deployments (Sepolia + Aztec testnet 4.2.0-rc.1) remain in `bridge
 
 Shield enables users to:
 - Bridge tokens between Ethereum Layer 1 and Aztec Layer 2
-- Manage multiple token types (ERC20, NFTs)
+- Bridge USDC today, with more ERC-20 assets planned
 - Interact with Aztec's privacy-preserving Layer 2 network
 - Use sponsored transactions for improved UX
 - Connect multiple wallet types including MetaMask and WaaP
@@ -171,7 +171,7 @@ forge deploy       # Deploy contracts
 
 ### Web3 Integration
 - **Multi-Wallet Support**: MetaMask, WaaP, WalletConnect
-- **Token Management**: ERC20 and NFT support
+- **Token Management**: USDC today, more ERC-20 assets planned
 - **Transaction Tracking**: Real-time transaction status
 - **Gas Optimization**: Sponsored transactions support
 

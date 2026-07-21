@@ -36,6 +36,16 @@ Shield enables users to:
 - Use sponsored transactions for improved UX
 - Connect multiple wallet types including MetaMask and Silk Wallet
 
+## 📦 Clean SDK
+
+Shield is the first app built on **Clean SDK** (`@human.tech/clean.sdk`), human.tech's programmable privacy toolkit. The SDK lives in [`packages/sdk/`](packages/sdk) — any app, on Aztec or any chain, can integrate it to give its users private, accountable transactions by routing funds through Aztec.
+
+```bash
+npm install @human.tech/clean.sdk
+```
+
+Guides: [User Guide](https://shield.human.tech/docs/users) · [Developer Guide](https://shield.human.tech/docs/developers) · [Clean SDK overview](https://human.tech/clean-sdk)
+
 ## 🏗️ Architecture
 
 ```
@@ -281,6 +291,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🔗 Links
 
+- Shield: [app](https://shield.human.tech) · [docs](https://shield.human.tech/docs) · [support](https://support.shield.human.tech) · [testnet](https://testnet.shield.human.tech/)
+- [Clean SDK](https://human.tech/clean-sdk)
 - [Aztec Network](https://aztec.network/)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Foundry Book](https://book.getfoundry.sh/)

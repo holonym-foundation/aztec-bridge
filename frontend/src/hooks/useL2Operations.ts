@@ -392,7 +392,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                 message:
                   'Please keep this page open while your withdrawal completes. Your data is encrypted and backed up — only you can access it.',
               },
-              { autoClose: false },
+              { autoClose: false, feed: false },
             )
             pushNotification({
               type: 'withdrawal',
@@ -604,6 +604,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                     message: errorMsgRaw.slice(0, 160),
                   },
             )
+            // feed:false on every toast below — the semantic error push above is
+            // the single feed record for this failure; the toasts are transient.
             if (event.fundsAtRisk) {
               notify(
                 'warn',
@@ -617,7 +619,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                       message:
                         'Your tokens were burned on L2 but the L1 withdrawal did not complete. Go to Activity to resume.',
                     },
-                { autoClose: false },
+                { autoClose: false, feed: false },
               )
             } else {
               // Skip generic toast for backup failures — onError handler shows a more specific one
@@ -627,17 +629,25 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
 
               if (errorMsg.includes('Contract artifact not found') || errorMsg.includes('artifact not found')) {
                 // registry URL must be testnet, not devnet (project runs on testnet).
-                notify('error', {
-                  heading: 'Contract Artifact Not Found',
-                  message:
-                    'The contract artifact is not available in the public registry. Please upload it to https://testnet.aztec-registry.xyz/ to make it available for the wallet.',
-                })
+                notify(
+                  'error',
+                  {
+                    heading: 'Contract Artifact Not Found',
+                    message:
+                      'The contract artifact is not available in the public registry. Please upload it to https://testnet.aztec-registry.xyz/ to make it available for the wallet.',
+                  },
+                  { feed: false },
+                )
               } else {
-                notify('error', {
-                  heading: 'Withdrawal Failed — No Funds Moved',
-                  message:
-                    'The transaction was not sent. Your balance is unchanged and no recovery is needed. You can safely retry.',
-                })
+                notify(
+                  'error',
+                  {
+                    heading: 'Withdrawal Failed — No Funds Moved',
+                    message:
+                      'The transaction was not sent. Your balance is unchanged and no recovery is needed. You can safely retry.',
+                  },
+                  { feed: false },
+                )
               }
             }
             break

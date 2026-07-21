@@ -43,10 +43,10 @@ const TransactionBreakdown: React.FC<TransactionBreakdownProps> = ({
   const showFuel = !!fuelReserveToken && !!fuelReserveFj
 
   return (
-    <div className='mt-3 bg-[#F5F5F5] rounded-md overflow-hidden'>
+    <div className='mt-1.5 bg-[#F5F5F5] rounded-md overflow-hidden'>
       <button
         type='button'
-        className='w-full p-3 flex items-center justify-between font-semibold text-sm text-latest-black-100'
+        className='w-full px-3 py-2 flex items-center justify-between font-semibold text-sm text-latest-black-100'
         onClick={onToggle}
         aria-expanded={isOpen}
         aria-controls='transaction-breakdown-detail'

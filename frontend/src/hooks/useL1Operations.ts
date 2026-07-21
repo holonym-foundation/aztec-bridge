@@ -568,7 +568,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 message:
                   'Please keep this page open while your deposit completes. Your data is encrypted and backed up — only you can access it.',
               },
-              { autoClose: false, toastId: TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS },
+              { autoClose: false, toastId: TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS, feed: false },
             )
             pushNotification({
               type: 'deposit',
@@ -608,6 +608,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               {
                 autoClose: false,
                 toastId: TOAST_ID_L1L2_DEPOSIT_CONFIRMED,
+                // feed:false — the 'deposit' push above is the feed record.
+                feed: false,
                 onClick: () => {
                   try {
                     const claims = localStorage.getItem(STORAGE_KEYS.deposits)
@@ -832,6 +834,9 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                   },
             )
 
+            // feed:false on every toast below — the semantic error push above is
+            // the single feed record for this failure; the toasts are the
+            // transient surface only.
             if (event.fundsAtRisk) {
               notify(
                 'warn',
@@ -839,7 +844,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                   heading: 'L2 Claim Failed — Funds Are Safe',
                   message: 'Your deposit confirmed on L1 but the L2 claim did not complete. Go to Activity to resume.',
                 },
-                { autoClose: false },
+                { autoClose: false, feed: false },
               )
             } else {
               // Skip generic toast for backup failures — onError handler shows a more specific one
@@ -861,22 +866,32 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 notify(
                   'error',
                   'The Aztec Testnet is congested right now. Unfortunately your transaction was dropped.',
-                  { autoClose: false },
+                  { autoClose: false, feed: false },
                 )
               } else if (isReloadable) {
-                notify('error', 'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page.')
+                notify('error', 'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page.', {
+                  feed: false,
+                })
               } else if (isArtifact) {
-                notify('error', {
-                  heading: 'Contract Artifact Not Found',
-                  message:
-                    'The contract artifact is not available in the public registry. Please upload it to https://testnet.aztec-registry.xyz/ to make it available for the wallet.',
-                })
+                notify(
+                  'error',
+                  {
+                    heading: 'Contract Artifact Not Found',
+                    message:
+                      'The contract artifact is not available in the public registry. Please upload it to https://testnet.aztec-registry.xyz/ to make it available for the wallet.',
+                  },
+                  { feed: false },
+                )
               } else {
-                notify('error', {
-                  heading: 'Deposit Failed — No Funds Moved',
-                  message:
-                    'The transaction was not sent. Your balance is unchanged and no recovery is needed. You can safely retry.',
-                })
+                notify(
+                  'error',
+                  {
+                    heading: 'Deposit Failed — No Funds Moved',
+                    message:
+                      'The transaction was not sent. Your balance is unchanged and no recovery is needed. You can safely retry.',
+                  },
+                  { feed: false },
+                )
               }
             }
             break
@@ -1125,7 +1140,7 @@ export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void)
       queryClient.invalidateQueries({ queryKey: ['l2TokenBalance', aztecAddress] })
       queryClient.invalidateQueries({ queryKey: ['l1TokenBalances', l1Address] })
       queryClient.invalidateQueries({ queryKey: ['l1TokenBalance', l1Address] })
-      notify('success', 'Fee Juice added — you can complete your withdrawal now.')
+      notify('success', 'Fee Juice added — you can complete your withdrawal now.', { feed: false })
       pushNotification({
         type: 'deposit',
         title: 'Fee Juice added',
@@ -1136,10 +1151,14 @@ export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void)
     onError: (error) => {
       notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
       const msg = extractErrorMessage(error) || 'The top-up could not be completed. Your balances are unchanged.'
-      notify('error', {
-        heading: 'Fee Juice top-up failed',
-        message: msg,
-      })
+      notify(
+        'error',
+        {
+          heading: 'Fee Juice top-up failed',
+          message: msg,
+        },
+        { feed: false },
+      )
       pushNotification({ type: 'error', title: 'Fee Juice top-up failed', message: msg })
     },
   })

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { formatUnits } from 'viem'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
 import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
+import { useResumableCount } from '@/hooks/useResumableCount'
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useToast } from '@/hooks/useToast'
@@ -96,9 +97,9 @@ const ActivityDrawer: React.FC = () => {
       .slice(0, MAX_VISIBLE_OPS)
   }, [operations])
 
-  const needsAttention = recentOps.some(
-    (op) => isResumable(op) || hasPossibleLockedFunds(op) || op.status === 'failed',
-  )
+  // Count across ALL operations (not just the visible 5), so the tab flags
+  // resumable work even when it has scrolled out of the recent peek.
+  const resumableCount = useResumableCount()
 
   const handleResume = async (operation: BridgeOperation) => {
     if (!l1Address) {
@@ -236,7 +237,14 @@ const ActivityDrawer: React.FC = () => {
   const panelBody = (onClose?: () => void) => (
     <>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge activity</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge activity</p>
+          {resumableCount > 0 && (
+            <span className="flex-shrink-0 rounded-full bg-[#FDE7F3] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.3px] text-[#81133B]">
+              {resumableCount} to finish
+            </span>
+          )}
+        </div>
         {onClose && (
           <button
             type="button"
@@ -309,14 +317,31 @@ const ActivityDrawer: React.FC = () => {
         ref={handleRef}
         type="button"
         aria-expanded={open}
+        aria-label={
+          resumableCount > 0
+            ? `Bridge activity, ${resumableCount} ${resumableCount === 1 ? 'transfer' : 'transfers'} to finish`
+            : 'Bridge activity'
+        }
         aria-controls={panelId}
-        aria-label="Bridge activity"
         onClick={() => setPinned((p) => !p)}
         className={`flex h-[120px] w-9 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-colors ${
           open ? 'border-[#17235E]/40' : 'border-[#D4D4D4] hover:border-[#17235E]/30'
         }`}
       >
-        <span className={`h-1.5 w-1.5 rounded-full ${needsAttention ? 'bg-[#81133B]' : 'bg-[#17235E]'}`} />
+        {resumableCount > 0 ? (
+          // Attention badge: a shield-pink count sits where the neutral status
+          // dot would, so the user sees "you have N transfers to finish"
+          // without opening the drawer. Ring keeps it legible against the tab
+          // on either theme. Static (no pulse) so it is reduced-motion safe.
+          <span
+            aria-hidden="true"
+            className="flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#81133B] px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white/90"
+          >
+            {resumableCount > 9 ? '9+' : resumableCount}
+          </span>
+        ) : (
+          <span className="h-1.5 w-1.5 rounded-full bg-[#17235E]" aria-hidden="true" />
+        )}
         <span
           className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}

@@ -582,7 +582,7 @@ export default function Home() {
             MAINTENANCE_MODE ? 'pointer-events-none' : ''
           }`}
         >
-          <div className="shrink-0 px-5 pt-4 pb-2">
+          <div className="shrink-0 px-5 pt-2 pb-1.5">
             <BridgeHeader
               onClick={async () => {
                 // Explicit reset only. Never blanket-clear localStorage — encrypted
@@ -616,6 +616,9 @@ export default function Home() {
               attestationMethod={attestationData?.method ?? null}
               passportMaxAmount={attestationData?.passportMaxAmount}
               youWillReceive={youWillReceiveAmount}
+              // Space-yielding: when either detail accordion is expanded, collapse From/To to
+              // one-line summary rows so the expanded detail fits without scrolling the card.
+              compact={showBreakdown || fuelDetailOpen}
             />
             {bridgeConfig.direction === BridgeDirection.L1_TO_L2 &&
               !!SWAP_BRIDGE_ROUTER_ADDRESS &&
@@ -684,7 +687,7 @@ export default function Home() {
           </div>
 
           <div className="shrink-0">
-            <div className="sticky bottom-0 rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[12px] pt-[12px] pr-[10px] pb-0 pl-[10px] w-full">
+            <div className="sticky bottom-0 rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[6px] pt-[8px] pr-[10px] pb-0 pl-[10px] w-full">
               <BridgeActionButton
                 // Fuel gating is a DEPOSIT-only concern (fuel is carved out of the L1→L2
                 // bridge amount; withdrawals have no fuel carve). The FuelToggle that

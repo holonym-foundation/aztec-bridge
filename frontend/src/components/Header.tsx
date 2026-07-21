@@ -46,6 +46,7 @@ if (typeof window !== 'undefined') {
     'ph:list',
     'ph:x',
     'ph:book-open',
+    'ph:gas-pump',
     'ph:link-simple',
     'ph:check',
     'ph:warning-circle',
@@ -1195,6 +1196,18 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       >
         <Icon icon="ph:book-open" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
         Docs
+      </Link>
+      {/* Direct, always-available entry to the Fee Juice screen — previously only
+          reachable by failing a claim (#146). Same pattern/tone as the sibling
+          links; shared by the desktop nav and the mobile panel so the label stays
+          visible in both. whitespace-nowrap keeps it from wrapping the nav row. */}
+      <Link
+        href="/fee-juice"
+        onClick={() => setMobileMenuOpen(false)}
+        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+      >
+        <Icon icon="ph:gas-pump" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
+        Fee Juice
       </Link>
     </>
   )

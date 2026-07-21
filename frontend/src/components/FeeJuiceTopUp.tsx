@@ -23,17 +23,21 @@ const USD_PRESETS = [1, 5, 10]
 /**
  * Recommended top-up spend for the "auto" convenience.
  *
- * Mirrors FuelToggle's `useRecommendedFuelAmount` but without a bridge-fraction
- * cap (a standalone top-up has no bridge to size against). We probe the real V4
- * pool for its FeeJuice-per-token rate — off mainnet the FJ price feed and the
- * pool diverge, so price-based sizing is wrong — then size the spend to cover the
- * L2 claim fee with headroom. The live sufficiency check still validates the
- * result before the user can spend.
+ * Sizes the spend to cover the SHORTFALL between the L2 claim fee and the FJ the
+ * user already holds — not the full claim fee. Public fuel claims into the
+ * account's public FJ balance, so an existing balance offsets what must be
+ * bridged. Private fuel (BridgedFPC) self-funds its own landing claim
+ * (mint_and_pay_fee asserts the fresh amount ≥ gas), so a private top-up must
+ * still cover the whole claim — but if the user already holds enough, no top-up
+ * is recommended at all. We probe the real V4 pool for its FeeJuice-per-token
+ * rate (off mainnet the FJ price feed and the pool diverge, so price-based
+ * sizing is wrong), then size the spend with headroom.
  */
 function useRecommendedTopUp(
   enabled: boolean,
   fuelType: 'public' | 'private',
   claimFeeLimit: bigint | undefined,
+  existingFj: number,
   tokenAddress: string,
   tokenDecimals: number,
   tokenSymbol: string,
@@ -47,7 +51,13 @@ function useRecommendedTopUp(
     let cancelled = false
     const timeout = setTimeout(async () => {
       try {
-        const requiredFj = Number(claimFeeLimit) / 1e18
+        const needFj = Number(claimFeeLimit) / 1e18
+        // Existing FJ already covers the claim → nothing to bridge.
+        if (existingFj >= needFj) return
+        // Public fuel: only bridge the shortfall (existing + claimed pay together).
+        // Private fuel: the fresh bridge self-funds its own landing claim, so size
+        // to the whole claim.
+        const requiredFj = fuelType === 'public' ? needFj - existingFj : needFj
         const fjUsd = getFeeJuicePriceUsd(prices)
         const tokenUsd = getTokenPriceUsd(tokenSymbol, prices)
         // Order-of-magnitude probe size (not the rate; the rate is measured on-chain).
@@ -78,7 +88,7 @@ function useRecommendedTopUp(
       cancelled = true
       clearTimeout(timeout)
     }
-  }, [enabled, fuelType, claimFeeLimit, tokenAddress, tokenDecimals, tokenSymbol, prices])
+  }, [enabled, fuelType, claimFeeLimit, existingFj, tokenAddress, tokenDecimals, tokenSymbol, prices])
 
   return recommended
 }
@@ -106,6 +116,10 @@ function QuoteSkeleton() {
 
 interface FeeJuiceTopUpProps {
   isPrivacyModeEnabled?: boolean
+  /** Public L2 Fee Juice balance (pays public claims; string like "10.15"). */
+  feeJuiceBalance?: string
+  /** BridgedFPC balance — the applicable balance in privacy mode. */
+  privateFeeJuiceBalance?: string
   /** Called with the L2 tx hash once the top-up completes and FJ lands on L2. */
   onSuccess?: (l2TxHash?: string) => void
 }
@@ -119,7 +133,12 @@ interface FeeJuiceTopUpProps {
  * fee. Privacy mode forces private (BridgedFPC) fuel so the topped-up FJ stays
  * anonymous — same enforcement as every other fuel path.
  */
-const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({ isPrivacyModeEnabled = false, onSuccess }) => {
+const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
+  isPrivacyModeEnabled = false,
+  feeJuiceBalance,
+  privateFeeJuiceBalance,
+  onSuccess,
+}) => {
   const hasBridgedFpc = !!BRIDGED_FPC_ADDRESS
   const { isWaapConnected, isAztecConnected } = useWalletStore()
 
@@ -139,7 +158,28 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({ isPrivacyModeEnabled = fa
   const fuelAmount = deriveFuelAmount(spendAmount, fundingDecimals)
 
   const { fjOutput, loading: quoteLoading, error: quoteError } = useTopUpQuote(fuelAmount, fundingAddress, fundingDecimals)
-  const { sufficient, feeLimitFj, loading: sufficiencyLoading } = useTopUpSufficiency(fjOutput, fuelType)
+  const { feeLimitFj, loading: sufficiencyLoading } = useTopUpSufficiency(fjOutput, fuelType)
+
+  // The FJ that pays an L2 claim comes from the user's ACCOUNT balance — public
+  // FJ for public fuel, BridgedFPC balance for private fuel — so the existing
+  // balance counts toward "do I have enough". For public fuel the freshly
+  // claimed FJ lands in that same public balance, so existing + swap pay
+  // together. For private fuel the fresh bridge self-funds its own landing
+  // claim, so the swap alone must clear the claim (existing private balance
+  // still means no top-up is needed if it already covers the claim).
+  const applicableBalanceStr = fuelType === 'private' ? privateFeeJuiceBalance : feeJuiceBalance
+  const existingFj = applicableBalanceStr != null && applicableBalanceStr !== '--' ? Number(applicableBalanceStr) : 0
+  const needFj = claimFeeLimit != null ? Number(claimFeeLimit) / 1e18 : null
+  const swapFj = fjOutput != null ? Number(fjOutput) / 1e18 : null
+  const alreadyEnough = needFj != null && existingFj >= needFj
+  const effectiveSufficient: boolean | null =
+    alreadyEnough
+      ? true
+      : needFj == null || swapFj == null
+        ? null
+        : fuelType === 'public'
+          ? existingFj + swapFj >= needFj
+          : swapFj >= needFj
 
   const topUp = useL1TopUpFeeJuice((l2TxHash) => {
     setSpendAmount('')
@@ -150,6 +190,7 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({ isPrivacyModeEnabled = fa
     canTopUp,
     fuelType,
     claimFeeLimit,
+    existingFj,
     fundingAddress,
     fundingDecimals,
     fundingSymbol,
@@ -166,7 +207,7 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({ isPrivacyModeEnabled = fa
     fjOutput === null ||
     !!quoteError ||
     sufficiencyLoading ||
-    sufficient === false ||
+    effectiveSufficient === false ||
     topUp.isPending
 
   const spend = (amount: string) => {
@@ -205,113 +246,121 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({ isPrivacyModeEnabled = fa
         </p>
       ) : (
         <>
-          <p className="text-12 leading-[16px] text-[#737373]">
-            Buy Fee Juice with {fundingSymbol} on Ethereum and bridge it to Aztec. Almost all of it converts to Fee
-            Juice; a negligible remainder lands on L2 as c{fundingSymbol}.
+          <p className="text-11 leading-[15px] text-[#737373]">
+            Buy with {fundingSymbol} on Ethereum, bridged to Aztec.
+            {isPrivacyModeEnabled && (
+              <span
+                className="ml-1 inline-flex items-center gap-0.5 font-medium text-[#81133B]"
+                title="Privacy mode routes the top-up through private (BridgedFPC) fuel so your claim stays anonymous."
+              >
+                <Icon icon="ph:lock-key-fill" width={11} height={11} />
+                Private
+              </span>
+            )}
           </p>
-
-          {isPrivacyModeEnabled && (
-            <div className="flex items-start gap-1.5 rounded-[6px] bg-white/60 px-2 py-1.5">
-              <Icon icon="ph:lock-key-fill" width={12} height={12} className="mt-0.5 flex-shrink-0 text-[#81133B]" />
-              <p className="text-11 leading-[15px] text-[#737373]">
-                <span className="font-semibold text-[#81133B]">Private Fee Juice.</span> Privacy mode routes the top-up
-                through private (BridgedFPC) fuel so your claim stays anonymous.
-              </p>
-            </div>
-          )}
 
           {pricesError && (
             <p className="text-11 text-amber-600">Live prices unavailable — using fallback prices</p>
           )}
 
-          {/* One-tap auto: recommended amount + immediate top-up (single click, never silent). */}
-          <button
-            type="button"
-            onClick={handleAuto}
-            disabled={!autoReady}
-            className="w-full flex items-center justify-center gap-1.5 rounded-md border border-[#17235E]/40 bg-[#E5EFFF] px-3 py-2 text-12 font-semibold text-[#17235E] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Icon icon="ph:magic-wand-fill" width={13} height={13} />
-            {topUp.isPending
-              ? 'Topping up…'
-              : recommended
-                ? `Auto top up ~${recommended} ${fundingSymbol} (recommended)`
-                : 'Calculating recommended amount…'}
-          </button>
+          {alreadyEnough ? (
+            <p className="flex items-center gap-1 text-12 font-medium text-[#17235E]">
+              <Icon icon="ph:check-circle-fill" width={14} height={14} />
+              You have enough Fee Juice — no top-up needed.
+            </p>
+          ) : (
+            <>
+              {/* One-tap auto: recommended amount + immediate top-up (single click, never silent). */}
+              <button
+                type="button"
+                onClick={handleAuto}
+                disabled={!autoReady}
+                className="w-full flex items-center justify-center gap-1.5 rounded-md border border-[#17235E]/40 bg-[#17235E]/[0.08] px-3 py-2 text-12 font-semibold text-[#17235E] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Icon icon="ph:magic-wand-fill" width={13} height={13} />
+                {topUp.isPending
+                  ? 'Topping up…'
+                  : recommended
+                    ? `Auto top up ~${recommended} ${fundingSymbol}`
+                    : 'Calculating…'}
+              </button>
 
-          <div className="flex items-center gap-1.5 max-w-full">
-            <input
-              type="text"
-              inputMode="decimal"
-              placeholder={`Amount in ${fundingSymbol}`}
-              value={spendAmount}
-              disabled={topUp.isPending}
-              onChange={(e) => {
-                const v = e.target.value
-                if (v === '' || !isNaN(Number(v))) setSpendAmount(v)
-              }}
-              className="flex-1 min-w-0 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#81133B] disabled:opacity-60"
-            />
-            {USD_PRESETS.map((usd) => {
-              const tokenEquiv = usdToTokenAmount(usd, fundingSymbol, prices)
-              return (
-                <button
-                  key={usd}
-                  type="button"
+              <div className="flex items-center gap-1.5 max-w-full">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={`Amount in ${fundingSymbol}`}
+                  value={spendAmount}
                   disabled={topUp.isPending}
-                  onClick={() => setSpendAmount(tokenEquiv)}
-                  title={`${tokenEquiv} ${fundingSymbol}`}
-                  className={`shrink-0 px-1.5 py-1 text-xs rounded border transition-colors disabled:opacity-60 ${
-                    spendAmount === tokenEquiv
-                      ? 'border-[#81133B] bg-[#F9EEF3] text-[#81133B]'
-                      : 'border-gray-300 text-gray-600 hover:border-gray-400'
+                  onChange={(e) => {
+                    const v = e.target.value
+                    if (v === '' || !isNaN(Number(v))) setSpendAmount(v)
+                  }}
+                  className="flex-1 min-w-0 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#81133B] disabled:opacity-60"
+                />
+                {USD_PRESETS.map((usd) => {
+                  const tokenEquiv = usdToTokenAmount(usd, fundingSymbol, prices)
+                  return (
+                    <button
+                      key={usd}
+                      type="button"
+                      disabled={topUp.isPending}
+                      onClick={() => setSpendAmount(tokenEquiv)}
+                      title={`${tokenEquiv} ${fundingSymbol}`}
+                      className={`shrink-0 px-1.5 py-1 text-xs rounded border transition-colors disabled:opacity-60 ${
+                        spendAmount === tokenEquiv
+                          ? 'border-[#81133B] bg-[#F9EEF3] text-[#81133B]'
+                          : 'border-gray-300 text-gray-600 hover:border-gray-400'
+                      }`}
+                    >
+                      ${usd}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {amountValid && (quoteLoading || (fjOutput === null && !quoteError)) && <QuoteSkeleton />}
+              {amountValid && quoteError && <p className="text-11 text-red-500">{quoteError}</p>}
+              {amountValid && !quoteLoading && !quoteError && fjOutput !== null && !sufficiencyLoading && (
+                <p
+                  className={`text-11 leading-[15px] font-medium ${
+                    effectiveSufficient === false ? 'text-[#D92D20]' : 'text-[#17235E]'
                   }`}
                 >
-                  ${usd}
-                </button>
-              )
-            })}
-          </div>
-
-          {amountValid && (quoteLoading || (fjOutput === null && !quoteError)) && <QuoteSkeleton />}
-          {amountValid && quoteError && <p className="text-11 text-red-500">{quoteError}</p>}
-          {amountValid && !quoteLoading && !quoteError && fjOutput !== null && (
-            <div className="text-11 leading-[15px] text-latest-grey-700 space-y-0.5">
-              <p>
-                {spendAmount} {fundingSymbol} → <span className="font-semibold">~{formatFjAmount(fjOutput)} FJ</span>
-              </p>
-              {!sufficiencyLoading && sufficient === false && (
-                <p className="text-[#D92D20] font-medium">
-                  Not enough: ~{formatFjAmount(fjOutput)} FJ from this swap but ~{feeLimitFj} FJ needed for the L2 claim.
-                  Increase the amount.
+                  {effectiveSufficient === false
+                    ? recommended
+                      ? `Not enough yet — add ~${recommended} ${fundingSymbol} to cover your claim.`
+                      : 'Not enough yet — increase the amount.'
+                    : `Covers your claim (~${feeLimitFj ?? claimFeeFj} FJ needed).`}
                 </p>
               )}
-              {!sufficiencyLoading && sufficient === true && (
-                <p className="text-[#17235E]">Covers the L2 claim (~{feeLimitFj} FJ needed).</p>
-              )}
-            </div>
+            </>
           )}
 
-          {!walletsReady && <p className="text-11 text-[#737373]">Connect both wallets to buy Fee Juice.</p>}
+          {!walletsReady && !alreadyEnough && (
+            <p className="text-11 text-[#737373]">Connect both wallets to buy Fee Juice.</p>
+          )}
 
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={confirmDisabled}
-            className="w-full flex items-center justify-center gap-1.5 rounded-md bg-[#81133B] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {topUp.isPending ? (
-              <>
-                <Icon icon="ph:spinner-gap-bold" width={13} height={13} className="animate-spin" />
-                Buying Fee Juice…
-              </>
-            ) : (
-              <>
-                <Icon icon="ph:lightning-fill" width={13} height={13} />
-                Buy &amp; bridge Fee Juice
-              </>
-            )}
-          </button>
+          {!alreadyEnough && (
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={confirmDisabled}
+              className="w-full flex items-center justify-center gap-1.5 rounded-md bg-[#81133B] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {topUp.isPending ? (
+                <>
+                  <Icon icon="ph:spinner-gap-bold" width={13} height={13} className="animate-spin" />
+                  Buying Fee Juice…
+                </>
+              ) : (
+                <>
+                  <Icon icon="ph:lightning-fill" width={13} height={13} />
+                  Buy &amp; bridge Fee Juice
+                </>
+              )}
+            </button>
+          )}
 
           {topUp.isPending && (
             <p className="text-11 leading-[15px] text-[#737373]">

@@ -15,6 +15,7 @@ import { silkUrl } from '@/config/l1.config'
 import { L1_CHAIN_ID } from '@/config'
 import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
+import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 
 /** Delay before auto-starting Aztec wallet discovery after WaaP connects. */
 const AZTEC_AUTO_CONNECT_DELAY_MS = 2000
@@ -51,12 +52,12 @@ const GLASS_PILL_HOVER =
   'hover:bg-white hover:shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
 const GLASS_PILL_ACTIVE = 'bg-white shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
 
-// TODO(real-data): Humanity Score + Points have no live source wired up in
-// this app yet (no scoring/points API, hook, or store exists today). These
-// are stubbed placeholder values exposed as optional Header props so a
-// future pass can pass real numbers (or wire a hook) without touching the
-// nav layout below.
-const PLACEHOLDER_HUMANITY_SCORE = 92
+// Humanity Score is now wired to the real proof-of-personhood result via
+// useAttestationCheck (POCH first, Passport fallback — see HumanityPointsChip
+// below). Points still has no live source in this app (no points API, hook,
+// or store exists today) — kept as a stubbed placeholder exposed as an
+// optional Header prop so a future pass can wire it without touching the nav
+// layout below.
 const PLACEHOLDER_POINTS = 1240
 
 /**
@@ -103,6 +104,14 @@ type WalletDisplayProps = {
   onSelectAccount?: (account: { alias: string; address: string }) => void
   walletType: WalletType
   loginMethod?: string | null
+  /**
+   * True when this row lives inside the merged wallet-cluster pill (see
+   * walletCluster in Header) — drops its own rounded/border/shadow/blur so
+   * the row reads as a flat strip and the *cluster's* single outer pill
+   * supplies the glass-pill material, instead of stacking a second
+   * independently-rounded pill on top of it.
+   */
+  flat?: boolean
 }
 
 function truncateAddr(addr: string): string {
@@ -127,6 +136,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
   onSelectAccount,
   walletType,
   loginMethod,
+  flat,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -183,7 +193,13 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
     <div className="relative w-full" ref={dropdownRef}>
       <button
         type="button"
-        className={`flex items-center gap-1.5 pr-2 pl-1 py-1 h-8 w-full rounded-full ${GLASS_PILL} ${GLASS_PILL_HOVER} ${showDropdown ? GLASS_PILL_ACTIVE : ''} cursor-pointer`}
+        className={
+          flat
+            ? `flex items-center gap-1.5 pr-2 pl-2.5 py-1 h-8 w-full cursor-pointer transition-colors duration-200 ${
+                showDropdown ? 'bg-black/[0.05]' : 'hover:bg-black/[0.04]'
+              }`
+            : `flex items-center gap-1.5 pr-2 pl-1 py-1 h-8 w-full rounded-full ${GLASS_PILL} ${GLASS_PILL_HOVER} ${showDropdown ? GLASS_PILL_ACTIVE : ''} cursor-pointer`
+        }
         onClick={handleClick}
         aria-haspopup="true"
         aria-expanded={showDropdown}
@@ -273,23 +289,31 @@ interface WalletConnectPillProps {
   onClick: () => void
   disabled?: boolean
   title?: string
+  /** See WalletDisplayProps.flat — same "flat row inside the merged cluster pill" treatment. */
+  flat?: boolean
 }
 
 /**
- * One wallet pill in the NOT-CONNECTED state, used inside the stacked
+ * One wallet pill in the NOT-CONNECTED state, used inside the merged
  * cluster once the *other* chain has already connected (see walletCluster
  * in Header below). Compact — same footprint as the connected WalletDisplay
- * pill so the stack doesn't jump in width when a chain connects/disconnects.
+ * pill so the cluster doesn't jump in width when a chain connects/disconnects.
  */
-const WalletConnectPill: React.FC<WalletConnectPillProps> = ({ icon, label, onClick, disabled, title }) => (
+const WalletConnectPill: React.FC<WalletConnectPillProps> = ({ icon, label, onClick, disabled, title, flat }) => (
   <button
     type="button"
     onClick={onClick}
     disabled={disabled}
     title={title}
-    className={`flex items-center gap-1.5 pr-2.5 pl-1 py-1 h-8 w-full rounded-full ${GLASS_PILL} ${
-      disabled ? 'opacity-50 cursor-not-allowed' : `${GLASS_PILL_HOVER} cursor-pointer`
-    }`}
+    className={
+      flat
+        ? `flex items-center gap-1.5 pr-2.5 pl-2.5 py-1 h-8 w-full transition-colors duration-200 ${
+            disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/[0.04] cursor-pointer'
+          }`
+        : `flex items-center gap-1.5 pr-2.5 pl-1 py-1 h-8 w-full rounded-full ${GLASS_PILL} ${
+            disabled ? 'opacity-50 cursor-not-allowed' : `${GLASS_PILL_HOVER} cursor-pointer`
+          }`
+    }
   >
     <span className="flex w-6 h-6 items-center justify-center rounded-full bg-latest-grey-300 flex-shrink-0">
       <Image src={icon} alt="" width={15} height={15} />
@@ -328,7 +352,12 @@ const ConnectWalletPill: React.FC<{ onClick: () => void; connecting?: boolean }>
 )
 
 interface HumanityPointsChipProps {
-  score: number
+  /** Real proof-of-personhood result from useAttestationCheck — 'poch' | 'passport' | null. */
+  method: 'poch' | 'passport' | null
+  passportScore?: number
+  passportThreshold?: number
+  /** True while the attestation query is in flight (or hasn't resolved yet). */
+  isFetching: boolean
   points: number
 }
 
@@ -336,8 +365,23 @@ interface HumanityPointsChipProps {
  * Collapsible Humanity Score + Points indicator. Collapsed = compact chip
  * (score · points); click/tap expands a small panel with the score bar and
  * points detail. Closes on click-outside or Escape.
+ *
+ * Humanity side reflects the real proof-of-personhood result from
+ * useAttestationCheck (see Header below):
+ *  - method === 'passport' → real numeric passportScore (with the
+ *    passportScore/passportThreshold ratio detailed in the panel).
+ *  - method === 'poch' → Proof of Clean Hands has no numeric score, so this
+ *    shows a "Verified" state instead of a fabricated number.
+ *  - no data yet / still loading / method === null / wallets not connected →
+ *    a dimmed neutral "—", never a fake score.
  */
-const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({ score, points }) => {
+const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
+  method,
+  passportScore,
+  passportThreshold,
+  isFetching,
+  points,
+}) => {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -356,6 +400,16 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({ score, points }
     }
   }, [])
 
+  const isPassport = method === 'passport' && typeof passportScore === 'number'
+  const isPoch = method === 'poch'
+  const isVerified = isPassport || isPoch
+  const scoreLabel = isPassport ? String(passportScore) : isPoch ? 'Verified' : '—'
+  const scorePct = isPassport
+    ? Math.min(100, Math.max(0, (passportScore! / (passportThreshold || passportScore!)) * 100))
+    : isPoch
+      ? 100
+      : 0
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -365,8 +419,8 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({ score, points }
         aria-expanded={open}
         className={`flex items-center gap-1.5 h-9 px-3 rounded-full ${GLASS_PILL} ${GLASS_PILL_HOVER} ${open ? GLASS_PILL_ACTIVE : ''} cursor-pointer`}
       >
-        <VerifiedIcon className="w-3.5 h-3.5 text-[#81133B]" />
-        <span className="text-xs font-semibold text-[#81133B]">{score}</span>
+        <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? 'text-[#81133B]' : 'text-gray-300'}`} />
+        <span className={`text-xs font-semibold ${isVerified ? 'text-[#81133B]' : 'text-gray-400'}`}>{scoreLabel}</span>
         <span className="w-px h-3.5 bg-[#E5E5E5]" aria-hidden="true" />
         <HumanPointsIcon className="w-3.5 h-3.5 text-[#17235E]" />
         <span className="text-xs font-semibold text-[#17235E]">{points.toLocaleString()}</span>
@@ -382,15 +436,31 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({ score, points }
         <div className="absolute right-0 mt-2 z-50 w-[220px] rounded-2xl border border-[#E5E5E5]/80 bg-white/95 backdrop-blur-md shadow-lg p-4 flex flex-col gap-3">
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-medium text-gray-500">Humanity Score</span>
-              <span className="text-sm font-semibold text-[#81133B]">{score}/100</span>
+              <span className="text-xs font-medium text-gray-500">Humanity</span>
+              <span className={`text-sm font-semibold ${isVerified ? 'text-[#81133B]' : 'text-gray-400'}`}>
+                {isPassport
+                  ? `${passportScore}${passportThreshold ? `/${passportThreshold}` : ''}`
+                  : isPoch
+                    ? 'Verified'
+                    : isFetching
+                      ? 'Checking…'
+                      : 'Not verified'}
+              </span>
             </div>
             <div className="w-full h-1.5 rounded-full bg-[#F5E1EA] overflow-hidden">
               <div
-                className="h-full rounded-full bg-[#81133B] transition-[width] duration-300"
-                style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
+                className={`h-full rounded-full transition-[width] duration-300 ${isVerified ? 'bg-[#81133B]' : 'bg-gray-300'}`}
+                style={{ width: `${scorePct}%` }}
               />
             </div>
+            {isPoch && (
+              <p className="text-[11px] text-gray-400 mt-1.5">Verified via Proof of Clean Hands — no numeric score needed.</p>
+            )}
+            {!isVerified && (
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                {isFetching ? 'Checking eligibility…' : 'Connect both wallets to verify personhood.'}
+              </p>
+            )}
           </div>
           <div className="flex items-center justify-between pt-1 border-t border-[#E5E5E5]">
             <span className="text-xs font-medium text-gray-500 pt-1">Points</span>
@@ -404,17 +474,18 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({ score, points }
 
 interface HeaderProps {
   credentials?: React.ReactNode
-  /** Live Humanity Score (0-100). Defaults to a stubbed placeholder — see PLACEHOLDER_HUMANITY_SCORE. */
-  humanityScore?: number
   /** Live points balance. Defaults to a stubbed placeholder — see PLACEHOLDER_POINTS. */
   points?: number
 }
 
-const Header: React.FC<HeaderProps> = ({
-  credentials,
-  humanityScore = PLACEHOLDER_HUMANITY_SCORE,
-  points = PLACEHOLDER_POINTS,
-}) => {
+const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINTS }) => {
+  // Real proof-of-personhood result (POCH first, Passport fallback). Called
+  // unconditionally per Rules of Hooks — the hook self-gates via its own
+  // `enabled` (both wallets connected + address + auth token present), so
+  // before that it just sits at isFetching/no-data and the chip renders its
+  // neutral state.
+  const { data: attestation, isFetching: isAttestationFetching } = useAttestationCheck()
+
   const {
     waapAddress,
     isWaapConnected,
@@ -586,7 +657,17 @@ const Header: React.FC<HeaderProps> = ({
   const walletCluster = !isWaapConnected && !isAztecConnected ? (
     <ConnectWalletPill onClick={handleConnectWallet} connecting={isL1Connecting} />
   ) : (
-    <div className="flex flex-col gap-1 w-[96px] sm:w-[156px] flex-shrink-0">
+    // Merged wallet cluster — ONE rounded glass-pill container (the
+    // GLASS_PILL material lives here, once) holding the ETH row and Aztec
+    // row flush against each other, separated only by a 1px divider
+    // (`divide-y`). Each row renders `flat` (see WalletDisplay/
+    // WalletConnectPill above) so it has no independent rounded
+    // border/shadow/blur of its own — previously each row carried its own
+    // full GLASS_PILL treatment, which read as two stacked pills rather
+    // than one unified control.
+    <div
+      className={`flex flex-col w-[96px] sm:w-[156px] flex-shrink-0 rounded-[20px] divide-y divide-[#E5E5E5]/70 ${GLASS_PILL} ${GLASS_PILL_HOVER}`}
+    >
       {isWaapConnected ? (
         <WalletDisplay
           address={waapAddress || undefined}
@@ -597,6 +678,7 @@ const Header: React.FC<HeaderProps> = ({
           onDisconnect={disconnectWaapWallet}
           walletType={WalletType.WAAP}
           loginMethod={loginMethod}
+          flat
         />
       ) : (
         <WalletConnectPill
@@ -605,6 +687,7 @@ const Header: React.FC<HeaderProps> = ({
           onClick={handleConnectWallet}
           disabled={isL1Connecting}
           title="Connect Ethereum (L1) wallet"
+          flat
         />
       )}
 
@@ -618,6 +701,7 @@ const Header: React.FC<HeaderProps> = ({
           availableAccounts={availableAccounts}
           onSelectAccount={switchAztecAccount}
           walletType={WalletType.AZTEC}
+          flat
         />
       ) : (
         <WalletConnectPill
@@ -626,6 +710,7 @@ const Header: React.FC<HeaderProps> = ({
           onClick={isWaapConnected ? handleConnectAztecOnly : handleConnectWallet}
           disabled={isL2Connecting}
           title="Connect Aztec (L2) wallet"
+          flat
         />
       )}
     </div>
@@ -689,7 +774,13 @@ const Header: React.FC<HeaderProps> = ({
             widths, Privacy Mode + the wallet cluster never collapse. */}
         <div className="flex items-center gap-1.5 sm:gap-3 ml-auto min-w-0">
           <div className="hidden sm:block flex-shrink-0">
-            <HumanityPointsChip score={humanityScore} points={points} />
+            <HumanityPointsChip
+              method={attestation?.method ?? null}
+              passportScore={attestation?.passportScore}
+              passportThreshold={attestation?.passportThreshold}
+              isFetching={isAttestationFetching}
+              points={points}
+            />
           </div>
 
           {privacyToggle}

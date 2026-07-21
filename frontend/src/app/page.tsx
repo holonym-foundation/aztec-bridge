@@ -458,7 +458,13 @@ export default function Home() {
 
   return (
     <>
-      <RootStyle aside={<BridgeStepsRail />}>
+      <RootStyle
+        aside={<BridgeStepsRail />}
+        // No-scroll budget: cap the card so it never grows the RootStyle region past
+        // its 90vh floor (min-h-[650px] would otherwise push card+py-10 over 90vh on
+        // short laptops). Content beyond the cap scrolls inside the card, never the page.
+        className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden"
+      >
         {/* Maintenance Overlay - blocks all interactions when enabled */}
         {MAINTENANCE_MODE && <MaintenanceOverlay title={MAINTENANCE_TITLE} message={MAINTENANCE_MESSAGE} />}
         <AztecWalletConnectionModals />
@@ -495,7 +501,7 @@ export default function Home() {
         {showVerification && <VerificationStep onClose={() => setShowVerification(false)} />}
 
         <div
-          className={`grid grid-rows-[max-content_1fr_max-content] grid-cols-[minmax(0,1fr)] w-full max-h-[calc(100vh-96px)] overflow-hidden ${
+          className={`grid grid-rows-[max-content_1fr_max-content] grid-cols-[minmax(0,1fr)] w-full h-full max-h-[calc(90vh-5rem)] overflow-hidden ${
             MAINTENANCE_MODE ? 'pointer-events-none' : ''
           }`}
         >

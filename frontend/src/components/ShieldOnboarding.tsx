@@ -21,7 +21,7 @@ type Screen = {
 const SCREENS: Screen[] = [
   {
     eyebrow: 'Private bridge\nEthereum ⇄ Aztec',
-    title: 'Private transactions have arrived for Ethereum funds',
+    title: 'Private Transactions for Ethereum Have Arrived',
     body: (
       <p>Move your funds between Ethereum and Aztec with privacy.</p>
     ),
@@ -130,11 +130,14 @@ const CX_CORE = 30
 const CX_STEPS = 48
 const CX_SPIRAL_TURNS = 3 // integer turns so the point ends exactly where it began (seamless loop)
 
+// `dashMini` is a coarser dash pattern for the minimized mark: literally scaling the hero's
+// 1.4/320-viewBox stroke down to a ~60px mark would put the ring under a physical pixel wide
+// (invisible). Small marks need their linework re-weighted, not just shrunk, to stay legible.
 const CX_RINGS = [
-  { r: 148, dash: '1.5 15', duration: 46, dir: 1 },
-  { r: 114, dash: '1.5 12', duration: 34, dir: -1 },
-  { r: 80, dash: '1.5 10', duration: 26, dir: 1 },
-  { r: 48, dash: '1.5 8', duration: 19, dir: -1 },
+  { r: 148, dash: '1.5 15', dashMini: '7 22', duration: 46, dir: 1 },
+  { r: 114, dash: '1.5 12', dashMini: '6 18', duration: 34, dir: -1 },
+  { r: 80, dash: '1.5 10', dashMini: '5 15', duration: 26, dir: 1 },
+  { r: 48, dash: '1.5 8', dashMini: '4 12', duration: 19, dir: -1 },
 ]
 
 function cxPoint(radius: number, angleDeg: number) {
@@ -168,9 +171,13 @@ const CX_X = CX_SPIRAL.map((p) => p.x)
 const CX_Y = CX_SPIRAL.map((p) => p.y)
 const CX_FILL = CX_SPIRAL.map((p) => p.fill)
 const CX_OPACITY = CX_SPIRAL.map((p) => p.opacity)
+const CX_OPACITY_MINI = CX_OPACITY.map((o) => o * 0.72)
 const CX_GLOW = CX_SPIRAL.map((p) => p.glow)
 
-function CryptexVisual({ still }: { still: boolean }) {
+// `mini` dials back stroke/point opacity and drops the blurred outer glow point (its blur
+// radius is a fixed px value that dominates at small sizes) so the mark reads as a subtle,
+// quiet echo once it's minimized into the eyebrow rather than competing with the copy.
+function CryptexVisual({ still, mini = false }: { still: boolean; mini?: boolean }) {
   return (
     <svg className="ob-cryptex-svg" viewBox={`0 0 ${CX_SIZE} ${CX_SIZE}`} aria-hidden="true">
       <defs>
@@ -191,9 +198,9 @@ function CryptexVisual({ still }: { still: boolean }) {
             r={ring.r}
             fill="none"
             stroke={i === 0 ? '#e79cbe' : i === CX_RINGS.length - 1 ? '#5a1f36' : '#c96f97'}
-            strokeWidth={1.4}
-            strokeDasharray={ring.dash}
-            opacity={0.5}
+            strokeWidth={mini ? 6 : 1.4}
+            strokeDasharray={mini ? ring.dashMini : ring.dash}
+            opacity={mini ? 0.5 : 0.5}
           />
         ) : (
           <motion.g
@@ -207,11 +214,11 @@ function CryptexVisual({ still }: { still: boolean }) {
               cy={CX_CENTER}
               r={ring.r}
               fill="none"
-              strokeWidth={1.4}
-              strokeDasharray={ring.dash}
+              strokeWidth={mini ? 6 : 1.4}
+              strokeDasharray={mini ? ring.dashMini : ring.dash}
               animate={{
                 stroke: ['#f2b7d3', '#5a1f36', '#f2b7d3'],
-                opacity: [0.28, 0.72, 0.28],
+                opacity: mini ? [0.2, 0.5, 0.2] : [0.28, 0.72, 0.28],
               }}
               transition={{
                 duration: 9,
@@ -226,15 +233,17 @@ function CryptexVisual({ still }: { still: boolean }) {
 
       {!still && (
         <>
+          {!mini && (
+            <motion.circle
+              r={11}
+              animate={{ cx: CX_X, cy: CX_Y, fill: CX_FILL, opacity: CX_GLOW }}
+              transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
+              style={{ filter: 'blur(5px)' }}
+            />
+          )}
           <motion.circle
-            r={11}
-            animate={{ cx: CX_X, cy: CX_Y, fill: CX_FILL, opacity: CX_GLOW }}
-            transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
-            style={{ filter: 'blur(5px)' }}
-          />
-          <motion.circle
-            r={4}
-            animate={{ cx: CX_X, cy: CX_Y, fill: CX_FILL, opacity: CX_OPACITY }}
+            r={mini ? 9 : 4}
+            animate={{ cx: CX_X, cy: CX_Y, fill: CX_FILL, opacity: mini ? CX_OPACITY_MINI : CX_OPACITY }}
             transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
           />
         </>
@@ -242,25 +251,49 @@ function CryptexVisual({ still }: { still: boolean }) {
 
       {still && (
         <>
-          <circle cx={cxPoint(CX_OUTER, 40).x} cy={cxPoint(CX_OUTER, 40).y} r={4.5} fill="#f462a6" />
-          <circle cx={cxPoint(CX_CORE + 4, 220).x} cy={cxPoint(CX_CORE + 4, 220).y} r={3.5} fill="#3d0e21" opacity={0.7} />
+          <circle cx={cxPoint(CX_OUTER, 40).x} cy={cxPoint(CX_OUTER, 40).y} r={mini ? 9 : 4.5} fill="#f462a6" />
+          <circle cx={cxPoint(CX_CORE + 4, 220).x} cy={cxPoint(CX_CORE + 4, 220).y} r={mini ? 7 : 3.5} fill="#3d0e21" opacity={0.7} />
         </>
       )}
     </svg>
   )
 }
 
-/* A quiet echo of the cryptex mark — a faint dashed ring behind the glyph, no motion. */
-function StaticGlyph({ kind }: { kind: 'shield' | 'identity' | 'zk' }) {
-  const label = kind === 'shield' ? 'Private on Aztec' : kind === 'identity' ? 'Human · verified' : 'Zero knowledge'
+// Shared layoutId used only within the multi-screen flow, so Framer Motion morphs the same
+// element between its hero size (screen 0) and its mini size (screens 1-3) instead of
+// cross-fading two different nodes — this is what produces the "minimize into the eyebrow"
+// motion. The splash (`shared` unset) always shows the plain hero, no shared transition needed.
+const CRYPTEX_LAYOUT_ID = 'ob-cryptex-shell'
+
+function CryptexMark({ reduce, mini = false, shared = false }: { reduce: boolean; mini?: boolean; shared?: boolean }) {
+  const shellClass = `ob-cryptex-shell${mini ? ' ob-cryptex-shell-mini' : ''}`
+
+  if (reduce) {
+    return (
+      <div className={shellClass}>
+        <CryptexVisual still mini={mini} />
+      </div>
+    )
+  }
+
   return (
-    <div className={`ob-glyph ob-glyph-${kind}`}>
-      <svg className="ob-glyph-ring" viewBox="0 0 120 120" aria-hidden="true">
-        <circle cx="60" cy="60" r="52" fill="none" stroke="#e79cbe" strokeWidth="1.2" strokeDasharray="1.5 11" opacity="0.55" />
-      </svg>
-      <img src="/assets/svg/shield-symbol-maroon.svg" alt="" width={64} height={80} />
-      <span>{label}</span>
-    </div>
+    <motion.div
+      layout
+      layoutId={shared ? CRYPTEX_LAYOUT_ID : undefined}
+      className={shellClass}
+      transition={{ layout: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } }}
+    >
+      <CryptexVisual still={false} mini={mini} />
+      {!mini && (
+        <div className="ob-epicenter" aria-hidden="true">
+          <MeshGradient
+            colors={['#f462a6', '#b23a72', '#4d051f', '#81133b']}
+            speed={0.32}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+          />
+        </div>
+      )}
+    </motion.div>
   )
 }
 
@@ -456,13 +489,8 @@ export default function ShieldOnboarding() {
                 transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
               >
                 {screen.visual === 'cryptex' ? (
-                  <div className="ob-cryptex-frame">
-                    <CryptexVisual still={reduce} />
-                    {!reduce && (
-                      <div className="ob-epicenter" aria-hidden="true">
-                        <MeshGradient colors={['#f462a6', '#b23a72', '#4d051f', '#81133b']} speed={0.32} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
-                      </div>
-                    )}
+                  <div className="ob-cryptex-hero">
+                    <CryptexMark reduce={reduce} shared />
                     <div className="ob-headline">
                       <p className="ob-eyebrow">{screen.eyebrow}</p>
                       <h1 className="ob-title">{screen.title}</h1>
@@ -471,7 +499,7 @@ export default function ShieldOnboarding() {
                 ) : (
                   <>
                     <div className="ob-visual">
-                      <StaticGlyph kind={screen.visual} />
+                      <CryptexMark reduce={reduce} mini shared />
                     </div>
                     <p className="ob-eyebrow">{screen.eyebrow}</p>
                     <h1 className={`ob-title ob-title-${screen.visual}`}>{screen.title}</h1>
@@ -511,13 +539,8 @@ export default function ShieldOnboarding() {
         <div className="ob-stage-inner">
           <div className="ob-card-region">
             <div className="ob-card">
-              <div className="ob-cryptex-frame">
-                <CryptexVisual still={reduce} />
-                {!reduce && (
-                  <div className="ob-epicenter" aria-hidden="true">
-                    <MeshGradient colors={['#f462a6', '#b23a72', '#4d051f', '#81133b']} speed={0.32} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
-                  </div>
-                )}
+              <div className="ob-cryptex-hero">
+                <CryptexMark reduce={reduce} />
                 <div className="ob-headline">
                   <p className="ob-eyebrow">{SCREENS[0].eyebrow}</p>
                   <h1 className="ob-title">{SCREENS[0].title}</h1>
@@ -618,7 +641,7 @@ export default function ShieldOnboarding() {
         .ob-card-region { position: relative; width: 100%; height: clamp(430px, 60vh, 540px); }
         .ob-card { position: absolute; inset: 0; width: 100%; text-align: center; display: flex;
           flex-direction: column; align-items: center; justify-content: center; }
-        .ob-visual { height: 168px; display: flex; align-items: center; justify-content: center; margin-bottom: 26px; width: 100%; }
+        .ob-visual { height: 72px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; width: 100%; }
         .ob-eyebrow { font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: ${BRAND};
           font-weight: 600; margin: 0 0 14px; white-space: pre-line; line-height: 1.7; }
         .ob-title { font-size: clamp(26px, 5vw, 40px); line-height: 1.08; letter-spacing: -0.02em; font-weight: 640;
@@ -675,8 +698,13 @@ export default function ShieldOnboarding() {
         /* cryptex hero — concentric dial rings framing the headline. max-height keeps the
            full-size mark from overflowing the fixed region on short viewports (it scales
            down with the region rather than being clipped or shrunk at its base size). */
-        .ob-cryptex-frame { position: relative; width: 100%; max-width: 500px; max-height: calc(100% - 40px);
+        .ob-cryptex-hero { position: relative; width: 100%; max-width: 500px; max-height: calc(100% - 40px);
           aspect-ratio: 1 / 1; margin: 4px auto 4px; display: flex; align-items: center; justify-content: center; }
+        /* The shared shell: fills the hero frame on screen 0, shrinks to a small fixed square
+           for the minimized mark on screens 1-3. Framer Motion's shared layoutId animates the
+           box between these two states as the user advances/goes back. */
+        .ob-cryptex-shell { position: absolute; inset: 0; }
+        .ob-cryptex-shell-mini { position: relative; inset: auto; width: 68px; height: 68px; }
         .ob-cryptex-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
         /* Amorphous epicenter glow: a real MeshGradient (shader) blob, blurred and radially
            masked so it reads as an organic ripple of light breathing behind the headline. */
@@ -687,13 +715,6 @@ export default function ShieldOnboarding() {
           mask: radial-gradient(circle, #000 22%, transparent 66%); }
         .ob-headline { position: relative; z-index: 1; padding: 0 28px; text-align: center; }
         .ob-headline .ob-title { max-width: 17ch; }
-        /* static glyphs */
-        .ob-glyph { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
-        .ob-glyph-ring { position: absolute; top: 50%; left: 50%; width: 132px; height: 132px;
-          transform: translate(-50%, -50%); z-index: 0; }
-        .ob-glyph img, .ob-glyph span { position: relative; z-index: 1; }
-        .ob-glyph span { font-size: 13px; color: ${BRAND}; font-weight: 600; letter-spacing: 0.02em; }
-        .ob-glyph img { filter: drop-shadow(0 8px 24px rgba(129,19,59,0.22)); }
         /* handoff splash */
         .ob-handoff { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center;
           background: radial-gradient(#FDE7F3, #ffffff); }
@@ -704,8 +725,9 @@ export default function ShieldOnboarding() {
           /* On mobile the cryptex is narrower, so a text-heavy screen (page 4) is tallest;
              size the region to fit it, page 1 then centers with room to spare. */
           .ob-card-region { height: clamp(420px, 66vh, 470px); }
-          .ob-visual { height: 140px; margin-bottom: 20px; }
-          .ob-cryptex-frame { max-width: 300px; }
+          .ob-visual { height: 62px; margin-bottom: 14px; }
+          .ob-cryptex-hero { max-width: 300px; }
+          .ob-cryptex-shell-mini { width: 58px; height: 58px; }
           .ob-headline { padding: 0 20px; }
           .ob-title { font-size: 27px; }
           .ob-title-zk { max-width: none; }

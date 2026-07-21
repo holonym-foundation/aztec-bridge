@@ -728,6 +728,28 @@ export interface PassportCheckResult {
   travelRuleRemainingUsd?: number
 }
 
+/**
+ * L1-only humanity eligibility result from GET /api/attestation/l1-eligibility.
+ *
+ * Unauthenticated, keyed solely on the supplied L1 address (no session, no L2
+ * binding). Runs the same POCH → Passport cascade + sanctions screen as the
+ * authenticated check routes. Deposit-cap / Travel-Rule fields are absent by
+ * design — those are per-user and require a session.
+ */
+export interface L1EligibilityResult {
+  address: string
+  eligible: boolean
+  method: 'poch' | 'passport' | null
+  reason?: string
+  /** True when the address matched a sanctions list (all other tiers skipped). */
+  sanctioned?: boolean
+  /** Present only when the Passport tier was evaluated (POCH not satisfied). */
+  passportScore?: number
+  passportThreshold?: number
+  /** Global Passport per-tx max in token base units (string; no per-user cap applied). */
+  passportMaxAmount?: string
+}
+
 // ─── L1 Token Balance Types ──────────────────────────────────────────
 
 /** Token balance response from Alchemy token balances API */

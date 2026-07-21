@@ -1,7 +1,9 @@
 'use client'
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { Icon } from '@iconify/react'
 import RootStyle from '@/components/RootStyle'
 import BridgeHeader from '@/components/BridgeHeader'
 import ActivityCard from '@/components/ActivityCard'
@@ -21,6 +23,8 @@ export default function ActivityPage() {
   const [resumingId, setResumingId] = useState<string | null>(null)
   const [sharingId, setSharingId] = useState<string | null>(null)
   const [shareLink, setShareLink] = useState<{ link: string; recipient: string } | null>(null)
+  const [page, setPage] = useState(0)
+  const prefersReducedMotion = useReducedMotion()
 
   const { waapAddress: l1Address, signWaapMessage } = useWalletStore()
   const { setRecovery, setWithdrawalRecovery, setDirection } = useBridgeStore()
@@ -33,6 +37,17 @@ export default function ActivityPage() {
   }, [router])
 
   const { data: operations, isLoading, isError, error } = useBridgeOperations()
+
+  // Fixed batch of cards per page keeps the card at a stable height so the page
+  // never grows past the viewport (no page-level scroll). 3 fits the ~640px card
+  // beneath the fixed header + footer on a typical laptop.
+  const PAGE_SIZE = 3
+  const ops = useMemo(() => operations ?? [], [operations])
+  const totalPages = Math.max(1, Math.ceil(ops.length / PAGE_SIZE))
+  useEffect(() => {
+    if (page > totalPages - 1) setPage(totalPages - 1)
+  }, [page, totalPages])
+  const pageItems = ops.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
 
   const handleResume = useCallback(
     async (operation: BridgeOperation) => {
@@ -191,40 +206,83 @@ export default function ActivityPage() {
   )
 
   return (
-    <RootStyle className="overflow-y-auto">
-      <div className="px-5 pt-5 pb-5 flex flex-col h-full">
+    <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
+      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden px-5 pt-5 pb-5">
         <div className="flex items-center gap-4">
           <BridgeHeader />
         </div>
 
         <h2 className="text-lg font-semibold mt-4">Bridge Activity</h2>
 
-        {isLoading && <p className="text-sm text-gray-400 mt-4 text-center">Loading operations...</p>}
+        <div className="flex-1 min-h-0 mt-3 flex flex-col">
+          {isLoading && <p className="text-sm text-gray-400 mt-1 text-center">Loading operations...</p>}
 
-        {isError && (
-          <p className="text-sm text-red-500 mt-4 text-center">
-            {error instanceof Error ? error.message : 'Failed to load'}
-          </p>
-        )}
+          {isError && (
+            <p className="text-sm text-red-500 mt-1 text-center">
+              {error instanceof Error ? error.message : 'Failed to load'}
+            </p>
+          )}
 
-        {!isLoading && operations && operations.length === 0 && (
-          <p className="text-sm text-gray-400 mt-4 text-center">No bridge operations yet.</p>
-        )}
+          {!isLoading && !isError && ops.length === 0 && (
+            <p className="text-sm text-gray-400 mt-1 text-center">No bridge operations yet.</p>
+          )}
 
-        <div className="flex flex-col gap-3 mt-3 flex-1 overflow-y-auto">
-          {operations?.map((op) => (
-            <ActivityCard
-              key={op.id}
-              operation={op}
-              onResume={handleResume}
-              resuming={resumingId === op.id}
-              onShareFuelClaim={handleShareFuelClaim}
-              sharingFuelClaim={sharingId === op.id}
-            />
-          ))}
+          {ops.length > 0 && (
+            <>
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={page}
+                    initial={prefersReducedMotion ? false : { opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0 }}
+                    transition={{ duration: prefersReducedMotion ? 0 : 0.15 }}
+                    className="flex flex-col gap-3"
+                  >
+                    {pageItems.map((op) => (
+                      <ActivityCard
+                        key={op.id}
+                        operation={op}
+                        onResume={handleResume}
+                        resuming={resumingId === op.id}
+                        onShareFuelClaim={handleShareFuelClaim}
+                        sharingFuelClaim={sharingId === op.id}
+                      />
+                    ))}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="mt-3 flex shrink-0 items-center justify-center gap-4 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                    aria-label="Previous page"
+                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-30 disabled:hover:text-gray-500 p-1 rounded"
+                  >
+                    <Icon icon="ph:caret-left-bold" width={16} height={16} />
+                  </button>
+                  <span className="text-xs font-medium text-gray-500 tabular-nums">
+                    {page + 1} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={page >= totalPages - 1}
+                    aria-label="Next page"
+                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-30 disabled:hover:text-gray-500 p-1 rounded"
+                  >
+                    <Icon icon="ph:caret-right-bold" width={16} height={16} />
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
-        <div className="mt-4 flex flex-col gap-2">
+        <div className="mt-4 flex shrink-0 flex-col gap-2">
           <TextButton onClick={() => router.push('/')}>Back to Bridge</TextButton>
           <TextButton
             onClick={() => router.push('/activity/local-recovery')}

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ALL_DEPLOYMENTS, ACTIVE_DEPLOYMENT_ID, DEPLOYMENT_ID } from '@/config'
 import { useBridgeStore } from '@/stores/bridgeStore'
+import { useOnboardingStore } from '@/stores/useOnboardingStore'
 
 // Mirrors the "glass pill" material the sibling nav pills use in Header.tsx
 // (the attestation/points chip, Privacy Mode, wallet cluster) so the version
@@ -30,7 +31,10 @@ const DeploymentSelector: React.FC = () => {
   // replaces the opacity scale with {0,20,40,60,80,100}, so `white/90`-style
   // shorthand outside that set compiles to nothing).
   const { isPrivacyModeEnabled } = useBridgeStore()
-  const isDark = isPrivacyModeEnabled
+  // Stay light-styled while the onboarding splash is up — the nav is lifted
+  // onto the splash's light field there, so dark styling is unreadable (#94).
+  const splashActive = useOnboardingStore((s) => s.splashActive)
+  const isDark = isPrivacyModeEnabled && !splashActive
   const [open, setOpen] = useState(false)
   const [selectedId, setSelectedId] = useState(DEPLOYMENT_ID)
   const [hoveredId, setHoveredId] = useState<string | null>(null)

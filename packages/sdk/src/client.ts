@@ -23,6 +23,7 @@ import type {
   BridgeOperation,
   PochCheckResult,
   PassportCheckResult,
+  L1EligibilityResult,
   L1TokenBalance,
   AttestationStatus,
   MintTokensResult,
@@ -226,6 +227,15 @@ export class HumanTechBridge {
    */
   async checkPassportEligibility(): Promise<PassportCheckResult> {
     return this.apiClient.checkPassportEligibility()
+  }
+
+  /**
+   * Public, L1-only humanity pre-check for a supplied L1 address.
+   * Requires no session and creates no address binding — runs the POCH →
+   * Passport cascade + sanctions screen against the address alone.
+   */
+  async checkL1Eligibility(address: string): Promise<L1EligibilityResult> {
+    return this.apiClient.checkL1Eligibility(address)
   }
 
   /**

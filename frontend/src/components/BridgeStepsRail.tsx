@@ -8,6 +8,11 @@ import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { EXPLAINER_STEPS } from '@/components/model/HowItWorksModal'
 
+// Motion values mirrored from the human-tech design system (docs/tokens.css):
+// --dur-enter / --ease-slide for the panel that slides out from the tab.
+const DS_DUR_ENTER = 0.32
+const DS_EASE_SLIDE: [number, number, number, number] = [0.32, 0.72, 0, 1]
+
 type StepStatus = 'done' | 'active' | 'upcoming'
 
 const BridgeStepsRail: React.FC = () => {
@@ -17,12 +22,11 @@ const BridgeStepsRail: React.FC = () => {
   const prefersReducedMotion = useReducedMotion()
   const panelId = useId()
 
-  // Desktop drawer: hover previews it, a click pins it open. Mobile: a
-  // separate collapsed-by-default accordion stacked below the card.
+  // Hover previews the panel; a click pins it open. On touch (no hover) the tap
+  // toggles `pinned`, so the same handle works on every size.
   const [hovered, setHovered] = useState(false)
   const [pinned, setPinned] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const desktopOpen = hovered || pinned
+  const open = hovered || pinned
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
 
@@ -171,96 +175,57 @@ const BridgeStepsRail: React.FC = () => {
     </>
   )
 
+  // A slim binder tab pinned to the viewport's right edge (stacked with the
+  // Activity tab by the dock in ClientLayout). Hover or click peeks the steps
+  // panel out to the LEFT of the tab. The whole drawer lives in a fixed dock, so
+  // it can't add page width or scroll and it persists across every app screen.
   return (
-    <>
-      {/* Mobile / narrow: a collapsed-by-default bar stacked below the card so
-          it never crowds it. Hidden at md+ where the drawer below takes over. */}
-      <div className="w-full max-w-[360px] md:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileOpen((o) => !o)}
-          aria-expanded={mobileOpen}
-          aria-controls={`${panelId}-mobile`}
-          className="flex w-full items-center justify-between rounded-[16px] border border-[#D4D4D4] bg-white px-4 py-3 text-left"
-        >
-          <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">
-            Bridge in 4 steps
-          </span>
-          <Icon
-            icon="ph:caret-down-bold"
-            width={14}
-            height={14}
-            className={`text-[#737373] transition-transform ${mobileOpen ? 'rotate-180' : ''}`}
-          />
-        </button>
-        <AnimatePresence initial={false}>
-          {mobileOpen && (
-            <motion.div
-              id={`${panelId}-mobile`}
-              key="mobile-panel"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: prefersReducedMotion ? 0 : 0.22, ease: 'easeInOut' }}
-              className="overflow-hidden"
+    <div
+      ref={drawerRef}
+      className="pointer-events-auto flex items-start justify-end"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="panel"
+            initial={{ width: 0, opacity: 0, marginRight: 0 }}
+            animate={{ width: 260, opacity: 1, marginRight: 12 }}
+            exit={{ width: 0, opacity: 0, marginRight: 0 }}
+            transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+            className="overflow-hidden"
+          >
+            <div
+              id={panelId}
+              className="w-[260px] rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
             >
-              <div className="mt-2 rounded-[16px] border border-[#D4D4D4] bg-white p-4">
-                {panelBody(() => setMobileOpen(false))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+              {panelBody(closeDesktop)}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Desktop: a slim handle flush against the card's left edge. Hover or
-          click peeks the full steps panel out to the left. This whole block is
-          absolutely positioned against RootStyle's card-sized wrapper, so it
-          never contributes to layout width and can't push the card off-center. */}
-      <div
-        ref={drawerRef}
-        className="absolute right-full top-3 z-10 hidden items-start md:flex"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+      <button
+        ref={handleRef}
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label="Bridge in 4 steps"
+        onClick={() => setPinned((p) => !p)}
+        className={`flex h-[120px] w-9 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-colors ${
+          open ? 'border-[#81133B]/40' : 'border-[#D4D4D4] hover:border-[#81133B]/30'
+        }`}
       >
-        <motion.div
-          initial={false}
-          animate={{
-            width: desktopOpen ? 260 : 0,
-            marginRight: desktopOpen ? 12 : 0,
-            opacity: desktopOpen ? 1 : 0,
-          }}
-          transition={{ duration: prefersReducedMotion ? 0 : 0.28, ease: 'easeOut' }}
-          className="overflow-hidden"
+        <span className={`h-1.5 w-1.5 rounded-full ${eligible && bothConnected ? 'bg-[#17235E]' : 'bg-[#81133B]'}`} />
+        <span
+          className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
+          style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
         >
-          <div
-            id={panelId}
-            className="w-[260px] rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
-          >
-            {panelBody(closeDesktop)}
-          </div>
-        </motion.div>
-
-        <button
-          ref={handleRef}
-          type="button"
-          aria-expanded={desktopOpen}
-          aria-controls={panelId}
-          aria-label="Bridge in 4 steps"
-          onClick={() => setPinned((p) => !p)}
-          className={`flex h-[120px] w-9 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-colors ${
-            desktopOpen ? 'border-[#81133B]/40' : 'border-[#D4D4D4] hover:border-[#81133B]/30'
-          }`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${eligible && bothConnected ? 'bg-[#17235E]' : 'bg-[#81133B]'}`} />
-          <span
-            className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
-            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-          >
-            Tutorial
-          </span>
-        </button>
-      </div>
-    </>
+          Tutorial
+        </span>
+      </button>
+    </div>
   )
 }
 

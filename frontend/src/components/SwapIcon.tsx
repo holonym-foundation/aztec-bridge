@@ -1,14 +1,23 @@
 import React, { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 
+// Motion values mirrored from the human-tech design system (docs/tokens.css).
+// --dur-enter / --ease-out for the slide-up entrance, --dur-enter / --ease-spring
+// for the swap rotation (icon active state), --dur-fast / --ease-default for hover.
+const DS_DUR_FAST = 0.15;
+const DS_DUR_ENTER = 0.32;
+const DS_EASE_DEFAULT: [number, number, number, number] = [0.4, 0, 0.2, 1];
+const DS_EASE_OUT: [number, number, number, number] = [0.22, 1, 0.36, 1];
+const DS_EASE_SPRING: [number, number, number, number] = [0.34, 1.56, 0.64, 1];
+
 interface SwapIconProps {
   onClick: () => void;
 }
 
 const SwapIcon: React.FC<SwapIconProps> = ({ onClick }) => {
   const [swapRotation, setSwapRotation] = useState(0);
-  // Match the app-wide motion convention (accordions, steps rail): honor the
-  // user's reduced-motion preference and use the same easeInOut curve.
+  // Match the design-system motion tokens (durations + easing curves) and honor
+  // the user's reduced-motion preference, like the accordions and steps rail.
   const shouldReduceMotion = useReducedMotion();
 
   const handleClick = () => {
@@ -21,7 +30,7 @@ const SwapIcon: React.FC<SwapIconProps> = ({ onClick }) => {
       className='absolute mb-0 bottom-[-30px] left-0 right-0 text-center'
       initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: shouldReduceMotion ? 0 : 0.3, ease: 'easeInOut' }}
+      transition={{ duration: shouldReduceMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_OUT }}
     >
       <motion.button
         className='mx-auto w-11 h-11 flex items-center justify-center'
@@ -36,7 +45,7 @@ const SwapIcon: React.FC<SwapIconProps> = ({ onClick }) => {
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
           animate={{ rotate: shouldReduceMotion ? 0 : swapRotation }}
-          transition={{ duration: shouldReduceMotion ? 0 : 0.5, ease: "easeInOut" }}
+          transition={{ duration: shouldReduceMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SPRING }}
         >
           <motion.rect 
             x="1" 
@@ -57,8 +66,8 @@ const SwapIcon: React.FC<SwapIconProps> = ({ onClick }) => {
               strokeWidth="2" 
               strokeLinecap="round" 
               strokeLinejoin="round"
-              whileHover={{ scale: 1.05 }}
-              transition={{ duration: 0.2 }}
+              whileHover={shouldReduceMotion ? undefined : { scale: 1.05 }}
+              transition={{ duration: shouldReduceMotion ? 0 : DS_DUR_FAST, ease: DS_EASE_DEFAULT }}
             />
           </g>
           <defs>

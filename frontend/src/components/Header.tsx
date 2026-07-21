@@ -15,7 +15,18 @@ import { silkUrl } from '@/config/l1.config'
 import { L1_CHAIN_ID } from '@/config'
 import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
+import { useOnboardingStore } from '@/stores/useOnboardingStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
+import { useL1Humanity } from '@/hooks/useL1Humanity'
+import { useAuthStore } from '@/stores/useAuthStore'
+import {
+  useBindingStatus,
+  describeConflict,
+  conflictMessage,
+  accountLabel,
+  shortAddr,
+} from '@/hooks/useBindingStatus'
+import { getKnownL2ForL1, rememberBinding } from '@/utils/bindingMemory'
 
 /** Delay before auto-starting Aztec wallet discovery after WaaP connects. */
 const AZTEC_AUTO_CONNECT_DELAY_MS = 2000
@@ -36,6 +47,9 @@ if (typeof window !== 'undefined') {
     'ph:list',
     'ph:x',
     'ph:book-open',
+    'ph:link-simple',
+    'ph:check',
+    'ph:warning-circle',
   ])
 }
 
@@ -183,10 +197,16 @@ type WalletDisplayProps = {
   networkIcon?: string
   balance?: string
   onDisconnect?: () => void
-  availableAccounts?: Array<{ alias: string; address: string }>
-  onSelectAccount?: (account: { alias: string; address: string }) => void
+  availableAccounts?: Array<{ alias: string; address: string; index?: number }>
+  onSelectAccount?: (account: { alias: string; address: string; index?: number }) => void
   walletType: WalletType
   loginMethod?: string | null
+  /**
+   * L2 address this device remembers as the pair for the connected EVM wallet
+   * (from bindingMemory). When an account in the Switch Account list matches it,
+   * that row is marked "linked to your EVM wallet" so the user can pick it.
+   */
+  linkedAccountAddress?: string
   /**
    * True when this row lives inside the merged wallet-cluster pill (see
    * walletCluster in Header) — drops its own rounded/border/shadow/blur so
@@ -229,6 +249,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
   onSelectAccount,
   walletType,
   loginMethod,
+  linkedAccountAddress,
   flat,
   roundedEdge,
   isDark = false,
@@ -349,24 +370,57 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
               <div className="px-4 py-1">
                 <span className={`text-xs ${mutedIconText(isDark)} font-medium`}>Switch Account</span>
               </div>
-              {availableAccounts
-                .filter((acc) => acc.address !== address)
-                .map((acc) => (
-                  <div
-                    key={acc.address}
-                    className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
-                    onClick={() => {
-                      onSelectAccount(acc)
-                      setShowDropdown(false)
-                    }}
-                  >
-                    <Icon icon="ph:wallet" width={18} height={18} className={subtleText(isDark)} />
-                    <div className="flex flex-col">
-                      <span className="text-sm">{acc.alias || truncateAddr(acc.address)}</span>
-                      {acc.alias && <span className={`text-xs ${mutedIconText(isDark)}`}>{truncateAddr(acc.address)}</span>}
+              {/* Current account indicator — the dropdown intentionally hides the
+                  active account from the switch list (you can't switch to what
+                  you're already on), so this non-interactive row keeps it visible
+                  and labelled "Current" so users aren't confused that one account
+                  appears to be "missing". Never rendered as a switchable row, so
+                  there's no duplicate. */}
+              {(() => {
+                const current = availableAccounts.find((a) => a.address === address)
+                const currentLabel = displayName || (current ? accountLabel(current) : address ? truncateAddr(address) : '')
+                return (
+                  <div className="flex items-center gap-2 px-4 py-2 cursor-default">
+                    <Icon icon="ph:check" width={18} height={18} className={accentPink(isDark)} />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm truncate">{currentLabel}</span>
+                      <span className={`text-xs ${mutedIconText(isDark)}`}>
+                        {address ? truncateAddr(address) : ''} · Current
+                      </span>
                     </div>
                   </div>
-                ))}
+                )
+              })()}
+              {availableAccounts
+                .filter((acc) => acc.address !== address)
+                .map((acc, i) => {
+                  const isLinked =
+                    !!linkedAccountAddress && acc.address.toLowerCase() === linkedAccountAddress.toLowerCase()
+                  return (
+                    <div
+                      key={acc.address}
+                      className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
+                      onClick={() => {
+                        onSelectAccount(acc)
+                        setShowDropdown(false)
+                      }}
+                    >
+                      <Icon icon="ph:wallet" width={18} height={18} className={subtleText(isDark)} />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm truncate">{accountLabel(acc, i)}</span>
+                        <span className={`text-xs ${mutedIconText(isDark)}`}>{truncateAddr(acc.address)}</span>
+                      </div>
+                      {isLinked && (
+                        <span
+                          className={`ml-auto flex items-center gap-1 ${accentPink(isDark)}`}
+                          title="Linked to your EVM wallet on this device"
+                        >
+                          <Icon icon="ph:link-simple" width={14} height={14} />
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
               <div className={`border-t ${panelDivider(isDark)} my-1`} />
             </>
           )}
@@ -489,6 +543,12 @@ interface HumanityPointsChipProps {
   points: number
   /** True when Privacy Mode is on and the page is on the dark background. */
   isDark?: boolean
+  /**
+   * Copy shown in the expanded panel when NOT verified. Varies by connection
+   * state (see Header): prompt to connect the EVM wallet when nothing is
+   * connected, or the eligibility reason once a wallet is connected.
+   */
+  unverifiedHint?: string
 }
 
 /**
@@ -512,6 +572,7 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
   isFetching,
   points,
   isDark = false,
+  unverifiedHint = 'Connect your Ethereum wallet to verify personhood.',
 }) => {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -550,13 +611,21 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
         aria-expanded={open}
         className={`flex items-center gap-1.5 h-9 px-3 rounded-full ${glassPill(isDark, open)} cursor-pointer`}
       >
-        <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? accentPink(isDark) : isDark ? 'text-white/[0.25]' : 'text-gray-300'}`} />
+        {/* Verified-humanity indicator. The green pulsing glow (ported DS
+            chip--glow) is a halo around this badge — applied ONLY in the
+            verified/green state, mirroring the DS which only glows the green
+            verified chip. The wrapper is a tight rounded container so the
+            box-shadow reads as a circular halo around the bare icon. */}
+        <span className={`inline-flex items-center justify-center rounded-full ${isVerified ? 'humanity-glow' : ''}`}>
+          <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? accentPink(isDark) : isDark ? 'text-white/[0.25]' : 'text-gray-300'}`} />
+        </span>
         <span className={`text-xs font-semibold ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
         <span className={`w-px h-3.5 ${isDark ? 'bg-white/[0.15]' : 'bg-[#E5E5E5]'}`} aria-hidden="true" />
-        <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)}`} />
+        {/* HUMN Points glyph — slow continuous rotation (ported DS chip--spin-icon). */}
+        <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
         <span
           className={`text-xs font-semibold ${navText(isDark)}`}
-          title="Human Points — earned by verified humans using Shield. Open for details."
+          title="HUMN Points — rewards for verified humans, not bots, across human.tech. Open for details."
         >
           {points.toLocaleString()}
         </span>
@@ -569,7 +638,7 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
       </button>
 
       {open && (
-        <div className={`absolute right-0 mt-2 z-50 w-[220px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-4 flex flex-col gap-3`}>
+        <div className={`absolute right-0 mt-2 z-50 w-[248px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-4 flex flex-col gap-3`}>
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <span className={`text-xs font-medium ${subtleText(isDark)}`}>Humanity</span>
@@ -596,22 +665,42 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
             )}
             {!isVerified && (
               <p className={`text-[11px] ${subtleText(isDark)} mt-1.5`}>
-                {isFetching ? 'Checking eligibility…' : 'Connect both wallets to verify personhood.'}
+                {isFetching ? 'Checking eligibility…' : unverifiedHint}
               </p>
             )}
           </div>
-          <div className={`flex flex-col gap-1.5 pt-2 border-t ${panelDivider(isDark)}`}>
+          <div className={`flex flex-col gap-2 pt-2 border-t ${panelDivider(isDark)}`}>
             <div className="flex items-center justify-between">
-              <span className={`text-xs font-medium ${subtleText(isDark)}`}>Points</span>
+              <span className={`flex items-center gap-1.5 text-xs font-medium ${subtleText(isDark)}`}>
+                <HumanPointsIcon className="w-3.5 h-3.5" />
+                HUMN Points
+              </span>
               <span className={`text-sm font-semibold ${navText(isDark)}`}>{points.toLocaleString()}</span>
             </div>
-            {/* PLACEHOLDER copy — reconcile against covenant/passport's real
-                Human Points wording before launch. Kept general on purpose:
-                no specific per-action point values or reward mechanics are
-                claimed, since none are wired in this app yet. */}
+            {/* The value is still a stub (see PLACEHOLDER_POINTS) — no live
+                points source is wired in Shield yet. Copy + branding mirror the
+                Covenant app's HUMN Points UI: the "verified humans, not bots,
+                across human.tech" framing and the two cross-product earning
+                actions Covenant assigns concrete values to that also apply to
+                Shield — verifying personhood (HUMANITY_VERIFIED = 1,000) and
+                creating a Human Wallet (WALLET_CONNECTION_BONUS = 3,750). No
+                Shield-specific mechanic or point value is invented here;
+                Covenant's artifact/hold/swap-volume tiers are product-specific
+                and don't apply, so they're left out of this nav panel. */}
             <p className={`text-[11px] leading-snug ${subtleText(isDark)}`}>
-              Human Points reward verified humans for using Shield. Prove your personhood and bridge privately to earn them.
+              HUMN Points reward real, verified humans — not bots — across human.tech.
             </p>
+            <div className="flex flex-col gap-1.5">
+              <span className={`text-[10px] font-medium uppercase tracking-wide ${mutedIconText(isDark)}`}>Ways to earn</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[11px] ${subtleText(isDark)}`}>Verify your humanity</span>
+                <span className={`text-[11px] font-semibold ${navText(isDark)}`}>+1,000</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[11px] ${subtleText(isDark)}`}>Create your Human Wallet</span>
+                <span className={`text-[11px] font-semibold ${navText(isDark)}`}>+3,750</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -650,6 +739,67 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     switchAztecAccount,
   } = useWalletStore()
 
+  const token = useAuthStore((s) => s.token)
+
+  // L1-only humanity — resolves the moment the EVM/waap wallet connects, before
+  // the Aztec wallet is linked and before any JWT exists (see useL1Humanity).
+  // Self-gates on `waapAddress`, so it's a no-op until the EVM wallet connects.
+  const { data: l1Humanity, isFetching: isL1HumanityFetching } = useL1Humanity(waapAddress || undefined)
+
+  // Authoritative binding for the connected pair (needs both wallets + JWT).
+  const { data: bindingStatus } = useBindingStatus()
+
+  // ─── Humanity source precedence (issue #105) ─────────────────────────
+  // Both wallets connected + JWT → the authoritative attestation (includes the
+  // binding). Only the EVM connected → L1-only humanity. Neither → prompt to
+  // connect the EVM wallet.
+  const bothWalletsAuthed = isWaapConnected && isAztecConnected && !!token
+  const humanitySource = bothWalletsAuthed
+    ? {
+        method: attestation?.method ?? null,
+        passportScore: attestation?.passportScore,
+        passportThreshold: attestation?.passportThreshold,
+        isFetching: isAttestationFetching,
+        reason: attestation?.reason,
+      }
+    : isWaapConnected
+      ? {
+          method: l1Humanity?.method ?? null,
+          passportScore: l1Humanity?.passportScore,
+          passportThreshold: l1Humanity?.passportThreshold,
+          isFetching: isL1HumanityFetching,
+          reason: l1Humanity?.reason,
+        }
+      : { method: null, passportScore: undefined, passportThreshold: undefined, isFetching: false, reason: undefined }
+
+  const unverifiedHint = !isWaapConnected
+    ? 'Connect your Ethereum wallet to verify personhood.'
+    : humanitySource.reason
+      ? humanitySource.reason
+      : bothWalletsAuthed
+        ? 'Complete verification to prove your personhood.'
+        : 'This wallet has not verified its humanity yet.'
+
+  // ─── Pairing / binding conflict (issues #98, #97, #100) ──────────────
+  // On a server-side conflict, describeConflict names the exact stored
+  // counterpart from the CURRENT pair's response (privacy-safe).
+  const conflict = describeConflict(bindingStatus?.binding, waapAddress, aztecAddress)
+
+  // Device-local pre-warn: this EVM has a known L2 pair on this device that
+  // differs from the currently-selected Aztec account — surface it BEFORE the
+  // server round-trip returns a conflict.
+  const knownL2ForEvm = isWaapConnected && waapAddress ? getKnownL2ForL1(waapAddress) : null
+  const preWarnMismatch =
+    !conflict && knownL2ForEvm && isAztecConnected && aztecAddress && knownL2ForEvm.toLowerCase() !== aztecAddress.toLowerCase()
+      ? knownL2ForEvm
+      : null
+
+  const walletNotice = conflict
+    ? conflictMessage(conflict)
+    : preWarnMismatch
+      ? `Heads up — on this device this EVM wallet is linked to Aztec account ${shortAddr(preWarnMismatch)}. Switch to it to keep the same identity.`
+      : null
+
   const { isPrivacyModeEnabled, setPrivacyModeEnabled, getProgressSteps } = useBridgeStore()
 
   // In-progress transfer detection — same derivation BridgeHeader uses: at
@@ -669,11 +819,18 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     if (isTransferInProgress && !window.confirm(TRANSFER_LEAVE_CONFIRM)) return
     run()
   }
+  const { splashActive, requestShowSplash } = useOnboardingStore()
+
   // Privacy Mode swaps the page to the deep-maroon background (see
   // ClientLayout's `showPrivacyBackground`) — the nav's light glass-pill
   // material reads poorly there, so every pill/text/hover style below is
   // gated on this same flag to switch to its dark-mode counterpart.
-  const isDark = isPrivacyModeEnabled
+  //
+  // Exception: while the onboarding splash is up, the nav is lifted ABOVE that
+  // overlay onto the splash's LIGHT paper field (the dark background is hidden
+  // behind the splash). Rendering the dark nav there is white-on-light-pink and
+  // unreadable, so stay light-styled until the splash dismisses (#94).
+  const isDark = isPrivacyModeEnabled && !splashActive
   const { openModal: openHowItWorks } = useExplainerStore()
   const notify = useToast()
 
@@ -685,7 +842,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   const { data: l1TokenBalances = [] } = useL1TokenBalances()
 
   const sepoliaNativeTokens = l1TokenBalances.find(
-    (token) => token.type === 'native' && token.network?.chainId === L1_CHAIN_ID,
+    (t) => t.type === 'native' && t.network?.chainId === L1_CHAIN_ID,
   )
   const l1NativeBalance = sepoliaNativeTokens?.balance_formatted?.toString()
 
@@ -696,6 +853,26 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Surface a binding CONFLICT as an actionable toast (in addition to the
+  // inline wallet-cluster alert). Stable toastId so re-renders refresh it in
+  // place instead of stacking; dismissed once the conflict clears.
+  useEffect(() => {
+    if (conflict) {
+      notify('error', conflictMessage(conflict), { toastId: 'binding-conflict' })
+    } else {
+      notify.dismiss('binding-conflict')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conflict?.kind, conflict?.counterpart])
+
+  // Once the server confirms the connected pair is BOUND, remember it on this
+  // device so we can pre-warn about mismatches on future connects.
+  useEffect(() => {
+    if (bindingStatus?.binding.status === 'bound' && waapAddress && aztecAddress) {
+      rememberBinding(waapAddress, aztecAddress)
+    }
+  }, [bindingStatus?.binding.status, waapAddress, aztecAddress])
 
   // Auto-connect to Aztec when WaaP wallet is connected
   useEffect(() => {
@@ -899,6 +1076,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           onDisconnect={guardTransfer(disconnectAztecWallet)}
           availableAccounts={availableAccounts}
           onSelectAccount={switchAztecAccount}
+          linkedAccountAddress={knownL2ForEvm || undefined}
           walletType={WalletType.AZTEC}
           flat
           roundedEdge="bottom"
@@ -959,9 +1137,15 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       <Link
         href="/"
         onClick={(e) => {
+          // Preserve the state-loss guard: while a transfer is in progress,
+          // returning to the splash tears down the live /progress view, so
+          // confirm first and bail if the user cancels.
           if (isTransferInProgress && !window.confirm(TRANSFER_LEAVE_CONFIRM)) {
             e.preventDefault()
+            return
           }
+          // Not just route home — re-show the onboarding splash (#103).
+          requestShowSplash()
         }}
         className={`flex-shrink-0 flex items-center justify-center min-h-12 sm:min-h-14 px-3 sm:px-5 rounded-full ${glassPill(isDark)}`}
       >
@@ -994,16 +1178,39 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
 
           <div className="hidden sm:block flex-shrink-0">
             <HumanityPointsChip
-              method={attestation?.method ?? null}
-              passportScore={attestation?.passportScore}
-              passportThreshold={attestation?.passportThreshold}
-              isFetching={isAttestationFetching}
+              method={humanitySource.method}
+              passportScore={humanitySource.passportScore}
+              passportThreshold={humanitySource.passportThreshold}
+              isFetching={humanitySource.isFetching}
               points={points}
               isDark={isDark}
+              unverifiedHint={unverifiedHint}
             />
           </div>
 
-          {walletCluster}
+          {/* Wallet cluster + an actionable binding notice anchored beneath it.
+              A server conflict (or the device-local pre-warn) is surfaced here
+              inline — naming the exact counterpart account — instead of being
+              buried in the tutorial (issue #98). */}
+          <div className="relative flex-shrink-0">
+            {walletCluster}
+            {walletNotice && (
+              <div
+                role="alert"
+                className={`absolute right-0 top-full mt-2 z-50 w-[240px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-3 flex items-start gap-2 border-l-2 ${
+                  conflict ? 'border-l-[#E3357E]' : 'border-l-[#FA8FC4]'
+                }`}
+              >
+                <Icon
+                  icon="ph:warning-circle"
+                  width={16}
+                  height={16}
+                  className={`mt-[1px] flex-shrink-0 ${accentPink(isDark)}`}
+                />
+                <p className={`text-[11px] leading-snug ${navText(isDark)}`}>{walletNotice}</p>
+              </div>
+            )}
+          </div>
 
           {/* Secondary-nav toggle — only needed below lg, where "How it
               works" / version selector move out of the main row. Privacy

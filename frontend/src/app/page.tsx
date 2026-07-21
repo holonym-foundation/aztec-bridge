@@ -38,8 +38,6 @@ import BridgeSection from '@/components/BridgeSection'
 import TransactionBreakdown from '@/components/TransactionBreakdown'
 import BridgeFooter from '@/components/BridgeFooter'
 import BridgeHeader from '@/components/BridgeHeader'
-import BridgeStepsRail from '@/components/BridgeStepsRail'
-import ActivityDrawer from '@/components/ActivityDrawer'
 import VerificationStep from '@/components/VerificationStep'
 import BridgeActionButton from '@/components/BridgeActionButton'
 import {
@@ -497,8 +495,6 @@ export default function Home() {
   return (
     <>
       <RootStyle
-        aside={<BridgeStepsRail />}
-        asideRight={<ActivityDrawer />}
         // No-scroll budget: cap the card so it never grows the RootStyle region past
         // its 90vh floor (min-h-[650px] would otherwise push card+py-10 over 90vh on
         // short laptops). Content beyond the cap scrolls inside the card, never the page.

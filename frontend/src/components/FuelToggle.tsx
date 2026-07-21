@@ -46,6 +46,11 @@ interface FuelToggleProps {
 
 const USD_PRESETS = [1, 5, 10]
 
+// Motion values mirrored from the human-tech design system (docs/tokens.css):
+// --dur-normal / --ease-default for the inline detail accordion reveal.
+const DS_DUR_NORMAL = 0.28
+const DS_EASE_DEFAULT: [number, number, number, number] = [0.4, 0, 0.2, 1]
+
 /**
  * Hook that fetches a real V4 on-chain quote, debounced by 500ms.
  */
@@ -519,7 +524,7 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: 'easeInOut' }}
+            transition={{ duration: shouldReduceMotion ? 0 : DS_DUR_NORMAL, ease: DS_EASE_DEFAULT }}
             className="overflow-hidden"
           >
             <div className="mt-3 space-y-2">

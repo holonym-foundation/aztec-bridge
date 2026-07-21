@@ -83,7 +83,7 @@ interface WalletState {
 
   // Account selection state
   aztecAlias: string | null
-  availableAccounts: Array<{ alias: string; address: string }>
+  availableAccounts: Array<{ alias: string; address: string; index: number }>
 
   // Connection generation counter — increments on each successful connection.
   // Used by useWalletAdapter to bust the React Query cache so a fresh adapter
@@ -112,8 +112,8 @@ interface WalletState {
   cancelWalletConnection: () => void
 
   // Account selection actions
-  selectAccount: (account: { alias: string; address: string }) => Promise<void>
-  switchAztecAccount: (account: { alias: string; address: string }) => void
+  selectAccount: (account: { alias: string; address: string; index?: number }) => Promise<void>
+  switchAztecAccount: (account: { alias: string; address: string; index?: number }) => void
 
   // Connection state
   waapAddress: `0x${string}` | null
@@ -495,8 +495,12 @@ const walletStore = create<WalletState>((set, get) => ({
         throw new Error('No accounts returned from wallet')
       }
 
-      // Parse all accounts into { alias, address } objects
-      const parsedAccounts = rawAccounts.map((raw) => {
+      // Parse all accounts into { alias, address, index } objects. The `index`
+      // is the account's original position in the wallet's list — retained so
+      // the UI can render a stable "Account N" label even after the dropdown
+      // filters out the currently-active account (which would otherwise renumber
+      // a bare array-position fallback).
+      const parsedAccounts = rawAccounts.map((raw, index) => {
         const obj = raw as Record<string, unknown> | undefined
         const aztecAddr = obj?.item ?? obj?.address ?? raw
         const address =
@@ -507,9 +511,10 @@ const walletStore = create<WalletState>((set, get) => ({
               : String(aztecAddr)
         // Extract alias from Aliased<T> wrapper or use empty string
         const rawAlias = typeof obj?.alias === 'string' ? obj.alias.trim() : ''
-        // Treat generic placeholder names as empty so the UI falls back to truncated address
+        // Treat generic placeholder names as empty so the UI falls back to a
+        // stable "Account N" label (see accountLabel in useBindingStatus).
         const alias = rawAlias && rawAlias.toLowerCase() !== 'account' ? rawAlias : ''
-        return { alias, address }
+        return { alias, address, index }
       })
 
       // Set up disconnect handler with grace period to absorb spurious

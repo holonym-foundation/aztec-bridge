@@ -97,6 +97,10 @@ export class BridgeApiClient {
     return this.get('/api/attestation/passport/check')
   }
 
+  async checkL1Eligibility(address: string): Promise<import('./types').L1EligibilityResult> {
+    return this.get(`/api/attestation/l1-eligibility?address=${encodeURIComponent(address)}`)
+  }
+
   async getL1TokenBalances(address: string, chains: number[]): Promise<import('./types').L1TokenBalance[]> {
     return this.post('/api/alchemy/tokens-balances', { address, chains })
   }

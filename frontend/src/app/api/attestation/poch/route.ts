@@ -104,10 +104,10 @@ export async function POST(request: NextRequest) {
 
     // 4. Get next nonce and sign attestations (L1 ECDSA + L2 Schnorr)
     const circuitId = getCircuitId()
-    const nonce = await getNextNonce(l1Address, 'poch')
+    const nonce = getNextNonce()
 
     const l1Signature = await signCleanHandsAttestation({
-      nonce: BigInt(nonce),
+      nonce,
       circuitId,
       actionId,
       userAddress: l1Address,
@@ -116,14 +116,14 @@ export async function POST(request: NextRequest) {
     const l2Signature = await signL2CleanHandsAttestation({
       circuitId,
       actionId,
-      nonce: BigInt(nonce),
+      nonce,
       userAztecAddress: l2Address,
     })
 
     return NextResponse.json({
       l1Signature,
       l2Signature,
-      nonce,
+      nonce: nonce.toString(),
       circuitId: circuitId.toString(),
       actionId: actionId.toString(),
     })

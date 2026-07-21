@@ -788,8 +788,6 @@ export interface AttestationStatus {
     l1Address: string | null
     l2Address: string | null
   }
-  poch: { noncesUsed: number }
-  passport: { noncesUsed: number }
   config: {
     attesterAddress: string
     passportSignerAddress: string

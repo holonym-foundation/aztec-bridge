@@ -193,7 +193,7 @@ const walletAdapter: WalletAdapterInterface = {
           Passport fallback). The SDK fetches it automatically inside <Code>bridgeL1ToL2</Code> and{' '}
           <Code>withdrawL2ToL1</Code>; the calls below are optional pre-checks for your own UI.
         </P>
-        <CodeBlock>{`// Full status: binding, nonce counts, attester config
+        <CodeBlock>{`// Full status: binding, attester config
 const status = await bridge.getAttestationStatus()
 
 // Lightweight pre-checks — no nonce consumed
@@ -321,7 +321,7 @@ try {
           </thead>
           <tbody>
             <tr><Td><Code>getOperation(id)</Code></Td><Td>A single operation by ID</Td></tr>
-            <tr><Td><Code>getAttestationStatus()</Code></Td><Td>Binding status, nonce counts, attester config</Td></tr>
+            <tr><Td><Code>getAttestationStatus()</Code></Td><Td>Binding status, attester config</Td></tr>
             <tr><Td><Code>getPortalFeeBasisPoints(portal)</Code></Td><Td>TokenPortal fee rate (bps), to compute the post-fee amount</Td></tr>
             <tr><Td><Code>getL1TokenBalances(address, chains)</Code></Td><Td>L1 token balances via the backend Alchemy proxy</Td></tr>
             <tr><Td><Code>getAztecNodeInfo()</Code></Td><Td>L2 node info (version, L1 contract addresses)</Td></tr>

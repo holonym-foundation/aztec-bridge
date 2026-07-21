@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Issue signed attestation (L1 ECDSA + L2 Schnorr)
-    const nonce = await getNextNonce(l1Address, 'passport')
+    const nonce = getNextNonce()
 
     // Default deadline: 1 hour from now
     const deadlineSeconds = data.deadline ? BigInt(data.deadline) : BigInt(Math.floor(Date.now() / 1000) + 3600)
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
     const l1Signature = await signPassportAttestation({
       userAddress: l1Address,
       maxAmount,
-      nonce: BigInt(nonce),
+      nonce,
       deadline: deadlineSeconds,
       // Zod schema now requires portalAddress; no `?? ''` wildcard fallback.
       portalAddress: data.portalAddress,
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
       l2Signature = await signL2PassportAttestation({
         userAztecAddress: l2Address,
         maxAmount,
-        nonce: BigInt(nonce),
+        nonce,
         deadline: deadlineSeconds,
         bridgeAddress,
       })
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       l1Signature,
       l2Signature,
-      nonce,
+      nonce: nonce.toString(),
       maxAmount: maxAmount.toString(),
       deadline: deadlineSeconds.toString(),
       score,

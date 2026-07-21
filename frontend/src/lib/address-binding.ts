@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { BridgeDirection, BridgeOperationStatus } from '@prisma/client'
 import { prisma } from './prisma'
 import { getTokenPriceUsd } from '@/utils/fuelPricing'
@@ -184,14 +185,23 @@ export async function evaluateTravelRuleThreshold(params: {
 }
 
 /**
- * Get the next nonce for a user+attestation type, incrementing atomically.
- * Nonces start at 1 and increase by 1 on each call.
+ * Issue a fresh attestation nonce.
+ *
+ * A DB counter can't be the source of truth here: the authoritative used-nonce
+ * state lives on-chain in `TokenPortal.cleanHandsNonces`/`passportNonces`, which
+ * persists for the life of the deployed portal. Whenever the app DB is reset or
+ * redeployed (routine on testnet) the counter falls behind on-chain reality and
+ * re-issues an already-consumed nonce, so the deposit reverts with
+ * `CleanHandsNonceUsed()` / `PassportNonceUsed()`.
+ *
+ * Drawing a random nonce sidesteps that entirely: the on-chain mapping is keyed
+ * by the full nonce value, so a random draw is effectively collision-free
+ * (2^-128) and cannot desync across resets. Kept to 128 bits so it also fits a
+ * BN254 field element — the L2 Schnorr attestation does `new Fr(nonce)`.
  */
-export async function getNextNonce(l1Address: string, type: 'poch' | 'passport'): Promise<number> {
-  const record = await prisma.attestationNonce.upsert({
-    where: { l1Address_type: { l1Address, type } },
-    create: { l1Address, type, nonce: 1 },
-    update: { nonce: { increment: 1 } },
-  })
-  return record.nonce
+export function getNextNonce(): bigint {
+  const bytes = randomBytes(16)
+  let n = 0n
+  for (const b of bytes) n = (n << 8n) | BigInt(b)
+  return n
 }

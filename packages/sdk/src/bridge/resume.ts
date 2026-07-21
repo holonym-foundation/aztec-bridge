@@ -125,6 +125,17 @@ async function recoverFromReceipt(
     timeout: 300_000, // 5 minutes
   })
 
+  // A reverted deposit never emitted a portal event and never locked funds, so
+  // there is nothing to recover or claim. Fail fast with an actionable message
+  // instead of letting extractEvent throw the opaque "Failed to find matching
+  // event DepositToAztecPublic" (the symptom, not the cause).
+  if (receipt.status === 'reverted') {
+    throw new Error(
+      `L1 deposit transaction reverted on-chain (hash: ${l1TxHash}). ` +
+        `No funds were locked and there is nothing to resume — start a new deposit.`,
+    )
+  }
+
   const eventName = isPrivacyModeEnabled
     ? 'DepositToAztecPrivate'
     : 'DepositToAztecPublic'

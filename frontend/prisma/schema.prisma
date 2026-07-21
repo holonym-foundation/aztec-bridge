@@ -79,28 +79,6 @@ model AddressBinding {
 }
 
 // ---------------------------------------------------------------------------
-// AttestationNonce: server-managed auto-incrementing nonces per user per type.
-// The on-chain contract tracks used nonces; we mirror that here to avoid
-// the frontend needing to query the contract for the next nonce.
-// ---------------------------------------------------------------------------
-
-enum AttestationType {
-  poch
-  passport
-}
-
-model AttestationNonce {
-  id         String          @id @default(cuid(2))
-  l1Address  String
-  type       AttestationType
-  nonce      Int             @default(0) // current nonce (incremented after each issuance)
-  updatedAt  DateTime        @updatedAt
-
-  @@unique([l1Address, type])
-  @@map("attestation_nonces")
-}
-
-// ---------------------------------------------------------------------------
 // AuthNonce: server-managed SIWE nonces with TTL for replay protection
 // ---------------------------------------------------------------------------
 

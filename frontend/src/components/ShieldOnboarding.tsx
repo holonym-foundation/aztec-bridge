@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useWalletStore } from '@/stores/walletStore'
+import { useOnboardingStore } from '@/stores/useOnboardingStore'
 
 const ONBOARDED_KEY = 'shield_onboarded'
 const BRAND = '#81133B'
@@ -546,6 +547,8 @@ export default function ShieldOnboarding() {
   const reduce = useReducedMotion() ?? false
   const connectWaapWallet = useWalletStore((s) => s.connectWaapWallet)
   const isWaapConnected = useWalletStore((s) => s.isWaapConnected)
+  const setSplashActive = useOnboardingStore((s) => s.setSplashActive)
+  const showSplashNonce = useOnboardingStore((s) => s.showSplashNonce)
   // Start in 'loading': the shader shell renders immediately (covering the bridge from
   // the first paint) while we read localStorage / wallet state, then we resolve to the
   // real mode and the inner content fades in over the same, never-remounted shader.
@@ -580,6 +583,29 @@ export default function ShieldOnboarding() {
     }
     return () => root.removeAttribute('data-ob-splash')
   }, [mode, isWaapConnected])
+
+  // Publish "splash is up" so the elevated nav (which sits ABOVE this overlay
+  // on the light paper field) can drop its dark Privacy-Mode styling while the
+  // splash covers the dark background it would otherwise read against (#94).
+  useEffect(() => {
+    setSplashActive(mode === 'splash')
+    return () => setSplashActive(false)
+  }, [mode, setSplashActive])
+
+  // Clicking the Shield brand returns the user to the splash (#103). The brand
+  // link's own in-progress-transfer guard runs first (see Header), so by the
+  // time the nonce bumps here it's already confirmed. Skip the initial mount
+  // value so this only fires on an actual request.
+  const didMountSplashRequest = useRef(false)
+  useEffect(() => {
+    if (!didMountSplashRequest.current) {
+      didMountSplashRequest.current = true
+      return
+    }
+    setLeaving(false)
+    setIndex(0)
+    setMode('splash')
+  }, [showSplashNonce])
 
   const markOnboarded = () => {
     try {

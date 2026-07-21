@@ -15,6 +15,7 @@ import { silkUrl } from '@/config/l1.config'
 import { L1_CHAIN_ID } from '@/config'
 import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
+import { useOnboardingStore } from '@/stores/useOnboardingStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useL1Humanity } from '@/hooks/useL1Humanity'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -610,10 +611,18 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
         aria-expanded={open}
         className={`flex items-center gap-1.5 h-9 px-3 rounded-full ${glassPill(isDark, open)} cursor-pointer`}
       >
-        <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? accentPink(isDark) : isDark ? 'text-white/[0.25]' : 'text-gray-300'}`} />
+        {/* Verified-humanity indicator. The green pulsing glow (ported DS
+            chip--glow) is a halo around this badge — applied ONLY in the
+            verified/green state, mirroring the DS which only glows the green
+            verified chip. The wrapper is a tight rounded container so the
+            box-shadow reads as a circular halo around the bare icon. */}
+        <span className={`inline-flex items-center justify-center rounded-full ${isVerified ? 'humanity-glow' : ''}`}>
+          <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? accentPink(isDark) : isDark ? 'text-white/[0.25]' : 'text-gray-300'}`} />
+        </span>
         <span className={`text-xs font-semibold ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
         <span className={`w-px h-3.5 ${isDark ? 'bg-white/[0.15]' : 'bg-[#E5E5E5]'}`} aria-hidden="true" />
-        <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)}`} />
+        {/* HUMN Points glyph — slow continuous rotation (ported DS chip--spin-icon). */}
+        <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
         <span
           className={`text-xs font-semibold ${navText(isDark)}`}
           title="HUMN Points — rewards for verified humans, not bots, across human.tech. Open for details."
@@ -810,11 +819,18 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     if (isTransferInProgress && !window.confirm(TRANSFER_LEAVE_CONFIRM)) return
     run()
   }
+  const { splashActive, requestShowSplash } = useOnboardingStore()
+
   // Privacy Mode swaps the page to the deep-maroon background (see
   // ClientLayout's `showPrivacyBackground`) — the nav's light glass-pill
   // material reads poorly there, so every pill/text/hover style below is
   // gated on this same flag to switch to its dark-mode counterpart.
-  const isDark = isPrivacyModeEnabled
+  //
+  // Exception: while the onboarding splash is up, the nav is lifted ABOVE that
+  // overlay onto the splash's LIGHT paper field (the dark background is hidden
+  // behind the splash). Rendering the dark nav there is white-on-light-pink and
+  // unreadable, so stay light-styled until the splash dismisses (#94).
+  const isDark = isPrivacyModeEnabled && !splashActive
   const { openModal: openHowItWorks } = useExplainerStore()
   const notify = useToast()
 
@@ -1121,9 +1137,15 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       <Link
         href="/"
         onClick={(e) => {
+          // Preserve the state-loss guard: while a transfer is in progress,
+          // returning to the splash tears down the live /progress view, so
+          // confirm first and bail if the user cancels.
           if (isTransferInProgress && !window.confirm(TRANSFER_LEAVE_CONFIRM)) {
             e.preventDefault()
+            return
           }
+          // Not just route home — re-show the onboarding splash (#103).
+          requestShowSplash()
         }}
         className={`flex-shrink-0 flex items-center justify-center min-h-12 sm:min-h-14 px-3 sm:px-5 rounded-full ${glassPill(isDark)}`}
       >

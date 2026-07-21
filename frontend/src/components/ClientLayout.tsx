@@ -55,6 +55,11 @@ export default function ClientLayout({
         />
         <motion.div
           className="absolute inset-0"
+          // initial={false} renders the background at its target on mount (no
+          // enter animation) so when Privacy Mode is the default the dark field
+          // is applied synchronously on first paint instead of animating up
+          // from light — the toggle transition on later changes is unaffected (#94).
+          initial={false}
           animate={{
             background: showPrivacyBackground
               ? 'rgba(31,8,22,0.66)'

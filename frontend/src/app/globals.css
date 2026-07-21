@@ -309,3 +309,52 @@ body {
 .error-toast.animate-icon img {
   animation: bounceIn 0.5s ease-out;
 }
+
+/* ── Ported from the design-system Chip (human-tech-design-system/src/Chip/
+   Chip.module.css) — the two opt-in ambient animations used on the HUMN Points
+   and verified-humanity chips in the SiteTopBar stories. Ported as CSS (the
+   design system is not a dependency of this app). Durations match the DS:
+   6s spin / 2.5s glow pulse — slow enough to read as ambient, not busy. */
+
+/* spinIcon → continuous slow rotation of the points glyph (the diamond). */
+.humn-points-spin {
+  animation: chip-icon-spin 6s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes chip-icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* glow → pulsing, color-matched box-shadow halo around the verified badge.
+   Glow color = the DS green variant: color-mix(in srgb, --color-emerald-50 55%,
+   transparent), with emerald-50 resolved to its concrete token value #00b88a.
+   Reads in both light and dark since it's an emerald halo drawn outward from
+   the badge, independent of the surface behind it. */
+.humanity-glow {
+  --humanity-glow-color: color-mix(in srgb, #00b88a 55%, transparent);
+  animation: chip-glow 2.5s ease-in-out infinite;
+}
+
+@keyframes chip-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--humanity-glow-color);
+  }
+  50% {
+    box-shadow: 0 0 10px 2px var(--humanity-glow-color);
+  }
+}
+
+/* Match the DS: both animations disabled under reduced-motion. */
+@media (prefers-reduced-motion: reduce) {
+  .humn-points-spin {
+    animation: none !important;
+  }
+  .humanity-glow {
+    animation: none !important;
+    box-shadow: none !important;
+  }
+}

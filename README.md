@@ -12,7 +12,7 @@ Move assets from Ethereum to Aztec privately, with proof-of-personhood and proof
 [![Audited: Nethermind | Halborn | Hexens](https://img.shields.io/badge/Audited-Nethermind%20%7C%20Halborn%20%7C%20Hexens-brightgreen)](#audits)
 [![Live on Mainnet](https://img.shields.io/badge/Live%20on-Mainnet-success)](https://shield.human.tech)
 
-[**Launch the app**](https://shield.human.tech) &nbsp;·&nbsp; [**Product**](https://human.tech/shield) &nbsp;·&nbsp; [**Docs**](https://docs.holonym.id/for-developers/clean-hands) &nbsp;·&nbsp; [**Clean SDK on npm**](https://www.npmjs.com/package/@human.tech/clean.sdk)
+[**Launch the app**](https://shield.human.tech) &nbsp;·&nbsp; [**Product**](https://human.tech/shield) &nbsp;·&nbsp; [**Docs**](https://docs.holonym.id/for-developers/clean-hands) &nbsp;·&nbsp; [**Clean SDK on npm**](https://www.npmjs.com/package/@human.tech/clean.sdk) &nbsp;·&nbsp; [**Testnet**](https://testnet.shield.human.tech/)
 
 </div>
 
@@ -145,6 +145,7 @@ Findings raised during these reviews were addressed before the mainnet deploymen
 ## Links
 
 - **App:** https://shield.human.tech
+- **Testnet (no real funds):** https://testnet.shield.human.tech/
 - **Product:** https://human.tech/shield
 - **Clean Hands docs:** https://docs.holonym.id/for-developers/clean-hands
 - **Clean SDK on npm:** https://www.npmjs.com/package/@human.tech/clean.sdk

@@ -72,7 +72,7 @@ const BridgeStepsRail: React.FC = () => {
               </div>
 
               {/* Label + active helper */}
-              <div className={isLast ? 'pb-0' : 'pb-4'}>
+              <div className={`min-w-0 flex-1 ${isLast ? 'pb-0' : 'pb-4'}`}>
                 <p
                   className={
                     status === 'upcoming'
@@ -82,7 +82,11 @@ const BridgeStepsRail: React.FC = () => {
                 >
                   {step.title}
                 </p>
-                {helper && <p className="mt-0.5 text-[12px] leading-[17px] text-[#737373]">{helper}</p>}
+                {helper && (
+                  <p className="mt-0.5 text-[12px] leading-[17px] text-[#737373] break-words [overflow-wrap:anywhere]">
+                    {helper}
+                  </p>
+                )}
                 {i === 1 && status === 'active' && (
                   <button
                     onClick={openModal}

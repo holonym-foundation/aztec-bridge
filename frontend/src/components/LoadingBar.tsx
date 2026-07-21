@@ -25,7 +25,7 @@ const LoadingBar: React.FC<LoadingBarProps> = ({
   const progress = (completedSteps / steps.length) * 100
 
   return (
-    <div className='w-full max-w-md mx-auto'>
+    <div className='flex-1 min-w-0 max-w-md mx-auto'>
       {/* Background bar */}
       <div className='h-1 w-full rounded-full bg-[#E5E5E5] overflow-hidden'>
         {/* Animated fill */}

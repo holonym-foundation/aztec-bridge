@@ -502,7 +502,7 @@ export default function Home() {
         {showVerification && <VerificationStep onClose={() => setShowVerification(false)} />}
 
         <div
-          className={`grid grid-rows-[max-content_1fr_max-content] h-full ${
+          className={`grid grid-rows-[max-content_1fr_max-content] grid-cols-[minmax(0,1fr)] w-full h-full ${
             MAINTENANCE_MODE ? 'pointer-events-none' : ''
           }`}
         >

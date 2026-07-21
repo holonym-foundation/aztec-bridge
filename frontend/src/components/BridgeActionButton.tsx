@@ -31,6 +31,13 @@ function LoadingContent({ label }: { label: string }) {
 interface BridgeActionButtonProps {
   isDisabled?: boolean
 
+  // Binding guard: the connected (L1, L2) pair is a CONFLICT (the EVM wallet is
+  // bound to a different Aztec account, or vice-versa). Bridging would deposit
+  // into a guaranteed-failing pair, so block up-front and name the linked wallet
+  // in the label rather than letting the user start it (issues #98/#130).
+  bindingBlocked?: boolean
+  bindingBlockedLabel?: string
+
   // Connection states
   isWaapConnected: boolean
   connectWaapWallet: () => void
@@ -104,6 +111,8 @@ interface BridgeActionButtonProps {
 
 function BridgeActionButton({
   isDisabled = false,
+  bindingBlocked = false,
+  bindingBlockedLabel,
   isWaapConnected,
   connectWaapWallet,
   getWalletProvider,
@@ -379,6 +388,11 @@ function BridgeActionButton({
       (travelRuleRemainingUsd != null &&
         (travelRuleRemainingUsd <= 0 || parseFloat(inputAmount || '0') >= travelRuleRemainingUsd - 1e-6)))
 
+  // Binding conflict is only meaningful once BOTH wallets are connected (it's
+  // derived from the connected pair). Before that the button is a Connect CTA,
+  // so never let the guard suppress those.
+  const bindingConflictBlocked = bindingBlocked && bothWalletsConnected
+
   const isButtonDisabled =
     l2NodeIsReadyLoading ||
     l2NodeError ||
@@ -390,6 +404,7 @@ function BridgeActionButton({
     bridgeTokensToL2Pending ||
     isOperationPending ||
     depositLimitBlocked ||
+    bindingConflictBlocked ||
     bridgeCompleted
 
   const isOperationInFlight =
@@ -423,6 +438,12 @@ function BridgeActionButton({
     // Connection states
     if (!isWaapConnected) return 'Connect Ethereum Wallet'
     if (!isAztecConnected) return 'Connect Aztec Wallet'
+
+    // Binding conflict: connected to the wrong pair — name the linked wallet so
+    // the user knows exactly which account to switch to before bridging.
+    if (bindingConflictBlocked) {
+      return bindingBlockedLabel || 'Switch to your linked wallet to continue'
+    }
 
     // Travel Rule: passport tier exhausted, POCH required (deposits only)
     if (travelRuleBlockedDeposit) {

@@ -58,6 +58,7 @@ import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModal
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useBindingStatus, describeConflict, shortAddr } from '@/hooks/useBindingStatus'
 import { useRouter } from 'next/navigation'
 import MaintenanceOverlay from '@/components/MaintenanceOverlay'
 import FuelToggle from '@/components/FuelToggle'
@@ -186,6 +187,23 @@ export default function Home() {
   // backup POST to /api/bridge/operations would 401, aborting before any
   // on-chain tx but only after the user clicked through. Block at the button.
   const authFailed = useAuthStore((s) => s.authFailed)
+
+  // Binding button guard (issues #98/#130): if the connected (L1, L2) pair is a
+  // CONFLICT (mismatch — the EVM wallet is bound to a different Aztec account, or
+  // vice-versa), block the primary action up-front and name the linked wallet, so
+  // the user can't start a bridge into a guaranteed-failing pair. Only 'conflict'
+  // yields a non-null result here — a matched 'bound' pair or a fresh 'unbound'
+  // pair does NOT block. The query key includes waapAddress + aztecAddress, so
+  // switching to the linked Aztec account re-runs it and clears this instantly.
+  const { data: pairBindingStatus } = useBindingStatus()
+  const bindingConflict = describeConflict(pairBindingStatus?.binding, waapAddress, aztecAddress)
+  const bindingBlockedLabel = !bindingConflict
+    ? undefined
+    : bindingConflict.kind === 'evm-linked-elsewhere'
+      ? `Switch to your linked Aztec wallet ${shortAddr(bindingConflict.counterpart)}`
+      : bindingConflict.kind === 'aztec-linked-elsewhere'
+        ? `Reconnect your linked EVM wallet ${shortAddr(bindingConflict.counterpart)}`
+        : `Switch to your linked wallet pair ${shortAddr(bindingConflict.counterpart)}`
 
   // Success callbacks
   const mintL1SBTOnSuccess = (_data: any) => {
@@ -683,6 +701,10 @@ export default function Home() {
                     (!fuelSufficient || !fuelRecipientValid || !fuelAmountValid)) ||
                   authFailed
                 }
+                // Binding conflict guard — disable + name the linked wallet
+                // before bridging into a guaranteed-failing pair.
+                bindingBlocked={!!bindingConflict}
+                bindingBlockedLabel={bindingBlockedLabel}
                 // Connection states
                 isWaapConnected={isWaapConnected}
                 connectWaapWallet={connectWaapWallet}

@@ -20,21 +20,16 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick }) => {
 
   // A transfer is in progress once an operation step is active and the flow is not terminal.
   // The reset/disconnect action (passed by consumers as `onClick`) tears down wallets and
-  // reloads, which would drop the live progress view, so confirm before running it mid-flight.
+  // reloads, which would drop the live progress view and orphan its recovery data — so it is
+  // HARD-DISABLED mid-flight (issue #136), not merely confirm-gated. Idle/terminal flows reset
+  // freely (the consumer's own disconnect confirm still applies there).
   const progressSteps = getProgressSteps()
   const isTransferInProgress =
     progressSteps.some((s) => s.status === 'active') && !progressSteps.every((s) => s.status === 'completed')
 
   const handleResetClick = () => {
     if (!onClick) return
-    if (
-      isTransferInProgress &&
-      !window.confirm(
-        "Leave now? Your in-progress transfer's recovery data could be lost — export a backup first.",
-      )
-    ) {
-      return
-    }
+    if (isTransferInProgress) return
     onClick()
   }
 
@@ -70,7 +65,11 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick }) => {
 
       <LoadingBar steps={steps} currentStep={headerStep} />
       <p
-        className={`text-center text-[#0A0A0A] font-[700] text-[16px] leading-[24px] tracking-[0.32px] uppercase font-['Suisse_Intl']`}
+        className={`text-center text-[#0A0A0A] font-[700] text-[16px] leading-[24px] tracking-[0.32px] uppercase font-['Suisse_Intl'] ${
+          isTransferInProgress ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+        }`}
+        title={isTransferInProgress ? 'Locked during transfer to protect your funds.' : undefined}
+        aria-disabled={isTransferInProgress}
         onClick={handleResetClick}>
         BRIDGE
       </p>

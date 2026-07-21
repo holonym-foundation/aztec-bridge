@@ -11,8 +11,7 @@ import { useWalletStore } from '@/stores/walletStore'
 import {
   accountLabel,
   useBindingStatus,
-  describeConflict,
-  disclosedLinkedL2,
+  useSessionLinkedL2,
   shortAddr,
 } from '@/hooks/useBindingStatus'
 
@@ -214,17 +213,17 @@ export function AztecWalletConnectionModals() {
     webWalletUrl,
     setWebWalletUrl,
     waapAddress,
-    aztecAddress,
   } = useWalletStore()
 
   // SERVER TRUTH ONLY (issue #124): the picker marks an account as "linked" only
   // when the server has actually disclosed the connected EVM wallet's bound L2
-  // counterpart — never from device-local storage. During the initial connect
-  // flow the Aztec wallet isn't connected yet, so this query is gated off and
-  // resolves to null, meaning no "linked" badge is shown (no guessing).
-  const { data: bindingStatus } = useBindingStatus()
-  const conflict = describeConflict(bindingStatus?.binding, waapAddress, aztecAddress)
-  const linkedAddress = disclosedLinkedL2(conflict)
+  // counterpart — never from device-local storage. useBindingStatus feeds any
+  // disclosure into the in-memory session store; useSessionLinkedL2 then reads it
+  // back, so the badge persists across modal reopens within the session and shows
+  // even after the transient conflict response has cleared. null (no badge, no
+  // guessing) until something has actually been disclosed.
+  useBindingStatus()
+  const linkedAddress = useSessionLinkedL2(waapAddress)
 
   return (
     <>

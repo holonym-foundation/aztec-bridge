@@ -19,6 +19,7 @@ import { useOnboardingStore } from '@/stores/useOnboardingStore'
 import { useL1Humanity } from '@/hooks/useL1Humanity'
 import {
   useBindingStatus,
+  useSessionLinkedL2,
   describeConflict,
   conflictMessage,
   disclosedLinkedL2,
@@ -230,7 +231,16 @@ type WalletDisplayProps = {
   roundedEdge?: 'top' | 'bottom'
   /** True when Privacy Mode is on and the page is on the dark background. */
   isDark?: boolean
+  /**
+   * Hard-lock the fund-losing actions in this row's dropdown (Disconnect +
+   * Switch Account) while a transfer is in progress (issue #136). Copy Address /
+   * Open Wallet stay enabled — they can't orphan the transfer.
+   */
+  actionsLocked?: boolean
 }
+
+/** Shown on the locked Disconnect / Switch-Account rows during a transfer. */
+const TRANSFER_LOCK_HINT = 'Locked during transfer to protect your funds.'
 
 function truncateAddr(addr: string): string {
   if (addr.length <= 13) return addr
@@ -259,6 +269,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
   flat,
   roundedEdge,
   isDark = false,
+  actionsLocked = false,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -376,6 +387,13 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
               <div className="px-4 py-1">
                 <span className={`text-xs ${mutedIconText(isDark)} font-medium`}>Switch Account</span>
               </div>
+              {/* #136: switching the Aztec account mid-transfer would re-point
+                  the flow at a different L2 recipient and orphan the in-flight
+                  claim, so the switch rows are hard-disabled (not merely
+                  confirm-gated) until the transfer settles. */}
+              {actionsLocked && (
+                <p className={`px-4 pb-1 text-[10px] leading-snug ${subtleText(isDark)}`}>{TRANSFER_LOCK_HINT}</p>
+              )}
               {/* Current account indicator — the dropdown intentionally hides the
                   active account from the switch list (you can't switch to what
                   you're already on), so this non-interactive row keeps it visible
@@ -405,8 +423,13 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
                   return (
                     <div
                       key={acc.address}
-                      className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
+                      className={`flex items-center gap-2 px-4 py-2 transition-colors duration-150 ${
+                        actionsLocked ? 'opacity-50 cursor-not-allowed' : `${menuItemHover(isDark)} cursor-pointer`
+                      }`}
+                      aria-disabled={actionsLocked}
+                      title={actionsLocked ? TRANSFER_LOCK_HINT : undefined}
                       onClick={() => {
+                        if (actionsLocked) return
                         onSelectAccount(acc)
                         setShowDropdown(false)
                       }}
@@ -436,8 +459,14 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
             </>
           )}
 
+          {/* #136: disconnecting mid-transfer tears down the wallet session the
+              live /progress view depends on, orphaning the transfer's recovery
+              data — so this is hard-disabled during an active transfer rather
+              than confirm-gated. */}
           <div
-            className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 transition-colors duration-150 ${
+              actionsLocked ? 'opacity-50 cursor-not-allowed' : `${menuItemHover(isDark)} cursor-pointer`
+            } ${
               // NOTE: `text-red-500` never resolved here — this app's tailwind.config.js
               // replaces (not extends) the default palette, which drops the red-500/
               // gray-300/400/500 numbered scales, so `text-red-500` silently compiles to
@@ -447,8 +476,10 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
               // Pre-existing bug; left as-is for light so that mode stays byte-identical,
               // fixed only for dark where an unstyled Disconnect loses its meaning.
               isDark ? 'text-[#FF6B6B]' : 'text-red-500'
-            } transition-colors duration-150`}
-            onClick={handleDisconnect}
+            }`}
+            aria-disabled={actionsLocked}
+            title={actionsLocked ? TRANSFER_LOCK_HINT : undefined}
+            onClick={actionsLocked ? undefined : handleDisconnect}
           >
             <Icon icon="ph:sign-out" width={20} height={20} />
             <span>Disconnect</span>
@@ -840,12 +871,19 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   const conflict = describeConflict(bindingStatus?.binding, waapAddress, aztecAddress)
 
   // The Aztec account the SERVER says this EVM wallet is bound to (disclosed on
-  // an evm-linked-elsewhere conflict). This is the ONLY source of "linked" — no
-  // device-local memory. null unless the server has actually disclosed it.
+  // an evm-linked-elsewhere conflict). Live off the CURRENT response — used for
+  // the inline conflict notice so it clears the instant the pair matches.
   const serverLinkedL2 = disclosedLinkedL2(conflict)
 
+  // Persistent (session) view of the linked Aztec account for the connected EVM
+  // wallet — remembered from any earlier server disclosure this session (bound
+  // or conflict), so the "Linked" badge on the Switch Account list survives a
+  // dropdown reopen even after the transient conflict response has cleared. In
+  // memory only (never localStorage); null until something has been disclosed.
+  const sessionLinkedL2 = useSessionLinkedL2(waapAddress)
+
   // Is that server-disclosed linked account one of the Azguard accounts the user
-  // already has connected? If so we can auto-switch to it (see effect below).
+  // already has connected? Used only to tune the inline notice copy.
   const linkedAccountConnected =
     !!serverLinkedL2 && availableAccounts.some((a) => a.address.toLowerCase() === serverLinkedL2.toLowerCase())
 
@@ -859,21 +897,16 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
 
   // In-progress transfer detection — same derivation BridgeHeader uses: at
   // least one active step, not all completed, and not errored. While true, the
-  // brand-link-to-home and wallet Disconnect (both of which tear down the live
-  // /progress view and its recovery data) confirm before proceeding. Idle,
-  // completed and errored flows navigate/disconnect freely.
+  // wallet Disconnect + Switch Account are HARD-DISABLED (issue #136 — they'd
+  // orphan the live transfer's recovery data), and the brand-link-to-home still
+  // confirms before tearing down the /progress view. Idle, completed and errored
+  // flows navigate/disconnect freely.
   const progressSteps = getProgressSteps()
   const isTransferInProgress =
     progressSteps.some((s) => s.status === 'active') &&
     !progressSteps.every((s) => s.status === 'completed') &&
     !progressSteps.some((s) => s.status === 'error')
 
-  // Wrap an action so it prompts (and can be cancelled) while a transfer is in
-  // flight, but runs untouched otherwise.
-  const guardTransfer = (run: () => void) => () => {
-    if (isTransferInProgress && !window.confirm(TRANSFER_LEAVE_CONFIRM)) return
-    run()
-  }
   const { splashActive, requestShowSplash } = useOnboardingStore()
 
   // Privacy Mode swaps the page to the deep-maroon background (see
@@ -909,31 +942,13 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     setMounted(true)
   }, [])
 
-  // Auto-select the linked Aztec account (issue #120). When the server discloses
-  // that the connected EVM wallet is already bound to a specific L2 account AND
-  // that account is among the user's connected Azguard accounts, switch to it
-  // once so the pair matches and the flow can proceed — instead of leaving the
-  // user stuck on the "wrong" account. Guarded against loops: we auto-switch a
-  // given target only once (tracked in the ref) and never while already on it.
-  // The binding-conflict message is surfaced ONLY inline under the wallet
-  // cluster (see walletNotice) — no duplicate toast (#116/#115).
-  const lastAutoSwitchTarget = useRef<string | null>(null)
-  useEffect(() => {
-    if (!serverLinkedL2) {
-      lastAutoSwitchTarget.current = null
-      return
-    }
-    const key = serverLinkedL2.toLowerCase()
-    if (aztecAddress && aztecAddress.toLowerCase() === key) return
-    if (lastAutoSwitchTarget.current === key) return
-    const target = availableAccounts.find((a) => a.address.toLowerCase() === key)
-    if (!target) return
-    lastAutoSwitchTarget.current = key
-    switchAztecAccount(target)
-    notify('success', `Switched to your linked Aztec account ${shortAddr(target.address)}`, {
-      toastId: 'auto-switch-linked',
-    })
-  }, [serverLinkedL2, aztecAddress, availableAccounts, switchAztecAccount, notify])
+  // No forced auto-switch (reverted #120): selecting a "wrong" Aztec account is
+  // allowed and never silently overridden — the app must never change the user's
+  // chosen account for them. Instead the linked account is MARKED in the switch
+  // list (see linkedAccountAddress below) and the primary action button is
+  // guarded up-front in page.tsx when the connected pair is a conflict, so a
+  // guaranteed-to-fail bridge can't be started. The conflict is surfaced inline
+  // under the wallet cluster (walletNotice) — no toast.
 
   // Auto-connect to Aztec when WaaP wallet is connected
   useEffect(() => {
@@ -1086,12 +1101,13 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           walletIcon={walletIcon || '/assets/wallets/wally-dark.svg'}
           networkIcon="/assets/svg/network-logo.svg"
           balance={l1NativeBalance}
-          onDisconnect={guardTransfer(disconnectWaapWallet)}
+          onDisconnect={disconnectWaapWallet}
           walletType={WalletType.WAAP}
           loginMethod={loginMethod}
           flat
           roundedEdge="top"
           isDark={isDark}
+          actionsLocked={isTransferInProgress}
         />
       ) : (
         <WalletConnectPill
@@ -1125,15 +1141,16 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           displayName={aztecAlias || undefined}
           isConnected={isAztecConnected}
           walletIcon="/assets/svg/aztec-wallet-logo.svg"
-          onDisconnect={guardTransfer(disconnectAztecWallet)}
+          onDisconnect={disconnectAztecWallet}
           availableAccounts={availableAccounts}
           onSelectAccount={switchAztecAccount}
-          linkedAccountAddress={serverLinkedL2 || undefined}
+          linkedAccountAddress={sessionLinkedL2 || undefined}
           linkedEvmAddress={waapAddress || undefined}
           walletType={WalletType.AZTEC}
           flat
           roundedEdge="bottom"
           isDark={isDark}
+          actionsLocked={isTransferInProgress}
         />
       ) : (
         <WalletConnectPill

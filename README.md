@@ -38,13 +38,13 @@ Shield enables users to:
 
 ## 📦 Clean SDK
 
-Shield is the first app built on **Clean SDK** (`@human.tech/clean.sdk`), human.tech's programmable privacy toolkit. The SDK lives in [`packages/sdk/`](packages/sdk) — any app, on Aztec or any chain, can integrate it to give its users private, accountable transactions by routing funds through Aztec.
+Shield is the first app built on **Clean SDK** ([`@human.tech/clean.sdk`](https://www.npmjs.com/package/@human.tech/clean.sdk)), human.tech's programmable privacy toolkit. The SDK lives in [`packages/sdk/`](packages/sdk) — any app, on Aztec or any chain, can integrate it to give its users private, accountable transactions by routing funds through Aztec.
 
 ```bash
 npm install @human.tech/clean.sdk
 ```
 
-Guides: [User Guide](https://shield.human.tech/docs/users) · [Developer Guide](https://shield.human.tech/docs/developers) · [Clean SDK overview](https://human.tech/clean-sdk)
+Links: [npm](https://www.npmjs.com/package/@human.tech/clean.sdk) · [User Guide](https://shield.human.tech/docs/users) · [Developer Guide](https://shield.human.tech/docs/developers) · [Clean SDK overview](https://human.tech/clean-sdk)
 
 ## 🏗️ Architecture
 

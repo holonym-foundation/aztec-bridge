@@ -142,7 +142,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
               onClick={handleOpenWallet}
             >
               <Icon icon="majesticons:open" width={20} height={20} />
-              <span>Open Human Wallet</span>
+              <span>Open Wallet</span>
             </div>
           )}
 

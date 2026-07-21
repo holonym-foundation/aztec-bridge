@@ -26,7 +26,7 @@ export default function RootStyle({ children, className, aside }: RootStyleProps
 
   return (
     <div className={`flex items-center min-h-[90vh] justify-center py-10 px-4`}>
-      <div className='flex flex-col items-center gap-4 md:flex-row md:items-start md:gap-6'>
+      <div className='flex flex-col items-center gap-4 max-w-full md:flex-row md:items-start md:gap-6'>
         {card}
         {aside}
       </div>

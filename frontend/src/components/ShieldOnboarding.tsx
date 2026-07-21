@@ -7,7 +7,7 @@ import { useWalletStore } from '@/stores/walletStore'
 
 const ONBOARDED_KEY = 'shield_onboarded'
 const BRAND = '#81133B'
-const CLEAN_SDK = 'https://www.npmjs.com/package/@human.tech/clean.sdk'
+const CLEAN_SDK = 'https://human.tech/clean-sdk'
 const DOCS_CLEAN_HANDS = '/docs/users'
 
 type Screen = {
@@ -64,7 +64,7 @@ const SCREENS: Screen[] = [
               <strong>Above $1,000</strong>
               <span>
                 Prove your hands are clean.{' '}
-                <InfoTooltip href="https://human.tech/shield" label="Learn more about Proof of Clean Hands">
+                <InfoTooltip href="https://human.tech/shield" label="Learn more about Proof of Clean Hands" align="right">
                   Above $1,000 you verify a government ID in zero knowledge. Learn more at human.tech/shield.
                 </InfoTooltip>
               </span>
@@ -179,7 +179,17 @@ function CryptexVisual({ still }: { still: boolean }) {
         </radialGradient>
       </defs>
 
-      <circle cx={CX_CENTER} cy={CX_CENTER} r={CX_CORE + 8} fill="url(#cx-core)" />
+      {still ? (
+        <circle cx={CX_CENTER} cy={CX_CENTER} r={CX_CORE + 8} fill="url(#cx-core)" />
+      ) : (
+        <motion.circle
+          cx={CX_CENTER}
+          cy={CX_CENTER}
+          fill="url(#cx-core)"
+          animate={{ r: [CX_CORE - 4, CX_CORE + 30, CX_CORE - 4], opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+        />
+      )}
 
       {CX_RINGS.map((ring, i) =>
         still ? (
@@ -287,7 +297,7 @@ function TierIcon({ kind }: { kind: 'unique' | 'clean' }) {
    hover or keyboard focus. No external positioning library, no portal, just a relatively
    positioned bubble anchored to the trigger. The trigger sits inline with the sentence
    and never forces a line break. */
-function InfoTooltip({ label, children, href }: { label: string; children: ReactNode; href?: string }) {
+function InfoTooltip({ label, children, href, align = 'center' }: { label: string; children: ReactNode; href?: string; align?: 'center' | 'right' }) {
   const [open, setOpen] = useState(false)
   const tooltipId = useId()
   const icon = (
@@ -331,7 +341,7 @@ function InfoTooltip({ label, children, href }: { label: string; children: React
           <motion.span
             id={tooltipId}
             role="tooltip"
-            className="ob-tooltip-bubble"
+            className={`ob-tooltip-bubble${align === 'right' ? ' ob-tooltip-bubble-right' : ''}`}
             initial={{ opacity: 0, y: 4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.98 }}
@@ -643,6 +653,10 @@ export default function ShieldOnboarding() {
           pointer-events: none; }
         .ob-tooltip-bubble::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
           border: 6px solid transparent; border-top-color: #1c1116; }
+        /* Edge-anchored variant: for triggers near the right edge (e.g. page-3 tiers),
+           pin the bubble's right edge to the trigger so it can't overflow the viewport. */
+        .ob-tooltip-bubble-right { left: auto; right: 0; transform: none; }
+        .ob-tooltip-bubble-right::after { left: auto; right: 6px; transform: none; }
         .ob-controls { position: relative; z-index: 3; width: 100%; display: flex; flex-direction: column;
           align-items: center; gap: 16px; }
         .ob-btns { width: 100%; max-width: 420px; display: flex; gap: 12px; }

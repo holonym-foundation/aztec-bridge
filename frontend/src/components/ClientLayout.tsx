@@ -20,7 +20,7 @@ export default function ClientLayout({
   // Docs is a neutral reading view — keep the light background even when privacy mode is on.
   const showPrivacyBackground = isPrivacyModeEnabled && !(pathname?.startsWith('/docs') ?? false)
   return (
-    <div className="relative min-h-screen flex flex-col w-full min-w-0" style={{ minHeight: '100vh', minWidth: 0 }}>
+    <div className="relative min-h-screen flex flex-col w-full min-w-0 overflow-x-hidden" style={{ minHeight: '100vh', minWidth: 0 }}>
       <ShieldOnboarding />
       {/* Paper-shader background */}
       <div className="absolute inset-0 z-0" aria-hidden="true">
@@ -56,7 +56,7 @@ export default function ClientLayout({
       /> */}
       {/* Header — kept in its own stacking wrapper so it can be lifted above the
           onboarding splash overlay (z-100) for connected users. See data-ob-splash. */}
-      <div className="ob-header-elevate relative z-20 flex flex-col">
+      <div className="ob-header-elevate relative z-30 flex flex-col">
         <BannerAztecTestnet />
         <BannerAztecNodeError />
         <Header />

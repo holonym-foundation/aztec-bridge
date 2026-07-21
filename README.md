@@ -5,7 +5,7 @@ A visual overview of the Aztec Bridge flow:
 
 A comprehensive bridge application for transferring tokens between Ethereum (L1) and Aztec Network (L2), featuring a modern React/Next.js frontend with seamless Web3 integration.
 
-## ⚠️ **Aztec Mainnet Alpha — Use Caution**
+## ⚠️ **Aztec Mainnet Alpha  — Use Caution**
 
 Active deployment: **Ethereum mainnet (L1) + Aztec Mainnet Alpha v4.3.0 (L2)** with real ZK proofs, live since 2026-05-29 per `bridge-script/deployments/registry.json`.
 

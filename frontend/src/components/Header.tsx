@@ -556,7 +556,7 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
         <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)}`} />
         <span
           className={`text-xs font-semibold ${navText(isDark)}`}
-          title="Human Points — rewards for verified humans, not bots. Open for details."
+          title="HUMN Points — rewards for verified humans, not bots, across human.tech. Open for details."
         >
           {points.toLocaleString()}
         </span>
@@ -569,7 +569,7 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
       </button>
 
       {open && (
-        <div className={`absolute right-0 mt-2 z-50 w-[220px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-4 flex flex-col gap-3`}>
+        <div className={`absolute right-0 mt-2 z-50 w-[248px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-4 flex flex-col gap-3`}>
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <span className={`text-xs font-medium ${subtleText(isDark)}`}>Humanity</span>
@@ -600,26 +600,38 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
               </p>
             )}
           </div>
-          <div className={`flex flex-col gap-1.5 pt-2 border-t ${panelDivider(isDark)}`}>
+          <div className={`flex flex-col gap-2 pt-2 border-t ${panelDivider(isDark)}`}>
             <div className="flex items-center justify-between">
               <span className={`flex items-center gap-1.5 text-xs font-medium ${subtleText(isDark)}`}>
                 <HumanPointsIcon className="w-3.5 h-3.5" />
-                Human Points
+                HUMN Points
               </span>
               <span className={`text-sm font-semibold ${navText(isDark)}`}>{points.toLocaleString()}</span>
             </div>
-            {/* Points has no live source in this app yet (see PLACEHOLDER_POINTS)
-                — the value is a stub. Copy stays general on purpose: no
-                per-action point values or reward tiers are claimed, since none
-                are wired here and neither covenant nor passport define concrete
-                earning mechanics to mirror. Framing follows the human.tech
-                proof-of-personhood voice (verified humans, not bots) and names
-                only the real Shield actions — proving personhood + private
-                bridging — that a future points source would credit. */}
+            {/* The value is still a stub (see PLACEHOLDER_POINTS) — no live
+                points source is wired in Shield yet. Copy + branding mirror the
+                Covenant app's HUMN Points UI: the "verified humans, not bots,
+                across human.tech" framing and the two cross-product earning
+                actions Covenant assigns concrete values to that also apply to
+                Shield — verifying personhood (HUMANITY_VERIFIED = 1,000) and
+                creating a Human Wallet (WALLET_CONNECTION_BONUS = 3,750). No
+                Shield-specific mechanic or point value is invented here;
+                Covenant's artifact/hold/swap-volume tiers are product-specific
+                and don't apply, so they're left out of this nav panel. */}
             <p className={`text-[11px] leading-snug ${subtleText(isDark)}`}>
-              Human Points reward real, verified humans — not bots — across human.tech. In Shield, you earn them by proving
-              your personhood and bridging privately.
+              HUMN Points reward real, verified humans — not bots — across human.tech.
             </p>
+            <div className="flex flex-col gap-1.5">
+              <span className={`text-[10px] font-medium uppercase tracking-wide ${mutedIconText(isDark)}`}>Ways to earn</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[11px] ${subtleText(isDark)}`}>Verify your humanity</span>
+                <span className={`text-[11px] font-semibold ${navText(isDark)}`}>+1,000</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[11px] ${subtleText(isDark)}`}>Create your Human Wallet</span>
+                <span className={`text-[11px] font-semibold ${navText(isDark)}`}>+3,750</span>
+              </div>
+            </div>
           </div>
         </div>
       )}

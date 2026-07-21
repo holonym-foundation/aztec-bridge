@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useWalletStore } from '@/stores/walletStore'
@@ -64,8 +64,9 @@ const SCREENS: Screen[] = [
               <strong>Above $1,000</strong>
               <span>
                 Prove your hands are clean.{' '}
-                <InfoTooltip href="https://human.tech/shield" label="Learn more about Proof of Clean Hands" align="right">
-                  Above $1,000 you verify a government ID in zero knowledge. Learn more at human.tech/shield.
+                <InfoTooltip label="Learn more about Proof of Clean Hands" align="right">
+                  Above $1,000 you verify a government ID in zero knowledge.{' '}
+                  <a href="https://human.tech/shield" target="_blank" rel="noopener noreferrer">Learn more</a>.
                 </InfoTooltip>
               </span>
             </div>
@@ -179,17 +180,7 @@ function CryptexVisual({ still }: { still: boolean }) {
         </radialGradient>
       </defs>
 
-      {still ? (
-        <circle cx={CX_CENTER} cy={CX_CENTER} r={CX_CORE + 8} fill="url(#cx-core)" />
-      ) : (
-        <motion.circle
-          cx={CX_CENTER}
-          cy={CX_CENTER}
-          fill="url(#cx-core)"
-          animate={{ r: [CX_CORE - 4, CX_CORE + 30, CX_CORE - 4], opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-        />
-      )}
+      <circle cx={CX_CENTER} cy={CX_CENTER} r={CX_CORE + 8} fill="url(#cx-core)" />
 
       {CX_RINGS.map((ring, i) =>
         still ? (
@@ -297,9 +288,22 @@ function TierIcon({ kind }: { kind: 'unique' | 'clean' }) {
    hover or keyboard focus. No external positioning library, no portal, just a relatively
    positioned bubble anchored to the trigger. The trigger sits inline with the sentence
    and never forces a line break. */
-function InfoTooltip({ label, children, href, align = 'center' }: { label: string; children: ReactNode; href?: string; align?: 'center' | 'right' }) {
+function InfoTooltip({ label, children, align = 'center' }: { label: string; children: ReactNode; align?: 'center' | 'right' }) {
   const [open, setOpen] = useState(false)
   const tooltipId = useId()
+  // Small close delay so the pointer can travel from the icon into the bubble
+  // (to click the link inside) without the bubble vanishing mid-move.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimer.current = setTimeout(() => setOpen(false), 240)
+  }
   const icon = (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.3" />
@@ -308,43 +312,30 @@ function InfoTooltip({ label, children, href, align = 'center' }: { label: strin
     </svg>
   )
   return (
-    <span className="ob-tooltip" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      {href ? (
-        <a
-          className="ob-tooltip-trigger"
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={label}
-          aria-describedby={tooltipId}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
-        >
-          {icon}
-        </a>
-      ) : (
-        <button
-          type="button"
-          className="ob-tooltip-trigger"
-          aria-label={label}
-          aria-describedby={tooltipId}
-          aria-expanded={open}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
-          onClick={() => setOpen((o) => !o)}
-        >
-          {icon}
-        </button>
-      )}
+    <span className="ob-tooltip" onMouseEnter={() => { cancelClose(); setOpen(true) }} onMouseLeave={scheduleClose}>
+      <button
+        type="button"
+        className="ob-tooltip-trigger"
+        aria-label={label}
+        aria-describedby={tooltipId}
+        aria-expanded={open}
+        onFocus={() => setOpen(true)}
+        onBlur={scheduleClose}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {icon}
+      </button>
       <AnimatePresence>
         {open && (
           <motion.span
             id={tooltipId}
             role="tooltip"
             className={`ob-tooltip-bubble${align === 'right' ? ' ob-tooltip-bubble-right' : ''}`}
-            initial={{ opacity: 0, y: 4, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
           >
             {children}
@@ -467,6 +458,11 @@ export default function ShieldOnboarding() {
                 {screen.visual === 'cryptex' ? (
                   <div className="ob-cryptex-frame">
                     <CryptexVisual still={reduce} />
+                    {!reduce && (
+                      <div className="ob-epicenter" aria-hidden="true">
+                        <MeshGradient colors={['#f462a6', '#b23a72', '#4d051f', '#81133b']} speed={0.32} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+                      </div>
+                    )}
                     <div className="ob-headline">
                       <p className="ob-eyebrow">{screen.eyebrow}</p>
                       <h1 className="ob-title">{screen.title}</h1>
@@ -517,6 +513,11 @@ export default function ShieldOnboarding() {
             <div className="ob-card">
               <div className="ob-cryptex-frame">
                 <CryptexVisual still={reduce} />
+                {!reduce && (
+                  <div className="ob-epicenter" aria-hidden="true">
+                    <MeshGradient colors={['#f462a6', '#b23a72', '#4d051f', '#81133b']} speed={0.32} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+                  </div>
+                )}
                 <div className="ob-headline">
                   <p className="ob-eyebrow">{SCREENS[0].eyebrow}</p>
                   <h1 className="ob-title">{SCREENS[0].title}</h1>
@@ -649,14 +650,16 @@ export default function ShieldOnboarding() {
         .ob-tooltip-trigger:focus-visible { outline: 2px solid ${BRAND}; outline-offset: 2px; }
         .ob-tooltip-bubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
           width: 240px; max-width: 76vw; padding: 12px 14px; border-radius: 12px; background: #1c1116; color: #fdf0f6;
-          font-size: 13px; line-height: 1.45; text-align: left; box-shadow: 0 12px 30px rgba(0,0,0,0.22); z-index: 5;
-          pointer-events: none; }
+          font-size: 13px; line-height: 1.45; text-align: left; box-shadow: 0 12px 30px rgba(0,0,0,0.22); z-index: 5; }
+        .ob-tooltip-bubble a { color: #f9b9d6; text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }
+        .ob-tooltip-bubble a:hover { color: #fff; }
         .ob-tooltip-bubble::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
           border: 6px solid transparent; border-top-color: #1c1116; }
         /* Edge-anchored variant: for triggers near the right edge (e.g. page-3 tiers),
            pin the bubble's right edge to the trigger so it can't overflow the viewport. */
-        .ob-tooltip-bubble-right { left: auto; right: 0; transform: none; }
-        .ob-tooltip-bubble-right::after { left: auto; right: 6px; transform: none; }
+        .ob-tooltip-bubble-right { left: calc(100% + 12px); right: auto; bottom: auto; top: 50%; transform: translateY(-50%); }
+        .ob-tooltip-bubble-right::after { top: 50%; left: -6px; right: auto; transform: translateY(-50%);
+          border-width: 6px 6px 6px 0; border-color: transparent #1c1116 transparent transparent; }
         .ob-controls { position: relative; z-index: 3; width: 100%; display: flex; flex-direction: column;
           align-items: center; gap: 16px; }
         .ob-btns { width: 100%; max-width: 420px; display: flex; gap: 12px; }
@@ -675,6 +678,13 @@ export default function ShieldOnboarding() {
         .ob-cryptex-frame { position: relative; width: 100%; max-width: 500px; max-height: calc(100% - 40px);
           aspect-ratio: 1 / 1; margin: 4px auto 4px; display: flex; align-items: center; justify-content: center; }
         .ob-cryptex-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+        /* Amorphous epicenter glow: a real MeshGradient (shader) blob, blurred and radially
+           masked so it reads as an organic ripple of light breathing behind the headline. */
+        .ob-epicenter { position: absolute; top: 47%; left: 50%; width: 360px; height: 360px;
+          transform: translate(-50%, -50%); z-index: 0; border-radius: 50%; overflow: hidden;
+          opacity: 0.44; filter: blur(28px); pointer-events: none;
+          -webkit-mask: radial-gradient(circle, #000 22%, transparent 66%);
+          mask: radial-gradient(circle, #000 22%, transparent 66%); }
         .ob-headline { position: relative; z-index: 1; padding: 0 28px; text-align: center; }
         .ob-headline .ob-title { max-width: 17ch; }
         /* static glyphs */
@@ -718,6 +728,9 @@ export default function ShieldOnboarding() {
           .ob-tier-copy span { color: #cba7b6; }
           .ob-tooltip-bubble { background: #f6ecf1; color: #1c1116; }
           .ob-tooltip-bubble::after { border-top-color: #f6ecf1; }
+          .ob-tooltip-bubble-right::after { border-color: transparent #f6ecf1 transparent transparent; }
+          .ob-tooltip-bubble a { color: ${BRAND}; }
+          .ob-tooltip-bubble a:hover { color: #4d051f; }
           .ob-handoff { background: radial-gradient(#2a141f, #150a0f); }
         }
       `}</style>

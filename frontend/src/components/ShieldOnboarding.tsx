@@ -349,7 +349,10 @@ export default function ShieldOnboarding() {
   const reduce = useReducedMotion() ?? false
   const connectWaapWallet = useWalletStore((s) => s.connectWaapWallet)
   const isWaapConnected = useWalletStore((s) => s.isWaapConnected)
-  const [mode, setMode] = useState<'hidden' | 'flow' | 'splash'>('hidden')
+  // Start in 'loading': the shader shell renders immediately (covering the bridge from
+  // the first paint) while we read localStorage / wallet state, then we resolve to the
+  // real mode and the inner content fades in over the same, never-remounted shader.
+  const [mode, setMode] = useState<'loading' | 'hidden' | 'flow' | 'splash'>('loading')
   const [index, setIndex] = useState(0)
   const [leaving, setLeaving] = useState(false)
 
@@ -403,129 +406,152 @@ export default function ShieldOnboarding() {
 
   const back = () => setIndex((i) => Math.max(0, i - 1))
 
-  if (mode === 'hidden') return null
-
   const screen = SCREENS[index]
   const progress = ((index + 1) / SCREENS.length) * 100
 
-  return (
-    <AnimatePresence onExitComplete={finishFlow}>
-      {mode === 'splash' ? (
-        <motion.div
-          key="splash"
-          className="ob-root"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.5, ease: 'easeInOut' }}
-        >
-          <PaperField still={reduce} />
-          <div className="ob-stage">
-            <div className="ob-stage-inner">
-              <div className="ob-card-region">
-                <div className="ob-card">
+  const flowContent = (
+    <motion.div
+      key="flow"
+      className="ob-inner"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.5, ease: 'easeInOut' }}
+    >
+      {/* Full-width progress bar */}
+      <div className="ob-progress" role="progressbar" aria-valuenow={index + 1} aria-valuemin={1} aria-valuemax={SCREENS.length}>
+        <motion.div className="ob-progress-fill" animate={{ width: `${progress}%` }} transition={{ duration: 0.5, ease: 'easeOut' }} />
+      </div>
+
+      <div className="ob-top">
+        <img src="/assets/svg/shield-symbol-maroon.svg" alt="Shield" width={22} height={27} />
+        <button className="ob-skip" onClick={skip}>Skip</button>
+      </div>
+
+      <div className="ob-stage">
+        <div className="ob-stage-inner">
+          <div className="ob-card-region">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={index}
+                className="ob-card"
+                initial={{ opacity: 0, y: 22 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -22 }}
+                transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {screen.visual === 'cryptex' ? (
                   <div className="ob-cryptex-frame">
                     <CryptexVisual still={reduce} />
                     <div className="ob-headline">
-                      <p className="ob-eyebrow">{SCREENS[0].eyebrow}</p>
-                      <h1 className="ob-title">{SCREENS[0].title}</h1>
+                      <p className="ob-eyebrow">{screen.eyebrow}</p>
+                      <h1 className="ob-title">{screen.title}</h1>
                     </div>
                   </div>
-                  <div className="ob-body">
-                    <p>Move your funds between Ethereum and Aztec with privacy.</p>
-                  </div>
+                ) : (
+                  <>
+                    <div className="ob-visual">
+                      <StaticGlyph kind={screen.visual} />
+                    </div>
+                    <p className="ob-eyebrow">{screen.eyebrow}</p>
+                    <h1 className={`ob-title ob-title-${screen.visual}`}>{screen.title}</h1>
+                  </>
+                )}
+                <div className="ob-body">{screen.body}</div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          <div className="ob-controls">
+            <div className="ob-btns">
+              {index > 0 && <button className="ob-back" onClick={back}>Back</button>}
+              <button className="ob-next" onClick={advance}>{screen.cta}</button>
+            </div>
+            <p className="ob-secured">
+              Secured by <strong>human.tech</strong>
+              <span className="ob-dot">·</span>
+              Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+
+  const splashContent = (
+    <motion.div
+      key="splash"
+      className="ob-inner"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.5, ease: 'easeInOut' }}
+    >
+      <div className="ob-stage">
+        <div className="ob-stage-inner">
+          <div className="ob-card-region">
+            <div className="ob-card">
+              <div className="ob-cryptex-frame">
+                <CryptexVisual still={reduce} />
+                <div className="ob-headline">
+                  <p className="ob-eyebrow">{SCREENS[0].eyebrow}</p>
+                  <h1 className="ob-title">{SCREENS[0].title}</h1>
                 </div>
               </div>
-              <div className="ob-controls">
-                <div className="ob-btns">
-                  <button className="ob-next" onClick={connectFromSplash}>Connect wallet</button>
-                </div>
-                <p className="ob-secured">
-                  Secured by <strong>human.tech</strong>
-                  <span className="ob-dot">·</span>
-                  Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
-                </p>
+              <div className="ob-body">
+                <p>Move your funds between Ethereum and Aztec with privacy.</p>
               </div>
             </div>
           </div>
-        </motion.div>
-      ) : !leaving ? (
+          <div className="ob-controls">
+            <div className="ob-btns">
+              <button className="ob-next" onClick={connectFromSplash}>Connect wallet</button>
+            </div>
+            <p className="ob-secured">
+              Secured by <strong>human.tech</strong>
+              <span className="ob-dot">·</span>
+              Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+
+  return (
+    <AnimatePresence>
+      {/* The shader shell is painted on the very first client frame so the bridge never
+          flashes underneath. The shell itself never fades IN (initial={false}); it stays
+          mounted while the inner content (progress bar, headline, controls) fades in over
+          it, and it only fades OUT — cleanly revealing the bridge — when we dismiss. */}
+      {mode !== 'hidden' && !leaving && (
         <motion.div
-          key="onboarding"
+          key="ob-root"
           className="ob-root"
-          initial={{ opacity: 0 }}
+          initial={false}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5, ease: 'easeInOut' }}
         >
           <PaperField still={reduce} />
-
-          {/* Full-width progress bar */}
-          <div className="ob-progress" role="progressbar" aria-valuenow={index + 1} aria-valuemin={1} aria-valuemax={SCREENS.length}>
-            <motion.div className="ob-progress-fill" animate={{ width: `${progress}%` }} transition={{ duration: 0.5, ease: 'easeOut' }} />
-          </div>
-
-          <div className="ob-top">
-            <img src="/assets/svg/shield-symbol-maroon.svg" alt="Shield" width={22} height={27} />
-            <button className="ob-skip" onClick={skip}>Skip</button>
-          </div>
-
-          <div className="ob-stage">
-            <div className="ob-stage-inner">
-              <div className="ob-card-region">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={index}
-                    className="ob-card"
-                    initial={{ opacity: 0, y: 22 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -22 }}
-                    transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-                  >
-                  {screen.visual === 'cryptex' ? (
-                    <div className="ob-cryptex-frame">
-                      <CryptexVisual still={reduce} />
-                      <div className="ob-headline">
-                        <p className="ob-eyebrow">{screen.eyebrow}</p>
-                        <h1 className="ob-title">{screen.title}</h1>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="ob-visual">
-                        <StaticGlyph kind={screen.visual} />
-                      </div>
-                      <p className="ob-eyebrow">{screen.eyebrow}</p>
-                      <h1 className={`ob-title ob-title-${screen.visual}`}>{screen.title}</h1>
-                    </>
-                  )}
-                  <div className="ob-body">{screen.body}</div>
-                </motion.div>
-                </AnimatePresence>
-              </div>
-
-              <div className="ob-controls">
-                <div className="ob-btns">
-                  {index > 0 && <button className="ob-back" onClick={back}>Back</button>}
-                  <button className="ob-next" onClick={advance}>{screen.cta}</button>
-                </div>
-                <p className="ob-secured">
-                  Secured by <strong>human.tech</strong>
-                  <span className="ob-dot">·</span>
-                  Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
-                </p>
-              </div>
-            </div>
-          </div>
+          <AnimatePresence mode="wait">
+            {mode === 'flow' ? flowContent : mode === 'splash' ? splashContent : null}
+          </AnimatePresence>
         </motion.div>
-      ) : (
+      )}
+
+      {leaving && (
         <motion.div
           key="handoff"
           className="ob-handoff"
           initial={{ opacity: 0 }}
           animate={{ opacity: [0, 1, 1, 0] }}
           transition={{ duration: 1.5, times: [0, 0.25, 0.7, 1], ease: 'easeInOut' }}
-          onAnimationComplete={finishFlow}
+          onAnimationComplete={() => {
+            markOnboarded()
+            setLeaving(false)
+            setMode('hidden')
+          }}
         >
           <motion.div
             className="ob-handoff-mark"
@@ -542,6 +568,8 @@ export default function ShieldOnboarding() {
         .ob-root { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column;
           overflow: hidden; font-family: 'Suisse Intl', system-ui, sans-serif;
           background: #fff6fa; color: #1c1116; }
+        /* Inner content overlay: fades in over the persistent shader shell. */
+        .ob-inner { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; }
         .ob-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
         .ob-field canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
         .ob-veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,246,250,0.38), rgba(255,246,250,0.78)); }

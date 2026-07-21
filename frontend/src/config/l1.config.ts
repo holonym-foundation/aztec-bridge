@@ -1,6 +1,6 @@
 import { parseUnits } from 'viem'
 import { InitWaaPOptions } from '@human.tech/waap-sdk'
-import { logo } from './logo'
+import { shieldLogo } from './logo'
 import { L1_CHAIN_ID } from '@/config'
 import { WALLETCONNECT_PROJECT_ID } from '@/config/env.config'
 
@@ -17,8 +17,8 @@ export const waapConfig: InitWaaPOptions = {
     },
   },
   project: {
-    entryTitle: 'Welcome Human',
-    logo: logo,
+    entryTitle: 'Move funds privately',
+    logo: shieldLogo,
   },
   walletConnectProjectId: WALLETCONNECT_PROJECT_ID,
 }

@@ -107,12 +107,26 @@ export function usdToTokenBaseUnits(usd: number, tokenSymbol: string, decimals: 
 }
 
 /**
- * Sum a user's outstanding (non-expired) attestation budget reservations, in USD.
+ * Sum a user's outstanding attestation budget reservations, in USD.
  *
  * A reservation is written when a passport deposit attestation is signed, so this
  * counts budget that is authorized but not yet confirmed on-chain. Added to the
  * confirmed-deposit sum it closes the TOCTOU race where concurrent attestation
  * requests each read only confirmed usage and each receive a full-budget signature.
+ *
+ * Once the reservation's deposit settles on-chain (a confirmed deposit carrying
+ * the same attestation nonce) getConfirmedDepositUsd already counts that deposit,
+ * so a reservation must not re-charge the amount now confirmed against it —
+ * otherwise a user's own confirmed deposit blocks their next one until the
+ * reservation's TTL (<= the attestation deadline, ~1h). Each reservation therefore
+ * contributes only the portion of its signed ceiling NOT yet confirmed against it:
+ * max(0, signedMax - confirmedForThisNonce). Combined with getConfirmedDepositUsd
+ * the pair counts max(signedMax, confirmed) >= signedMax, so the reservation stays
+ * a floor the client-supplied confirmed amount cannot dip below. Fully retiring it
+ * would let a client under-report (or forge) a confirmed deposit's amount to free
+ * the signed budget while the still-valid attestation is spent on-chain for its
+ * full ceiling — reopening the cumulative-cap bypass. Matching counts confirmed
+ * statuses only, never 'pending' (client-supplied, unverified).
  */
 export async function getReservedDepositUsd(
   userId: string,
@@ -120,9 +134,28 @@ export async function getReservedDepositUsd(
 ): Promise<number> {
   const rows = await client.attestationReservation.findMany({
     where: { fkUserId: userId, expiresAt: { gt: new Date() } },
-    select: { amountUsd: true },
+    select: { amountUsd: true, nonce: true },
   })
-  return rows.reduce((sum, r) => sum + r.amountUsd, 0)
+  if (rows.length === 0) return 0
+
+  const settled = await client.bridgeActivity.findMany({
+    where: {
+      fkUserId: userId,
+      direction: BridgeDirection.L1_TO_L2,
+      status: { in: LOCKED_DEPOSIT_STATUSES },
+      attestationNonce: { in: rows.map((r) => r.nonce) },
+    },
+    select: { attestationNonce: true, amountL1: true, tokenDecimalsL1: true, tokenSymbolL1: true },
+  })
+  const confirmedByNonce = new Map<string, number>()
+  for (const d of settled) {
+    if (!d.attestationNonce || !d.amountL1) continue
+    const decimals = d.tokenDecimalsL1 ?? 6
+    const price = getTokenPriceUsd(d.tokenSymbolL1 ?? 'USDC', null)
+    const usd = (Number(d.amountL1) / 10 ** decimals) * price
+    confirmedByNonce.set(d.attestationNonce, (confirmedByNonce.get(d.attestationNonce) ?? 0) + usd)
+  }
+  return rows.reduce((sum, r) => sum + Math.max(0, r.amountUsd - (confirmedByNonce.get(r.nonce) ?? 0)), 0)
 }
 
 export interface PassportReservationResult {

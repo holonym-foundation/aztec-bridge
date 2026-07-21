@@ -112,6 +112,19 @@ export async function POST(request: NextRequest) {
 
     let maxAmount = getPassportMaxAmount()
 
+    // Cap the signed ceiling to the amount the client will actually deposit. The
+    // portal accepts any deposit <= maxAmount, so signing the full per-tx ceiling
+    // reserves the user's whole budget for a smaller deposit and blocks their next
+    // one until the reservation's TTL (~1h). Sizing the signature to the requested
+    // amount lets the reservation retire against the confirmed deposit instead. The
+    // value is client-supplied, so it can only tighten the ceiling here — the
+    // budget-derived cap below still applies, and the portal rejects any deposit
+    // above the signed amount.
+    if (isDeposit && data.amount) {
+      const requested = BigInt(data.amount)
+      if (requested > 0n && requested < maxAmount) maxAmount = requested
+    }
+
     // Deposit caps (cumulative Travel Rule threshold + Alpha rolling-24h cap).
     // Evaluated AND reserved atomically under a per-user lock, so concurrent requests
     // can't each pass a stale budget check and each get a full-budget signature

@@ -230,11 +230,16 @@ model BridgeActivity {
   // --- Client IP (for audit trail per-operation) ---
   clientIp  String?  // IP address of the client that initiated this operation
 
+  // Passport attestation nonce that authorized this L1→L2 deposit; lets the
+  // budget ledger match a confirmed deposit to its outstanding reservation.
+  attestationNonce String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([fkUserId])
   @@index([fkUserId, createdAt])
+  @@index([fkUserId, attestationNonce])
   @@index([status])
   @@index([direction])
   @@index([l1TxHash])

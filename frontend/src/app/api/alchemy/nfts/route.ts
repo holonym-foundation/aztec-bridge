@@ -7,12 +7,15 @@ import { getChainIdFromNetwork, getSupportedNetworks } from '@/utils/alchemy.uti
 import { ALCHEMY_API_KEY } from '@/config/env.config'
 const apiKey = ALCHEMY_API_KEY
 
-if (!apiKey) {
-  throw new Error('No ALCHEMY_API_KEY found in .env')
-}
-
 export async function POST(request: NextRequest) {
   try {
+    // NFTs are a display-only enhancement. Without a key, return empty
+    // rather than 500 so wallet connect and bridging still work.
+    if (!apiKey) {
+      console.warn('[nfts] ALCHEMY_API_KEY not set, returning empty NFT list')
+      return NextResponse.json([])
+    }
+
     const body = await request.json()
     const { chains, address } = body
 

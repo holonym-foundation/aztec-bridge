@@ -4,6 +4,7 @@ import BannerAztecNodeError from '@/components/BannerAztecNodeError'
 import BannerAztecTestnet from '@/components/BannerAztecTestnet'
 import Footer from '@/components/Footer'
 import Header from '@/components/Header'
+import HowItWorksModal from '@/components/model/HowItWorksModal'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { motion } from 'framer-motion'
 import { usePathname } from 'next/navigation'
@@ -51,6 +52,7 @@ export default function ClientLayout({
         <div className='flex-grow'>{children}</div>
         <Footer className='' />
       </div>
+      <HowItWorksModal />
     </div>
   )
 }

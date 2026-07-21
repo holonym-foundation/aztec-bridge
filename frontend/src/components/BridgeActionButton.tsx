@@ -79,10 +79,10 @@ interface BridgeActionButtonProps {
   pochEligible?: boolean
   pochLoading?: boolean
   pochReason?: string
+  // Opens the verification step/screen when attestation is required (replaces a toast).
+  onRequestVerification?: () => void
   attestationMethod?: 'poch' | 'passport' | null
   passportMaxAmount?: bigint
-  passportScore?: number
-  passportThreshold?: number
   // Alpha per-day (rolling 24h) deposit cap: USD left for this user (undefined = cap disabled)
   remainingDepositUsd?: number
   // Travel Rule: passport tier blocked because lifetime volume reached the threshold.
@@ -133,13 +133,12 @@ function BridgeActionButton({
   pochEligible,
   pochLoading = false,
   pochReason,
+  onRequestVerification,
   attestationMethod,
   passportMaxAmount,
   remainingDepositUsd,
   travelRuleBlocked = false,
   travelRuleRemainingUsd,
-  passportScore,
-  passportThreshold,
   bridgeCompleted = false,
   l2NodeError = false,
   l2NodeIsReadyLoading = false,
@@ -281,40 +280,7 @@ function BridgeActionButton({
       return
     }
     if (!pochEligible) {
-      notify('error', {
-        heading: 'Attestation Required',
-        message: React.createElement(
-          'span',
-          null,
-          React.createElement(
-            'span',
-            null,
-            pochReason ? `${pochReason}. ` : 'Cannot bridge without a valid attestation. ',
-          ),
-          React.createElement('br'),
-          React.createElement(
-            'a',
-            {
-              href: 'https://id.human.tech/sandbox/clean-hands',
-              target: '_blank',
-              rel: 'noopener noreferrer',
-              style: { color: '#2563eb', textDecoration: 'underline' },
-            },
-            'Mint your POCH SBT here',
-          ),
-          React.createElement('br'),
-          React.createElement(
-            'a',
-            {
-              href: 'https://app.passport.xyz/',
-              target: '_blank',
-              rel: 'noopener noreferrer',
-              style: { color: '#2563eb', textDecoration: 'underline' },
-            },
-            `Build your Passport score${passportScore != null && passportThreshold != null ? ` (current: ${passportScore}/${passportThreshold} needed)` : ''}`,
-          ),
-        ) as unknown as string,
-      })
+      onRequestVerification?.()
       return
     }
 
@@ -327,11 +293,11 @@ function BridgeActionButton({
         if (inputBigInt > passportMaxAmount) {
           const maxFormatted = (Number(passportMaxAmount) / 10 ** decimals).toFixed(2)
           notify('error', {
-            heading: 'Amount Exceeds Passport Limit',
+            heading: 'Amount Exceeds Human Passport Limit',
             message: React.createElement(
               'span',
               null,
-              `Passport allows up to ${maxFormatted} USDC per transaction. `,
+              `Human Passport allows up to ${maxFormatted} USDC per transaction. `,
               React.createElement(
                 'a',
                 {
@@ -340,7 +306,7 @@ function BridgeActionButton({
                   rel: 'noopener noreferrer',
                   style: { color: '#2563eb', textDecoration: 'underline' },
                 },
-                'Mint a POCH SBT',
+                'get a Proof of Clean Hands',
               ),
               ' to remove this limit.',
             ) as unknown as string,
@@ -464,7 +430,7 @@ function BridgeActionButton({
 
     // Attestation requirement applies to both public and private modes.
     if (pochLoading) return 'Checking eligibility...'
-    if (!pochEligible) return 'Attestation Required'
+    if (!pochEligible) return 'Verify to continue'
 
     return getOperationLabel(direction)
   }

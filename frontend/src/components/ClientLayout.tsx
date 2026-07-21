@@ -17,12 +17,19 @@ export default function ClientLayout({
 }) {
   const { isPrivacyModeEnabled } = useBridgeStore()
   const pathname = usePathname()
+  // Docs is a public, neutral reading surface: reachable without the onboarding gate and
+  // rendered on a clean near-white background rather than the pink paper-shader field.
+  const isDocs = pathname?.startsWith('/docs') ?? false
   // Docs is a neutral reading view — keep the light background even when privacy mode is on.
-  const showPrivacyBackground = isPrivacyModeEnabled && !(pathname?.startsWith('/docs') ?? false)
+  const showPrivacyBackground = isPrivacyModeEnabled && !isDocs
   return (
     <div className="relative min-h-screen flex flex-col w-full min-w-0" style={{ minHeight: '100vh', minWidth: 0 }}>
-      <ShieldOnboarding />
-      {/* Paper-shader background */}
+      {/* Onboarding is skipped on docs so the guides render without connecting a wallet. */}
+      {!isDocs && <ShieldOnboarding />}
+      {/* Background: clean near-white surface on docs, pink paper-shader field elsewhere. */}
+      {isDocs ? (
+        <div className="absolute inset-0 z-0 bg-white" aria-hidden="true" />
+      ) : (
       <div className="absolute inset-0 z-0" aria-hidden="true">
         <MeshGradient
           colors={['#fff6fa', '#fde7f3', '#fcd4ea', '#fa8fc4']}
@@ -40,6 +47,7 @@ export default function ClientLayout({
           style={{ willChange: 'background' }}
         />
       </div>
+      )}
       {/* Grain overlay */}
       {/* <motion.div
         className="absolute inset-0 z-10 pointer-events-none"

@@ -92,6 +92,24 @@ const HumanPointsIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 )
 
+/**
+ * GitHub and Discord marks for the docs header, inlined as raw SVG. These are
+ * deliberately NOT loaded through the iconify remote icon set: on the docs
+ * reading surface, a remotely-fetched icon glyph that is slow or blocked falls
+ * back to a broken dash/tofu placeholder. Inline SVG has no network dependency.
+ */
+const GithubIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.19-3.08-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 2.9-.39c.98 0 1.97.13 2.9.39 2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5Z" />
+  </svg>
+)
+
+const DiscordIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M20.32 4.37A19.8 19.8 0 0 0 15.4 2.9a.07.07 0 0 0-.08.04c-.21.38-.44.87-.6 1.25a18.3 18.3 0 0 0-5.44 0c-.17-.39-.4-.87-.62-1.25a.08.08 0 0 0-.08-.04c-1.71.3-3.35.8-4.92 1.47a.07.07 0 0 0-.03.03C.53 9.05-.32 13.58.1 18.06a.08.08 0 0 0 .03.06 19.9 19.9 0 0 0 6 3.03.08.08 0 0 0 .09-.03c.46-.63.87-1.3 1.23-2a.08.08 0 0 0-.04-.11c-.65-.25-1.28-.55-1.88-.9a.08.08 0 0 1-.01-.13l.37-.29a.07.07 0 0 1 .08-.01c3.93 1.8 8.18 1.8 12.06 0a.07.07 0 0 1 .08 0l.37.3a.08.08 0 0 1-.01.13c-.6.35-1.23.65-1.88.9a.08.08 0 0 0-.04.11c.36.7.78 1.36 1.23 2a.08.08 0 0 0 .09.03 19.8 19.8 0 0 0 6.01-3.03.08.08 0 0 0 .03-.06c.5-5.18-.84-9.67-3.54-13.66a.06.06 0 0 0-.03-.03ZM8.02 15.33c-1.18 0-2.16-1.09-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.33-.96 2.42-2.16 2.42Zm7.97 0c-1.18 0-2.16-1.09-2.16-2.42s.96-2.42 2.16-2.42c1.21 0 2.18 1.1 2.16 2.42 0 1.33-.95 2.42-2.16 2.42Z" />
+  </svg>
+)
+
 type WalletDisplayProps = {
   address?: string
   displayName?: string | null
@@ -600,13 +618,70 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   }
 
   if (isDocs) {
+    // Which audience are we in? Drives the "For Users" / "For Devs" highlight
+    // and the small context label next to the logo.
+    const isDevArea =
+      pathname?.startsWith('/docs/developers') ||
+      pathname?.startsWith('/docs/protocol') ||
+      pathname?.startsWith('/docs/recipes')
+    const isUserArea = pathname?.startsWith('/docs/users')
+    const docsLink = (href: string, label: string, active?: boolean) => (
+      <Link
+        href={href}
+        className={`hidden sm:inline-flex items-center h-8 px-3 rounded-full text-xs font-medium transition-colors ${
+          active
+            ? 'bg-latest-blue-200 text-latest-blue-100'
+            : 'text-[#17235E] hover:bg-black/[0.04]'
+        }`}
+      >
+        {label}
+      </Link>
+    )
+    // Icons are inlined as SVG (not loaded from a remote icon font/CDN). The
+    // old docs chrome rendered these glyphs from a remotely-loaded icon set,
+    // which fell back to broken dash/tofu placeholders whenever that request
+    // was slow or blocked. Inline SVG always paints.
     return (
-      <header className="w-full px-4 pt-3 flex justify-between items-center relative">
-        <div className="flex-shrink-0">
-          <Link href="/" className="hover:opacity-80 transition-opacity duration-200">
-            <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={112} height={30} />
-          </Link>
-        </div>
+      <header className="w-full px-4 pt-3 flex items-center justify-between gap-3 relative">
+        <Link
+          href="/docs"
+          className="flex-shrink-0 flex items-center gap-2 hover:opacity-80 transition-opacity duration-200"
+        >
+          <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={112} height={30} />
+          <span className="hidden sm:inline text-xs font-medium text-latest-grey-500">
+            {isDevArea ? '| For Devs' : isUserArea ? '| For Users' : 'Docs'}
+          </span>
+        </Link>
+
+        <nav className="flex items-center gap-1.5" aria-label="Docs">
+          {docsLink('/docs/users', 'For Users', isUserArea)}
+          {docsLink('/docs/developers', 'For Devs', isDevArea)}
+          <a
+            href="https://github.com/holonym-foundation/shield.human.tech"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub repository"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#17235E] hover:bg-black/[0.04] transition-colors"
+          >
+            <GithubIcon className="h-[18px] w-[18px]" />
+          </a>
+          <a
+            href="https://discord.com/invite/zfGqjA5pxU"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Discord community"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#17235E] hover:bg-black/[0.04] transition-colors"
+          >
+            <DiscordIcon className="h-[18px] w-[18px]" />
+          </a>
+          <a
+            href="/"
+            aria-label="Open the bridge app"
+            className={`flex-shrink-0 flex items-center h-8 px-3 rounded-full text-xs font-medium ${GLASS_PILL} ${GLASS_PILL_HOVER} text-[#81133B]`}
+          >
+            Open app
+          </a>
+        </nav>
       </header>
     )
   }

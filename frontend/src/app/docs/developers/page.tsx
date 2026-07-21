@@ -3,8 +3,8 @@ import DocsLayout, { Callout, Code, P, UL, Table, Th, Td, type DocsSection } fro
 import CodeBlock from '@/components/CodeBlock'
 
 export const metadata = {
-  title: 'Developer Guide · Aztec Bridge Docs',
-  description: 'Integrate the @human.tech/clean.sdk into your dapp — API reference and examples.',
+  title: 'Shield | For Devs',
+  description: 'Integrate the @human.tech/clean.sdk into your dapp: API reference and examples.',
 }
 
 const sections: DocsSection[] = [
@@ -19,9 +19,15 @@ const sections: DocsSection[] = [
         </P>
         <UL>
           <li>Works in the browser and in Node.js.</li>
-          <li>Aztec and viem dependencies are bundled — there are no peer dependencies to install separately.</li>
+          <li>Aztec and viem dependencies are bundled, so there are no peer dependencies to install separately.</li>
           <li>Fully typed; every public type is exported from the package root.</li>
         </UL>
+        <P>
+          Building something specific? See <a href="/docs/recipes" className="text-latest-blue-100 underline">Recipes</a>{' '}
+          for end-to-end patterns (agent, payroll, OTC, donations, embedded wallet), and{' '}
+          <a href="/docs/protocol" className="text-latest-blue-100 underline">Protocol &amp; Cryptography</a> for the ZK,
+          compliance, and contract layer under these calls.
+        </P>
       </>
     ),
   },
@@ -40,10 +46,10 @@ const sections: DocsSection[] = [
     label: 'Initialization',
     content: (
       <>
-        <CodeBlock>{`import { HumanTechBridge, ACTIVE_DEPLOYMENT_ID } from '@human.tech/clean.sdk'
+        <CodeBlock>{`import { HumanTechBridge, ACTIVE_DEPLOYMENT_ID, getDeployment } from '@human.tech/clean.sdk'
 
 const bridge = new HumanTechBridge({
-  l1RpcUrl: 'https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY', // required
+  l1RpcUrl: process.env.L1_RPC_URL, // required; your own endpoint. Keep keys server-side.
   deployment: ACTIVE_DEPLOYMENT_ID, // optional, defaults to the active deployment
   domain: window.location.origin,   // optional in the browser, required in Node.js
   apiUrl: 'https://shield.human.tech', // optional, this is the default
@@ -52,6 +58,12 @@ const bridge = new HumanTechBridge({
         <Callout tone="info">
           <Code>domain</Code> is used to derive the encryption key for operation backups. In the browser it defaults to{' '}
           <Code>window.location.origin</Code>; in Node.js you must pass it explicitly.
+        </Callout>
+        <Callout tone="info">
+          Read the network from the deployment rather than hardcoding it. The L1 chain your{' '}
+          <Code>l1RpcUrl</Code> points at, and the <Code>chainId</Code> you sign with, must match{' '}
+          <Code>getDeployment(ACTIVE_DEPLOYMENT_ID).network.l1ChainId</Code> for the active deployment. This keeps your
+          integration correct across deployment changes.
         </Callout>
       </>
     ),
@@ -67,7 +79,7 @@ const bridge = new HumanTechBridge({
   l2Address: '0x...',              // Aztec address
   domain: window.location.host,
   uri: window.location.origin,
-  chainId: 1,                      // Ethereum mainnet
+  chainId: l1ChainId,              // from getDeployment(ACTIVE_DEPLOYMENT_ID).network.l1ChainId
   signMessage: (msg) => wallet.signMessage(msg),
   // optional: nonce, l1LoginMethod, l1WalletProvider, l2LoginMethod, l2WalletProvider
 })
@@ -370,8 +382,8 @@ try {
 export default function DevelopersDocsPage() {
   return (
     <DocsLayout
-      title="Developer Guide"
-      subtitle="Integrate the bridge SDK into your dapp."
+      title="Shield | For Devs"
+      subtitle="Integrate the Clean SDK into your dapp."
       sections={sections}
     />
   )

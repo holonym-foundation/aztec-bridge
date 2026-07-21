@@ -271,7 +271,18 @@ The [frontend](../../frontend/) directory in this monorepo is a full Next.js app
 
 ## Network
 
-Currently targeting **Aztec Devnet 4** on Sepolia. See `package.json` for pinned Aztec package versions.
+Shield runs on **Aztec v5**. Do not hardcode network details: the SDK bundles all contract
+addresses and network config in `deployments.json`, and the active deployment is the single
+source of truth. Read it with the config helpers:
+
+```ts
+import { getDeployment, ACTIVE_DEPLOYMENT_ID } from '@human.tech/clean.sdk'
+
+const { network, tokens } = getDeployment(ACTIVE_DEPLOYMENT_ID)
+// network.l1ChainId, network.aztecVersion, network.nodeUrl, ...
+```
+
+See `package.json` for the pinned `@aztec` package versions.
 
 ## License
 

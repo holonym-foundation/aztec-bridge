@@ -5,22 +5,25 @@ A visual overview of the Aztec Bridge flow:
 
 A comprehensive bridge application for transferring tokens between Ethereum (L1) and Aztec Network (L2), featuring a modern React/Next.js frontend with seamless Web3 integration.
 
-## ⚠️ **Aztec Mainnet Alpha — Use Caution**
+## ⚠️ **Aztec v5 (Alpha network), Use Caution**
 
-Active deployment: **Ethereum mainnet (L1) + Aztec Mainnet Alpha v4.3.0 (L2)** with real ZK proofs, live since 2026-05-29 per `bridge-script/deployments/registry.json`.
+Shield is live on **Aztec v5**. The active deployment (id, contract addresses, node URL, chain
+IDs) is defined by `deployments.json`, which is the single source of truth; do not hardcode a
+version string from this README.
 
-**Aztec is in Alpha**, not full production:
+**Aztec is an early (alpha) network**, not full production:
 
 - ~1 TPS, ~6s block times (blocks bundled into ~72s checkpoints settled to L1)
 - Ongoing audits + bug bounty (see [aztec.network/blog/alpha-network-security-what-to-expect](https://aztec.network/blog/alpha-network-security-what-to-expect))
+- A serious proving-system issue found in early 2026 was fixed in the v5 release
 - Aztec advises users to only deposit funds they can afford to lose
 
 **Bridge-specific:**
 
-- Audited by Nethermind Security (NM-0756, May 2026) — 1 critical / 2 high / 3 medium findings, all resolved before deployment
-- Public marketing launch aligned with Aztec v5 release (~July 2026)
+- Audited by **Nethermind Security** (NM-0756, May 2026: 1 critical / 2 high / 3 medium, all resolved before deployment; bridge contracts, circuits, and cross-chain flow) and **Hexens** (ZK identity circuits and Human Network)
+- Public marketing launch aligned with the Aztec v5 release
 
-Prior testnet deployments (Sepolia + Aztec testnet 4.2.0-rc.1) remain in `bridge-script/deployments/` for historical reference but are no longer the active deployment.
+Prior testnet deployments remain in `bridge-script/deployments/` for historical reference but are no longer the active deployment.
 
 ## 🌟 Overview
 
@@ -166,15 +169,14 @@ forge deploy       # Deploy contracts
 
 ## 🔐 Security
 
-### ⚠️ **CRITICAL SECURITY DISCLAIMER**
-**THIS IS A TESTNET BRIDGE WITH KNOWN VULNERABILITIES - NOT PRODUCTION READY**
+### ⚠️ **RISK DISCLAIMER**
+**Shield is live on Aztec v5, an early (alpha) network. Bridge only what you can afford to lose.**
 
-This bridge implementation:
-- ❌ Contains known security vulnerabilities
-- ❌ Has not undergone professional security audits
-- ❌ Should never be used with real value or on mainnet
-- ❌ May have unpatched critical security flaws
-- ⚠️ Is intended for educational and testing purposes only
+Where the risk actually sits (see the top of this README for the current status):
+- ✅ Shield's own contracts and identity system were independently audited (Nethermind and Hexens); findings resolved before deployment
+- ⚠️ The Aztec network is still an early network under ongoing audit and a bug bounty; undiscovered bugs are possible
+- ⚠️ Non-custodial and final: the smart contracts hold funds in transit; there are no refunds, warranties, or insurance
+- ⚠️ Aztec itself advises users to only deposit funds they can afford to lose
 
 ### Basic Security Practices Implemented
 - ✅ Environment variables for all sensitive data

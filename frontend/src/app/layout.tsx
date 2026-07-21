@@ -5,6 +5,7 @@ import AppLoadingScreen from '@/components/AppLoadingScreen'
 import { Providers } from '@/providers'
 import type { Metadata } from 'next'
 import Script from 'next/script'
+import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import './globals.css'
 
@@ -14,6 +15,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   const [mounted, setMounted] = useState(false)
+  const pathname = usePathname()
+  // Docs are a clean, self-contained reading surface with their own header nav.
+  // The third-party Iris widget loads its UI (and its icon glyphs) from a remote
+  // origin; when that fetch is slow or blocked those glyphs render as broken
+  // dash/tofu placeholders. Keep it off the docs pages.
+  const isDocs = pathname?.startsWith('/docs') ?? false
 
   useEffect(() => {
     setMounted(true)
@@ -44,11 +51,13 @@ export default function RootLayout({
         <Providers>
           <ClientLayout>{children}</ClientLayout>
         </Providers>
-        <Script
-          src="https://iris-v2-fqgd.onrender.com/widget/iris-widget.js"
-          strategy="afterInteractive"
-          data-iris-key="shield"
-        />
+        {!isDocs && (
+          <Script
+            src="https://iris-v2-fqgd.onrender.com/widget/iris-widget.js"
+            strategy="afterInteractive"
+            data-iris-key="shield"
+          />
+        )}
       </body>
     </html>
   )

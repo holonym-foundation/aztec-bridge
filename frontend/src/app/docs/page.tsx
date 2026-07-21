@@ -17,14 +17,26 @@ const CARDS: DocCard[] = [
   {
     href: '/docs/users',
     title: 'For Users',
-    blurb: 'Everything you need to bridge safely on Mainnet Alpha.',
-    items: ['Mainnet Alpha risks', 'Rate limits & deposit caps', 'Private vs public mode', 'Backup & resuming'],
+    blurb: 'A friendly, step-by-step guide to bridging safely. No code.',
+    items: ['Is my money safe?', 'Two wallets, explained', 'Gas top-up (Fee Juice)', 'Verifying you are human'],
   },
   {
     href: '/docs/developers',
-    title: 'For Developers',
-    blurb: 'Integrate the bridge SDK into your own dapp.',
-    items: ['Install & initialize', 'Bridge L1↔L2', 'Events & error handling', 'TypeScript reference'],
+    title: 'Shield | For Devs',
+    blurb: 'Integrate the Clean SDK into your own dapp.',
+    items: ['Install & initialize', 'Bridge L1 to L2', 'Events & error handling', 'TypeScript reference'],
+  },
+  {
+    href: '/docs/recipes',
+    title: 'Recipes',
+    blurb: 'What you can build with the Clean SDK, with real code sketches.',
+    items: ['AEX Privacy Guard agent', 'Private payroll / treasury', 'Compliant OTC desk', 'SDK-embedded wallet'],
+  },
+  {
+    href: '/docs/protocol',
+    title: 'Protocol & Cryptography',
+    blurb: 'The ZK, compliance, and contract layer under the SDK.',
+    items: ['Proof of Clean Hands circuits', 'Proof of encryption', 'Programmable decryption', 'The Human Network'],
   },
 ]
 

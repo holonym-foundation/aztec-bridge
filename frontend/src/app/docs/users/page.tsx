@@ -11,24 +11,54 @@ export const metadata = {
 
 const sections: DocsSection[] = [
   {
-    id: 'alpha',
-    label: 'Mainnet Alpha',
+    id: 'start',
+    label: 'Start here',
     content: (
       <>
         <P>
-          This bridge runs on Ethereum mainnet and the Aztec network. You are moving real assets — treat every
-          transaction as final.
+          Shield moves your money between two networks and keeps it private on the other side. In plain terms: you send
+          tokens from Ethereum, and a matching amount appears in your Aztec wallet, where your balance and payments are
+          hidden from public view.
+        </P>
+        <P>You will use two wallets and complete one quick human check. This guide walks through all of it, step by step.</P>
+        <Callout tone="info">
+          New to this? Read the sections in order. You do not need to understand the cryptography to bridge safely, and
+          you never need to read any code.
+        </Callout>
+        {/* SCREENSHOT: the bridge home screen (the single centered card) with the From / To panels labelled. */}
+        <figure className="my-4 rounded-md border border-dashed border-latest-grey-300 bg-latest-grey-200 px-4 py-8 text-center text-12 text-latest-grey-500">
+          Screenshot to add: the Shield bridge home screen, with the From and To panels labelled.
+        </figure>
+      </>
+    ),
+  },
+  {
+    id: 'alpha',
+    label: 'Is my money safe?',
+    content: (
+      <>
+        <P>
+          Bridging moves real assets, so treat every transaction as final. Here is the honest picture, in plain terms.
         </P>
         <UL>
-          <li>The software is experimental and unaudited.</li>
-          <li>There are no warranties, refunds, or insurance.</li>
           <li>
-            It is non-custodial: the protocol smart contracts hold your funds in transit, not Human Tech. No one can
-            move or recover them on your behalf.
+            <strong>Shield&apos;s own code has been audited.</strong> The bridge contracts and identity system were
+            reviewed by Nethermind and Hexens, and the findings were resolved before launch.
           </li>
+          <li>
+            <strong>The Aztec network is still an early (alpha) network.</strong> Aztec is young software under ongoing
+            audit and a bug bounty. A serious proving-system issue found in early 2026 was fixed in the current Aztec v5
+            release, but early networks can still have undiscovered bugs. Aztec itself advises people to only deposit
+            funds they can afford to lose.
+          </li>
+          <li>
+            <strong>It is non-custodial.</strong> The smart contracts hold your funds while they are in transit, not
+            Human Tech. That means no one can move or recover them for you.
+          </li>
+          <li>There are no warranties, refunds, or insurance.</li>
         </UL>
         <Callout tone="danger">
-          You can permanently lose funds. Bridge only what you can afford to lose while the network is in Alpha.
+          You can permanently lose funds. While the network is in alpha, bridge only what you can afford to lose.
         </Callout>
       </>
     ),
@@ -93,6 +123,16 @@ const sections: DocsSection[] = [
           <li>Approve the deposit in your Ethereum wallet.</li>
           <li>Wait for the tokens to arrive on Aztec and claim them — this can take roughly 15–50 minutes.</li>
         </UL>
+        <Callout tone="warning">
+          <strong>The two wallets are different things.</strong> Your Ethereum wallet (for example MetaMask or a WaaP
+          / Silk login) sends the funds. Your Aztec wallet (for example Azguard or Obsidion) receives them. They are
+          separate connections, and picking the wrong one is the most common early mistake. Connect the Ethereum one
+          first, then the Aztec one.
+        </Callout>
+        {/* SCREENSHOT: the wallet connection step, showing the Ethereum wallet picker and, after it, the Aztec wallet picker with emoji verification. */}
+        <figure className="my-4 rounded-md border border-dashed border-latest-grey-300 bg-latest-grey-200 px-4 py-8 text-center text-12 text-latest-grey-500">
+          Screenshot to add: connecting the Ethereum wallet, then the Aztec wallet with the emoji check.
+        </figure>
         <Callout tone="info">
           The bridge claims on L2 for you while the page is open. If you close it mid-way, resume from the Activity page
           (see <a href="#resume" className="text-latest-blue-100 underline">Resuming</a>).
@@ -120,9 +160,19 @@ const sections: DocsSection[] = [
             completing Proof of Clean Hands removes that per-transaction cap.
           </li>
         </UL>
+        <Callout tone="warning">
+          <strong>Which one should you pick?</strong> If you plan to bridge more than a small amount, choose Proof of
+          Clean Hands: it takes about five minutes once, and then there is no per-transaction cap. Human Passport is
+          faster to start but limits how much you can move per transaction until you upgrade. You only ever need one of
+          the two.
+        </Callout>
+        {/* SCREENSHOT: the "Verify you're human" step showing the two options (Proof of Clean Hands, recommended, and Human Passport). */}
+        <figure className="my-4 rounded-md border border-dashed border-latest-grey-300 bg-latest-grey-200 px-4 py-8 text-center text-12 text-latest-grey-500">
+          Screenshot to add: the verification step with both options and the recheck button.
+        </figure>
         <Callout tone="info">
           When verification is needed, the bridge links you to the right place to complete it, then you can continue
-          where you left off.
+          where you left off. Just minted? Give it a few seconds to propagate before you re-check.
         </Callout>
       </>
     ),
@@ -133,7 +183,7 @@ const sections: DocsSection[] = [
     content: (
       <>
         <P>
-          Two limits apply during Mainnet Alpha. See{' '}
+          Two limits apply during the alpha period. See{' '}
           <a href="#verification" className="text-latest-blue-100 underline">Verification</a> for how to qualify.
         </P>
         <Table>

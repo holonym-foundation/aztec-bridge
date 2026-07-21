@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
+import { useWalletStore } from '@/stores/walletStore'
 
 const ONBOARDED_KEY = 'shield_onboarded'
 const BRAND = '#81133B'
@@ -79,8 +80,8 @@ const SCREENS: Screen[] = [
     body: (
       <>
         <p>
-          Your privacy is enforced by zero knowledge proofs, not promises.{' '}
-          <InfoTooltip label="Learn more">
+          Your privacy is enforced by zero knowledge proofs, not promises.
+          <InfoTooltip label="Learn more about the privacy guarantee">
             Your proofs are generated locally. Shield checks only what a rule requires and stores
             nothing else. That is the data minimization guarantee zero knowledge proofs make
             possible.
@@ -126,7 +127,7 @@ const CX_CENTER = CX_SIZE / 2
 const CX_OUTER = 148
 const CX_CORE = 30
 const CX_STEPS = 48
-const CX_SPIRAL_TURNS = 2.5
+const CX_SPIRAL_TURNS = 3 // integer turns so the point ends exactly where it began (seamless loop)
 
 const CX_RINGS = [
   { r: 148, dash: '1.5 15', duration: 46, dir: 1 },
@@ -282,9 +283,10 @@ function TierIcon({ kind }: { kind: 'unique' | 'clean' }) {
   )
 }
 
-/* Minimal accessible tooltip: a text trigger that reveals a short blurb on hover or
-   keyboard focus. No external positioning library, no portal, just a relatively
-   positioned bubble anchored to the trigger. */
+/* Minimal accessible tooltip: a small inline info glyph that reveals a short blurb on
+   hover or keyboard focus. No external positioning library, no portal, just a relatively
+   positioned bubble anchored to the trigger. The trigger sits inline with the sentence
+   and never forces a line break. */
 function InfoTooltip({ label, children }: { label: string; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const tooltipId = useId()
@@ -293,13 +295,18 @@ function InfoTooltip({ label, children }: { label: string; children: ReactNode }
       <button
         type="button"
         className="ob-tooltip-trigger"
+        aria-label={label}
         aria-describedby={tooltipId}
         aria-expanded={open}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onClick={() => setOpen((o) => !o)}
       >
-        {label}
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.3" />
+          <circle cx="8" cy="4.7" r="0.95" fill="currentColor" />
+          <path d="M8 7.1v4.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
       </button>
       <AnimatePresence>
         {open && (
@@ -322,46 +329,109 @@ function InfoTooltip({ label, children }: { label: string; children: ReactNode }
 
 export default function ShieldOnboarding() {
   const reduce = useReducedMotion() ?? false
-  const [visible, setVisible] = useState(false)
+  const connectWaapWallet = useWalletStore((s) => s.connectWaapWallet)
+  const isWaapConnected = useWalletStore((s) => s.isWaapConnected)
+  const [mode, setMode] = useState<'hidden' | 'flow' | 'splash'>('hidden')
   const [index, setIndex] = useState(0)
   const [leaving, setLeaving] = useState(false)
 
   useEffect(() => {
+    // First visit runs the full flow. A returning visitor who isn't connected yet
+    // gets the branded splash with a connect CTA. A connected visitor drops straight
+    // into the bridge. Reacting to isWaapConnected also auto-dismisses the splash the
+    // moment the wallet connects.
+    let onboarded = false
     try {
-      if (!localStorage.getItem(ONBOARDED_KEY)) setVisible(true)
+      onboarded = !!localStorage.getItem(ONBOARDED_KEY)
     } catch {
-      setVisible(true)
+      onboarded = false
     }
-  }, [])
+    if (!onboarded) setMode('flow')
+    else setMode(isWaapConnected ? 'hidden' : 'splash')
+  }, [isWaapConnected])
 
-  const commitDone = () => {
+  const markOnboarded = () => {
     try {
       localStorage.setItem(ONBOARDED_KEY, '1')
     } catch {}
-    setVisible(false)
   }
 
-  const skip = () => commitDone()
+  const finishFlow = () => {
+    markOnboarded()
+    setMode('hidden')
+  }
+
+  const skip = () => finishFlow()
+
+  const connectWallet = () => {
+    connectWaapWallet().catch(() => {})
+  }
 
   const advance = () => {
     if (index < SCREENS.length - 1) {
       setIndex((i) => i + 1)
     } else {
-      // Final CTA: play a soft zoom + splash + gradient fade into the app.
+      // Final CTA: open the WaaP login, then fade into the app.
+      markOnboarded()
+      connectWallet()
       setLeaving(true)
     }
   }
 
+  const connectFromSplash = () => {
+    connectWallet()
+    setMode('hidden')
+  }
+
   const back = () => setIndex((i) => Math.max(0, i - 1))
 
-  if (!visible) return null
+  if (mode === 'hidden') return null
 
   const screen = SCREENS[index]
   const progress = ((index + 1) / SCREENS.length) * 100
 
   return (
-    <AnimatePresence onExitComplete={commitDone}>
-      {!leaving ? (
+    <AnimatePresence onExitComplete={finishFlow}>
+      {mode === 'splash' ? (
+        <motion.div
+          key="splash"
+          className="ob-root"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.5, ease: 'easeInOut' }}
+        >
+          <PaperField still={reduce} />
+          <div className="ob-stage">
+            <div className="ob-stage-inner">
+              <div className="ob-card-region">
+                <div className="ob-card">
+                  <div className="ob-cryptex-frame">
+                    <CryptexVisual still={reduce} />
+                    <div className="ob-headline">
+                      <p className="ob-eyebrow">{SCREENS[0].eyebrow}</p>
+                      <h1 className="ob-title">{SCREENS[0].title}</h1>
+                    </div>
+                  </div>
+                  <div className="ob-body">
+                    <p>Move your funds between Ethereum and Aztec with privacy.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="ob-controls">
+                <div className="ob-btns">
+                  <button className="ob-next" onClick={connectFromSplash}>Connect wallet</button>
+                </div>
+                <p className="ob-secured">
+                  Secured by <strong>human.tech</strong>
+                  <span className="ob-dot">·</span>
+                  Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      ) : !leaving ? (
         <motion.div
           key="onboarding"
           className="ob-root"
@@ -384,15 +454,16 @@ export default function ShieldOnboarding() {
 
           <div className="ob-stage">
             <div className="ob-stage-inner">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={index}
-                  className="ob-card"
-                  initial={{ opacity: 0, y: 22 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -22 }}
-                  transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-                >
+              <div className="ob-card-region">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={index}
+                    className="ob-card"
+                    initial={{ opacity: 0, y: 22 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -22 }}
+                    transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+                  >
                   {screen.visual === 'cryptex' ? (
                     <div className="ob-cryptex-frame">
                       <CryptexVisual still={reduce} />
@@ -412,7 +483,8 @@ export default function ShieldOnboarding() {
                   )}
                   <div className="ob-body">{screen.body}</div>
                 </motion.div>
-              </AnimatePresence>
+                </AnimatePresence>
+              </div>
 
               <div className="ob-controls">
                 <div className="ob-btns">
@@ -435,7 +507,7 @@ export default function ShieldOnboarding() {
           initial={{ opacity: 0 }}
           animate={{ opacity: [0, 1, 1, 0] }}
           transition={{ duration: 1.5, times: [0, 0.25, 0.7, 1], ease: 'easeInOut' }}
-          onAnimationComplete={commitDone}
+          onAnimationComplete={finishFlow}
         >
           <motion.div
             className="ob-handoff-mark"
@@ -465,8 +537,13 @@ export default function ShieldOnboarding() {
         .ob-stage { position: relative; z-index: 2; flex: 1; min-height: 0; display: flex; align-items: center;
           justify-content: center; padding: 16px 24px; overflow-y: auto; }
         .ob-stage-inner { width: 100%; max-width: 720px; margin: auto; display: flex; flex-direction: column;
-          align-items: center; gap: 30px; }
-        .ob-card { width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; }
+          align-items: center; gap: 28px; }
+        /* Fixed content region: height is sized to the tallest screen (the cryptex hero).
+           Every screen's content is vertically centered inside it, so the controls row
+           below always sits at the same y and the button never shifts between screens. */
+        .ob-card-region { position: relative; width: 100%; height: clamp(430px, 60vh, 540px); }
+        .ob-card { position: absolute; inset: 0; width: 100%; text-align: center; display: flex;
+          flex-direction: column; align-items: center; justify-content: center; }
         .ob-visual { height: 168px; display: flex; align-items: center; justify-content: center; margin-bottom: 26px; width: 100%; }
         .ob-eyebrow { font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: ${BRAND};
           font-weight: 600; margin: 0 0 14px; white-space: pre-line; line-height: 1.7; }
@@ -488,11 +565,15 @@ export default function ShieldOnboarding() {
         .ob-tier-copy { display: flex; flex-direction: column; gap: 2px; }
         .ob-tier-copy strong { font-size: 15.5px; color: #1c1116; font-weight: 640; }
         .ob-tier-copy span { font-size: 14px; line-height: 1.4; color: #5a4650; }
-        /* learn more tooltip (page 4) */
-        .ob-tooltip { position: relative; display: inline-block; }
-        .ob-tooltip-trigger { background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: 550;
-          color: ${BRAND}; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-        .ob-tooltip-trigger:hover, .ob-tooltip-trigger:focus-visible { color: #5a1f36; }
+        /* learn more info-icon tooltip (page 4) */
+        .ob-tooltip { position: relative; display: inline-flex; vertical-align: middle; margin-left: 4px; }
+        .ob-tooltip-trigger { display: inline-flex; align-items: center; justify-content: center; background: none;
+          border: 0; padding: 0; margin: 0; width: 17px; height: 17px; color: ${BRAND}; opacity: 0.75;
+          cursor: pointer; border-radius: 50%; transition: opacity .15s ease, transform .15s ease;
+          transform: translateY(-1px); }
+        .ob-tooltip-trigger svg { width: 17px; height: 17px; display: block; }
+        .ob-tooltip-trigger:hover, .ob-tooltip-trigger:focus-visible { opacity: 1; }
+        .ob-tooltip-trigger:focus-visible { outline: 2px solid ${BRAND}; outline-offset: 2px; }
         .ob-tooltip-bubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
           width: 240px; max-width: 76vw; padding: 12px 14px; border-radius: 12px; background: #1c1116; color: #fdf0f6;
           font-size: 13px; line-height: 1.45; text-align: left; box-shadow: 0 12px 30px rgba(0,0,0,0.22); z-index: 5;
@@ -511,9 +592,11 @@ export default function ShieldOnboarding() {
         .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
         .ob-secured strong { color: #5a4650; font-weight: 620; }
         .ob-dot { opacity: 0.5; }
-        /* cryptex hero — concentric dial rings framing the headline */
-        .ob-cryptex-frame { position: relative; width: 100%; max-width: 500px; aspect-ratio: 1 / 1;
-          margin: 4px auto 4px; display: flex; align-items: center; justify-content: center; }
+        /* cryptex hero — concentric dial rings framing the headline. max-height keeps the
+           full-size mark from overflowing the fixed region on short viewports (it scales
+           down with the region rather than being clipped or shrunk at its base size). */
+        .ob-cryptex-frame { position: relative; width: 100%; max-width: 500px; max-height: calc(100% - 40px);
+          aspect-ratio: 1 / 1; margin: 4px auto 4px; display: flex; align-items: center; justify-content: center; }
         .ob-cryptex-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
         .ob-headline { position: relative; z-index: 1; padding: 0 28px; text-align: center; }
         .ob-headline .ob-title { max-width: 17ch; }
@@ -531,6 +614,9 @@ export default function ShieldOnboarding() {
         @media (max-width: 640px) {
           .ob-stage { padding: 14px 20px; }
           .ob-stage-inner { gap: 22px; }
+          /* On mobile the cryptex is narrower, so a text-heavy screen (page 4) is tallest;
+             size the region to fit it, page 1 then centers with room to spare. */
+          .ob-card-region { height: clamp(420px, 66vh, 470px); }
           .ob-visual { height: 140px; margin-bottom: 20px; }
           .ob-cryptex-frame { max-width: 300px; }
           .ob-headline { padding: 0 20px; }

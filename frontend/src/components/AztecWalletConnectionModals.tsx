@@ -137,6 +137,17 @@ function PaginatedAccountModal({
                 </div>
               )}
 
+              {/* No linked account is known yet (nothing disclosed by the server
+                  this session and nothing persisted from a prior one), so we
+                  can't flag a row. Reassure the user that picking "wrong" is safe
+                  — the button-guard blocks bridging a mismatched pair regardless. */}
+              {accounts.length > 0 && !linkedAddress && (
+                <p className='text-12 text-latest-grey-600 leading-snug mb-3 px-1'>
+                  Not sure which to pick? Choose any — we&apos;ll flag it before you bridge and won&apos;t
+                  let you bridge the wrong pair.
+                </p>
+              )}
+
               {showPagination && (
                 <div className='flex items-center justify-between mb-3'>
                   <button

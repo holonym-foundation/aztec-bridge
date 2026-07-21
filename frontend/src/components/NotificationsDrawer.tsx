@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { useNotificationsStore, type AppNotification, type NotificationType } from '@/stores/useNotificationsStore'
+import { GENIE_LANDED_EVENT } from '@/hooks/useToast'
 
 // Motion values mirrored from the human-tech design system (docs/tokens.css):
 // --dur-enter / --ease-slide for the panel that slides out from the tab.
@@ -23,6 +24,8 @@ const ICON_FOR: Record<NotificationType, string> = {
   deposit: 'ph:arrow-line-down',
   error: 'ph:warning-circle',
   info: 'ph:info',
+  success: 'ph:check-circle',
+  warning: 'ph:warning',
 }
 
 const ICON_TINT: Record<NotificationType, string> = {
@@ -32,6 +35,8 @@ const ICON_TINT: Record<NotificationType, string> = {
   deposit: 'text-[#17235E] bg-[#E5EFFF]',
   error: 'text-[#831816] bg-[#FFEBEB]',
   info: 'text-[#525252] bg-[#F0F0F0]',
+  success: 'text-[#2F5214] bg-[#DBFAAE]',
+  warning: 'text-[#7A4A00] bg-[#FFF1D6]',
 }
 
 const NotificationsDrawer: React.FC = () => {
@@ -52,6 +57,19 @@ const NotificationsDrawer: React.FC = () => {
   const open = hovered || pinned
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
+
+  // Genie-into-tab: the actual toast flies into this tab as it auto-closes (see
+  // useToast's GenieToastTransition). The moment it lands, the toast dispatches
+  // GENIE_LANDED_EVENT and we pulse the unread badge — so the flight and the
+  // badge read as one motion. Motion is fully gated on prefers-reduced-motion:
+  // reduced-motion users get no fly and no pulse, just the incremented badge.
+  const [pulseKey, setPulseKey] = useState(0)
+
+  useEffect(() => {
+    const onLanded = () => setPulseKey((k) => k + 1)
+    window.addEventListener(GENIE_LANDED_EVENT, onLanded)
+    return () => window.removeEventListener(GENIE_LANDED_EVENT, onLanded)
+  }, [])
 
   const closeDesktop = () => {
     setPinned(false)
@@ -76,6 +94,9 @@ const NotificationsDrawer: React.FC = () => {
     () => notifications.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE),
     [notifications, page],
   )
+
+  const rangeStart = notifications.length === 0 ? 0 : page * PAGE_SIZE + 1
+  const rangeEnd = Math.min(notifications.length, page * PAGE_SIZE + PAGE_SIZE)
 
   // Esc + outside click close a pinned desktop drawer. Only wired up while
   // pinned so hover-only previews don't pay for a global listener.
@@ -172,25 +193,25 @@ const NotificationsDrawer: React.FC = () => {
       ) : (
         <>
           <ul className="flex flex-col">{pageItems.map(renderItem)}</ul>
-          {pageCount > 1 && (
+          {notifications.length > 0 && (
             <div className="mt-3 flex items-center justify-between border-t border-[#F0F0F0] pt-3">
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 disabled={page === 0}
-                aria-label="Previous page"
+                aria-label="Newer messages"
                 className="flex h-6 w-6 items-center justify-center rounded-full text-[#737373] transition-colors hover:bg-[#F0F0F0] hover:text-[#0A0A0A] disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <Icon icon="ph:caret-left-bold" width={13} height={13} />
               </button>
-              <span className="text-[11px] font-medium text-[#989898]">
-                {page + 1} / {pageCount}
+              <span className="text-[11px] font-medium tabular-nums text-[#989898]">
+                {rangeStart}–{rangeEnd} of {notifications.length}
               </span>
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
                 disabled={page >= pageCount - 1}
-                aria-label="Next page"
+                aria-label="Older messages"
                 className="flex h-6 w-6 items-center justify-center rounded-full text-[#737373] transition-colors hover:bg-[#F0F0F0] hover:text-[#0A0A0A] disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <Icon icon="ph:caret-right-bold" width={13} height={13} />
@@ -236,6 +257,7 @@ const NotificationsDrawer: React.FC = () => {
       <button
         ref={handleRef}
         type="button"
+        data-messages-tab
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={unreadCount > 0 ? `Messages, ${unreadCount} unread` : 'Messages'}
@@ -245,9 +267,14 @@ const NotificationsDrawer: React.FC = () => {
         }`}
       >
         {unreadCount > 0 ? (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[#81133B] px-1 text-[9px] font-bold leading-none text-white">
+          <motion.span
+            key={pulseKey}
+            animate={prefersReducedMotion ? undefined : { scale: [1, 1.35, 1] }}
+            transition={{ duration: 0.36, ease: 'easeOut' }}
+            className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[#81133B] px-1 text-[9px] font-bold leading-none text-white"
+          >
             {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
+          </motion.span>
         ) : (
           <span className="h-1.5 w-1.5 rounded-full bg-[#D4D4D4]" />
         )}

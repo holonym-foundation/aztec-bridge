@@ -133,16 +133,16 @@ function FeeJuicePageInner() {
             <h1 className="text-16 font-semibold text-latest-black-100">Fee Juice</h1>
           </div>
           <p className="mt-1 text-12 leading-[16px] text-latest-grey-500">
-            Fee Juice is gas on Aztec. Top it up here anytime — you&apos;ll need it to claim bridged tokens or withdraw.
+            Fee Juice is gas on Aztec. Top up here anytime.
           </p>
 
           {/* Resume-after-topup context banner — only when arriving from a stuck claim. */}
           {fromResume && (
-            <div className="mt-3 flex items-start gap-1.5 rounded-md bg-[#FDECEC] px-2.5 py-2">
-              <Icon icon="ph:warning-circle-fill" width={14} height={14} className="mt-0.5 flex-shrink-0 text-[#D92D20]" />
+            <div className="mt-3 flex items-center gap-1.5 rounded-md bg-[#D92D20]/[0.08] px-2.5 py-2">
+              <Icon icon="ph:warning-circle-fill" width={14} height={14} className="flex-shrink-0 text-[#D92D20]" />
               <p className="text-11 leading-[15px] text-[#737373]">
-                <span className="font-semibold text-[#D92D20]">Your claim ran short on L2 gas.</span> Add Fee Juice
-                below, then resume the claim — your funds stay safe in the meantime.
+                <span className="font-semibold text-[#D92D20]">Claim ran short on L2 gas.</span> Add Fee Juice, then
+                resume — your funds stay safe.
               </p>
             </div>
           )}
@@ -174,7 +174,12 @@ function FeeJuicePageInner() {
 
           {/* Reusable buy + bridge Fee Juice form (auto + manual). */}
           <div className="mt-3">
-            <FeeJuiceTopUp isPrivacyModeEnabled={isPrivacyModeEnabled} onSuccess={() => setToppedUp(true)} />
+            <FeeJuiceTopUp
+              isPrivacyModeEnabled={isPrivacyModeEnabled}
+              feeJuiceBalance={feeJuiceBalance}
+              privateFeeJuiceBalance={privateFeeJuiceBalance}
+              onSuccess={() => setToppedUp(true)}
+            />
           </div>
 
           {/* Prominent "Resume claim" after a successful top-up, when we came from a stuck claim. */}

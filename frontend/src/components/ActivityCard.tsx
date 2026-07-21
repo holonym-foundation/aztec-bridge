@@ -25,14 +25,20 @@ function StatusBadge({ status }: { status: string }) {
     label: status,
     className: 'bg-gray-100 text-gray-800',
   }
-  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${style.className}`}>{style.label}</span>
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${style.className}`}>
+      {style.label}
+    </span>
+  )
 }
 
-// Above this length a 2-line clamp will very likely cut the message off, so
-// we only surface the "Show more" toggle when it's actually worth showing.
-const ERROR_EXPAND_THRESHOLD = 100
+// Collapsed to a SINGLE line by default (line-clamp-1) so the card stays
+// compact and a page of them fits the fixed shell with no scroll. Anything
+// past roughly one line's worth of characters is likely being truncated, so
+// that's when we surface the "Show more" toggle to reveal the full copyable text.
+const ERROR_EXPAND_THRESHOLD = 48
 
-/** Failed-operation error message: clamped by default, expandable + copyable in full. */
+/** Failed-operation error message: clamped to one line by default, expandable + copyable in full. */
 function OperationError({ message }: { message: string }) {
   const notify = useToast()
   const [expanded, setExpanded] = useState(false)
@@ -47,12 +53,12 @@ function OperationError({ message }: { message: string }) {
     <div className="mt-1 flex items-start gap-1.5">
       <p
         className={`text-xs text-red-500 flex-1 min-w-0 ${
-          expanded ? 'whitespace-pre-wrap break-words' : 'line-clamp-2 break-words'
+          expanded ? 'whitespace-pre-wrap break-words' : 'line-clamp-1 break-words'
         }`}
       >
         {message}
       </p>
-      <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+      <div className="flex items-center gap-1 flex-shrink-0">
         {canExpand && (
           <button
             type="button"
@@ -125,70 +131,78 @@ export default function ActivityCard({
   const lockedFunds = hasPossibleLockedFunds(operation)
   const showResume = resumable || lockedFunds
 
+  const hasActionRow =
+    operation.l1TxUrl ||
+    operation.l2TxUrl ||
+    (onShareFuelClaim && hasFuelClaimData(operation)) ||
+    showResume
+
   return (
-    <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-600">{directionLabel}</span>
+    <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+          <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{directionLabel}</span>
           <StatusBadge status={operation.status} />
           {lockedFunds && (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-800 whitespace-nowrap">
               Funds may be locked
             </span>
           )}
         </div>
-        <span className="text-xs text-gray-400">{date}</span>
+        <span className="text-[11px] text-gray-400 whitespace-nowrap flex-shrink-0">{date}</span>
       </div>
 
-      <p className="text-xl font-semibold mt-2">
+      <p className="text-base font-semibold leading-none mt-1.5">
         {amount} {tokenSymbol}
       </p>
 
       {operation.lastErrorMessage && <OperationError message={operation.lastErrorMessage} />}
 
-      <div className="flex items-center gap-3 mt-3">
-        {operation.l1TxUrl && (
-          <a
-            href={operation.l1TxUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-medium text-blue-600 hover:text-blue-800"
-          >
-            L1 Tx ↗
-          </a>
-        )}
-        {operation.l2TxUrl && (
-          <a
-            href={operation.l2TxUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-medium text-purple-600 hover:text-purple-800"
-          >
-            L2 Tx ↗
-          </a>
-        )}
+      {hasActionRow && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2">
+          {operation.l1TxUrl && (
+            <a
+              href={operation.l1TxUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap"
+            >
+              L1 Tx ↗
+            </a>
+          )}
+          {operation.l2TxUrl && (
+            <a
+              href={operation.l2TxUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-purple-600 hover:text-purple-800 whitespace-nowrap"
+            >
+              L2 Tx ↗
+            </a>
+          )}
 
-        <div className="ml-auto flex items-center gap-2">
-          {onShareFuelClaim && hasFuelClaimData(operation) && (
-            <button
-              onClick={() => onShareFuelClaim(operation)}
-              disabled={!!sharingFuelClaim}
-              className="text-xs font-semibold text-black bg-amber-100 hover:bg-amber-200 disabled:opacity-50 px-3 py-1 rounded-lg"
-            >
-              {sharingFuelClaim ? 'Decrypting…' : 'Share fuel claim'}
-            </button>
-          )}
-          {showResume && (
-            <button
-              onClick={() => onResume(operation)}
-              disabled={resuming}
-              className="text-xs font-semibold text-white bg-black hover:bg-gray-800 disabled:bg-gray-400 px-3 py-1 rounded-lg"
-            >
-              {resuming ? 'Decrypting...' : 'Resume'}
-            </button>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            {onShareFuelClaim && hasFuelClaimData(operation) && (
+              <button
+                onClick={() => onShareFuelClaim(operation)}
+                disabled={!!sharingFuelClaim}
+                className="text-xs font-semibold text-black bg-amber-100 hover:bg-amber-200 disabled:opacity-50 px-3 py-1 rounded-lg whitespace-nowrap"
+              >
+                {sharingFuelClaim ? 'Decrypting…' : 'Share fuel claim'}
+              </button>
+            )}
+            {showResume && (
+              <button
+                onClick={() => onResume(operation)}
+                disabled={resuming}
+                className="text-xs font-semibold text-white bg-black hover:bg-gray-800 disabled:bg-gray-400 px-3 py-1 rounded-lg whitespace-nowrap"
+              >
+                {resuming ? 'Decrypting...' : 'Resume'}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

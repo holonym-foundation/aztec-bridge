@@ -5,6 +5,7 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useBridge } from '@/hooks/useBridge'
 import { useLinkedPairStore } from '@/stores/useLinkedPairStore'
+import { rememberConfirmedBinding, getKnownL2ForL1 } from '@/utils/bindingMemory'
 
 /**
  * Authoritative L1↔L2 binding state for the CURRENTLY connected pair.
@@ -30,16 +31,25 @@ export function useBindingStatus() {
     retry: false,
   })
 
-  // Persist any SERVER-disclosed L1↔L2 pair into the session store so the
-  // "Linked" badge survives after the transient conflict response clears. Both
-  // 'bound' (the connected pair itself) and 'conflict' (the disclosed stored
-  // counterpart) carry an authoritative l1Address/l2Address for the user's own
-  // wallets — privacy-safe to remember for this session only (never persisted).
+  // Persist any SERVER-CONFIRMED L1↔L2 pair. Both 'bound' (the connected pair
+  // itself) and 'conflict' (the disclosed stored counterpart) carry an
+  // authoritative l1Address/l2Address for the user's own wallets. We write to
+  // TWO layers, both fed ONLY from this confirmed disclosure (never a guess or a
+  // selection):
+  //   1. the in-memory session store — keeps the "Linked" badge alive across
+  //      modal/dropdown reopens even after the transient conflict response clears.
+  //   2. localStorage via rememberConfirmedBinding — makes the badge survive a
+  //      full page reload (the owner reloads constantly while testing), so a fresh
+  //      load still marks the known account before this query resolves.
+  // Live wins: this fires on every fresh disclosure and rememberConfirmedBinding
+  // overwrites + prunes, so a server-side rebinding heals the persisted value the
+  // instant the new status is known — the persisted marker can't outlive the truth.
   const binding = query.data?.binding
   useEffect(() => {
     if (!binding) return
     if (binding.status === 'bound' || binding.status === 'conflict') {
       recordPair(binding.l1Address, binding.l2Address)
+      rememberConfirmedBinding(binding.l1Address, binding.l2Address)
     }
   }, [binding, recordPair])
 
@@ -47,15 +57,26 @@ export function useBindingStatus() {
 }
 
 /**
- * The Aztec (L2) account the server has disclosed as the pair for the given EVM
- * (L1) wallet at any point this session — from the in-memory store, so it
- * persists across dropdown/modal reopens even after a conflict response has
- * cleared. Returns null until something has actually been disclosed (no guess).
+ * The Aztec (L2) account the server has CONFIRMED as the pair for the given EVM
+ * (L1) wallet. Resolves LIVE session store first, then the persisted
+ * confirmed-only memory as a fallback:
+ *   1. the in-memory session store — populated this session by useBindingStatus
+ *      from a 'bound'/'conflict' disclosure; survives dropdown/modal reopens even
+ *      after a conflict response has cleared, and reflects the freshest live
+ *      status (so a re-disclosure this session always wins over the fallback).
+ *   2. getKnownL2ForL1 — the localStorage memory of the last confirmed pair, so a
+ *      fresh reload still marks the known account before the live query resolves.
+ * Returns null until a pair has actually been confirmed at some point (never a
+ * guess). Both layers are written only from authoritative server disclosures, so
+ * neither can mark an unconfirmed pair; when the live query later disagrees it
+ * overwrites both (see useBindingStatus), so the marker can't contradict truth.
  */
 export function useSessionLinkedL2(l1?: string | null): string | null {
   const pairs = useLinkedPairStore((s) => s.pairs)
   if (!l1) return null
-  return pairs[l1.toLowerCase()] ?? null
+  const live = pairs[l1.toLowerCase()] ?? null
+  if (live) return live
+  return getKnownL2ForL1(l1)
 }
 
 export interface AccountLike {

@@ -38,10 +38,14 @@ export default function ActivityPage() {
 
   const { data: operations, isLoading, isError, error } = useBridgeOperations()
 
-  // Fixed batch of cards per page keeps the card at a stable height so the page
-  // never grows past the viewport (no page-level scroll). 3 fits the ~640px card
-  // beneath the fixed header + footer on a typical laptop.
-  const PAGE_SIZE = 3
+  // Fixed batch of cards per page keeps the card body inside the shell's height
+  // budget (card is capped at calc(90vh-5rem) ≈ 568px at innerHeight 720) with no
+  // internal scrollbar. The fixed chrome (BridgeHeader + "Bridge Activity" + the
+  // pagination row + footer) eats ~260px, leaving ~300px for the batch. A compact
+  // card runs ~96px (completed) to ~130px (failed: single-line error + Resume +
+  // tx links), so two per page fit 720/800/900; three of the taller cards would
+  // spill past 720 and reintroduce the scrollbar. Measured, not guessed.
+  const PAGE_SIZE = 2
   const ops = useMemo(() => operations ?? [], [operations])
   const totalPages = Math.max(1, Math.ceil(ops.length / PAGE_SIZE))
   useEffect(() => {
@@ -207,12 +211,12 @@ export default function ActivityPage() {
 
   return (
     <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
-      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden px-5 pt-5 pb-5">
+      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden px-5 pt-4 pb-4">
         <div className="flex items-center gap-4">
           <BridgeHeader />
         </div>
 
-        <h2 className="text-lg font-semibold mt-4">Bridge Activity</h2>
+        <h2 className="text-lg font-semibold mt-3">Bridge Activity</h2>
 
         <div className="flex-1 min-h-0 mt-3 flex flex-col">
           {isLoading && <p className="text-sm text-gray-400 mt-1 text-center">Loading operations...</p>}
@@ -254,7 +258,7 @@ export default function ActivityPage() {
               </div>
 
               {totalPages > 1 && (
-                <div className="mt-3 flex shrink-0 items-center justify-center gap-4 pt-1">
+                <div className="mt-2 flex shrink-0 items-center justify-center gap-4 pt-0.5">
                   <button
                     type="button"
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
@@ -282,7 +286,7 @@ export default function ActivityPage() {
           )}
         </div>
 
-        <div className="mt-4 flex shrink-0 flex-col gap-2">
+        <div className="mt-3 flex shrink-0 flex-col gap-2">
           <TextButton onClick={() => router.push('/')}>Back to Bridge</TextButton>
           <TextButton
             onClick={() => router.push('/activity/local-recovery')}

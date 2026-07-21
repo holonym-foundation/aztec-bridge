@@ -6,7 +6,7 @@ import { Icon } from '@iconify/react'
 import TextButton from './TextButton'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 
-const POCH_MINT_URL = 'https://id.human.tech/sandbox/clean-hands'
+const POCH_MINT_URL = 'https://id.human.tech/clean-hands'
 const PASSPORT_BUILD_URL = 'https://app.passport.xyz/'
 
 interface VerificationStepProps {

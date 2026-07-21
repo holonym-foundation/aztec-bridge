@@ -1,7 +1,8 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useId, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useWalletStore } from '@/stores/walletStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useExplainerStore } from '@/stores/useExplainerStore'
@@ -13,6 +14,17 @@ const BridgeStepsRail: React.FC = () => {
   const { isWaapConnected, isAztecConnected } = useWalletStore()
   const attestation = useAttestationCheck()
   const { openModal } = useExplainerStore()
+  const prefersReducedMotion = useReducedMotion()
+  const panelId = useId()
+
+  // Desktop drawer: hover previews it, a click pins it open. Mobile: a
+  // separate collapsed-by-default accordion stacked below the card.
+  const [hovered, setHovered] = useState(false)
+  const [pinned, setPinned] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const desktopOpen = hovered || pinned
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const handleRef = useRef<HTMLButtonElement>(null)
 
   const bothConnected = isWaapConnected && isAztecConnected
   const eligible = !!attestation.data?.eligible
@@ -42,65 +54,93 @@ const BridgeStepsRail: React.FC = () => {
     return EXPLAINER_STEPS[index].body
   }
 
-  return (
-    <div className="w-full max-w-[360px] shrink-0 rounded-[16px] border border-[#D4D4D4] bg-white p-4 md:w-[260px]">
-      <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge in 4 steps</p>
+  // Esc + outside click close a pinned desktop drawer. Only wired up while
+  // pinned so hover-only previews don't pay for a global listener.
+  useEffect(() => {
+    if (!pinned) return
 
-      <ol className="flex flex-col">
-        {EXPLAINER_STEPS.map((step, i) => {
-          const status = statusFor(i)
-          const helper = helperFor(i)
-          const isLast = i === EXPLAINER_STEPS.length - 1
-          return (
-            <li key={step.title} className="flex gap-3">
-              {/* Marker + connector */}
-              <div className="flex flex-col items-center">
-                <span
-                  className={
-                    status === 'done'
-                      ? 'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-[#0A0A0A] text-white'
-                      : status === 'active'
-                        ? 'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 border-[#17235E] bg-[#E5EFFF] text-[11px] font-semibold text-[#17235E]'
-                        : 'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-[#D4D4D4] text-[11px] font-semibold text-[#B7B7B7]'
-                  }
-                >
-                  {status === 'done' ? <Icon icon="ph:check-bold" width={13} height={13} /> : i + 1}
-                </span>
-                {!isLast && (
-                  <span className={`my-1 w-px flex-1 ${status === 'done' ? 'bg-[#0A0A0A]' : 'bg-[#E5E5E5]'}`} />
-                )}
-              </div>
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setPinned(false)
+      setHovered(false)
+      handleRef.current?.focus()
+    }
+    const onPointerDown = (e: PointerEvent) => {
+      if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+        setPinned(false)
+        setHovered(false)
+      }
+    }
 
-              {/* Label + active helper */}
-              <div className={`min-w-0 flex-1 ${isLast ? 'pb-0' : 'pb-4'}`}>
-                <p
-                  className={
-                    status === 'upcoming'
-                      ? 'text-[13px] font-medium text-[#B7B7B7]'
-                      : 'text-[13px] font-semibold text-[#0A0A0A]'
-                  }
-                >
-                  {step.title}
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [pinned])
+
+  const stepsList = (
+    <ol className="flex flex-col">
+      {EXPLAINER_STEPS.map((step, i) => {
+        const status = statusFor(i)
+        const helper = helperFor(i)
+        const isLast = i === EXPLAINER_STEPS.length - 1
+        return (
+          <li key={step.title} className="flex gap-3">
+            {/* Marker + connector */}
+            <div className="flex flex-col items-center">
+              <span
+                className={
+                  status === 'done'
+                    ? 'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-[#0A0A0A] text-white'
+                    : status === 'active'
+                      ? 'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 border-[#17235E] bg-[#E5EFFF] text-[11px] font-semibold text-[#17235E]'
+                      : 'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-[#D4D4D4] text-[11px] font-semibold text-[#B7B7B7]'
+                }
+              >
+                {status === 'done' ? <Icon icon="ph:check-bold" width={13} height={13} /> : i + 1}
+              </span>
+              {!isLast && (
+                <span className={`my-1 w-px flex-1 ${status === 'done' ? 'bg-[#0A0A0A]' : 'bg-[#E5E5E5]'}`} />
+              )}
+            </div>
+
+            {/* Label + active helper */}
+            <div className={`min-w-0 flex-1 ${isLast ? 'pb-0' : 'pb-4'}`}>
+              <p
+                className={
+                  status === 'upcoming'
+                    ? 'text-[13px] font-medium text-[#B7B7B7]'
+                    : 'text-[13px] font-semibold text-[#0A0A0A]'
+                }
+              >
+                {step.title}
+              </p>
+              {helper && (
+                <p className="mt-0.5 text-[12px] leading-[17px] text-[#737373] break-words [overflow-wrap:anywhere]">
+                  {helper}
                 </p>
-                {helper && (
-                  <p className="mt-0.5 text-[12px] leading-[17px] text-[#737373] break-words [overflow-wrap:anywhere]">
-                    {helper}
-                  </p>
-                )}
-                {i === 1 && status === 'active' && (
-                  <button
-                    onClick={openModal}
-                    className="mt-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80 transition-opacity"
-                  >
-                    Why is this needed?
-                  </button>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ol>
+              )}
+              {i === 1 && status === 'active' && (
+                <button
+                  onClick={openModal}
+                  className="mt-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80 transition-opacity"
+                >
+                  Why is this needed?
+                </button>
+              )}
+            </div>
+          </li>
+        )
+      })}
+    </ol>
+  )
 
+  const panelBody = (
+    <>
+      <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge in 4 steps</p>
+      {stepsList}
       <div className="mt-1 border-t border-[#F0F0F0] pt-3">
         <button
           onClick={openModal}
@@ -110,7 +150,97 @@ const BridgeStepsRail: React.FC = () => {
           See the full walkthrough
         </button>
       </div>
-    </div>
+    </>
+  )
+
+  return (
+    <>
+      {/* Mobile / narrow: a collapsed-by-default bar stacked below the card so
+          it never crowds it. Hidden at md+ where the drawer below takes over. */}
+      <div className="w-full max-w-[360px] md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen((o) => !o)}
+          aria-expanded={mobileOpen}
+          aria-controls={`${panelId}-mobile`}
+          className="flex w-full items-center justify-between rounded-[16px] border border-[#D4D4D4] bg-white px-4 py-3 text-left"
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">
+            Bridge in 4 steps
+          </span>
+          <Icon
+            icon="ph:caret-down-bold"
+            width={14}
+            height={14}
+            className={`text-[#737373] transition-transform ${mobileOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        <AnimatePresence initial={false}>
+          {mobileOpen && (
+            <motion.div
+              id={`${panelId}-mobile`}
+              key="mobile-panel"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.22, ease: 'easeInOut' }}
+              className="overflow-hidden"
+            >
+              <div className="mt-2 rounded-[16px] border border-[#D4D4D4] bg-white p-4">{panelBody}</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Desktop: a slim handle flush against the card's left edge. Hover or
+          click peeks the full steps panel out to the left. This whole block is
+          absolutely positioned against RootStyle's card-sized wrapper, so it
+          never contributes to layout width and can't push the card off-center. */}
+      <div
+        ref={drawerRef}
+        className="absolute right-full top-3 z-10 hidden items-start md:flex"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <motion.div
+          initial={false}
+          animate={{
+            width: desktopOpen ? 260 : 0,
+            marginRight: desktopOpen ? 12 : 0,
+            opacity: desktopOpen ? 1 : 0,
+          }}
+          transition={{ duration: prefersReducedMotion ? 0 : 0.28, ease: 'easeOut' }}
+          className="overflow-hidden"
+        >
+          <div
+            id={panelId}
+            className="w-[260px] rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
+          >
+            {panelBody}
+          </div>
+        </motion.div>
+
+        <button
+          ref={handleRef}
+          type="button"
+          aria-expanded={desktopOpen}
+          aria-controls={panelId}
+          aria-label="Bridge in 4 steps"
+          onClick={() => setPinned((p) => !p)}
+          className={`flex h-[120px] w-9 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-colors ${
+            desktopOpen ? 'border-[#81133B]/40' : 'border-[#D4D4D4] hover:border-[#81133B]/30'
+          }`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${eligible && bothConnected ? 'bg-[#17235E]' : 'bg-[#81133B]'}`} />
+          <span
+            className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
+            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+          >
+            Tutorial
+          </span>
+        </button>
+      </div>
+    </>
   )
 }
 

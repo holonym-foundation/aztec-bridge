@@ -39,7 +39,6 @@ import BridgeFooter from '@/components/BridgeFooter'
 import BridgeHeader from '@/components/BridgeHeader'
 import BridgeStepsRail from '@/components/BridgeStepsRail'
 import VerificationStep from '@/components/VerificationStep'
-import { motion, AnimatePresence } from 'framer-motion'
 import BridgeActionButton from '@/components/BridgeActionButton'
 import {
   L1_CHAIN_ID,
@@ -69,12 +68,6 @@ import {
   MAINTENANCE_TITLE,
   SWAP_BRIDGE_ROUTER_ADDRESS,
 } from '@/config'
-
-const variants = {
-  hidden: { opacity: 0, y: 100 },
-  enter: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -100 },
-}
 
 export default function Home() {
   const router = useRouter()
@@ -502,11 +495,11 @@ export default function Home() {
         {showVerification && <VerificationStep onClose={() => setShowVerification(false)} />}
 
         <div
-          className={`grid grid-rows-[max-content_1fr_max-content] grid-cols-[minmax(0,1fr)] w-full h-full ${
+          className={`grid grid-rows-[max-content_1fr_max-content] grid-cols-[minmax(0,1fr)] w-full max-h-[calc(100vh-96px)] overflow-hidden ${
             MAINTENANCE_MODE ? 'pointer-events-none' : ''
           }`}
         >
-          <div className="p-5">
+          <div className="px-5 pt-4 pb-2">
             <BridgeHeader
               onClick={async () => {
                 // Explicit reset only. Never blanket-clear localStorage — encrypted
@@ -519,90 +512,67 @@ export default function Home() {
             />
           </div>
 
-          <div className="px-5">
-            <AnimatePresence mode="popLayout">
-              {!showBreakdown ? (
-                <motion.div
-                  key="bridge"
-                  initial="hidden"
-                  animate="enter"
-                  exit="exit"
-                  variants={variants}
-                  transition={{ ease: 'easeInOut', duration: 0.5 }}
-                >
-                  <BridgeSection
-                    bridgeConfig={bridgeConfig}
-                    setIsFromSection={setIsFromSection}
-                    setSelectNetwork={setSelectNetwork}
-                    setSelectToken={setSelectToken}
-                    inputAmount={bridgeConfig.amount}
-                    setInputAmount={handleAmountChange}
-                    l1NativeBalance={l1NativeBalance}
-                    l1Balance={l1Balance}
-                    l2Balance={l2Balance}
-                    direction={bridgeConfig.direction}
-                    inputRef={inputRef as React.RefObject<HTMLInputElement>}
-                    onSwap={swapDirection}
-                    isPrivacyModeEnabled={isPrivacyModeEnabled}
-                    feeJuiceBalance={feeJuiceBalance}
-                    feeJuiceLoading={feeJuiceBalanceLoading}
-                    attestationMethod={attestationData?.method ?? null}
-                    passportMaxAmount={attestationData?.passportMaxAmount}
-                    youWillReceive={youWillReceiveAmount}
-                  />
-                  {bridgeConfig.direction === BridgeDirection.L1_TO_L2 &&
-                    !!SWAP_BRIDGE_ROUTER_ADDRESS &&
-                    (!isPrivacyModeEnabled || !!BRIDGED_FPC_ADDRESS) && (
-                      <FuelToggle
-                        fuelEnabled={fuelEnabled}
-                        fuelAmount={fuelAmount}
-                        bridgeAmount={bridgeConfig.amount}
-                        tokenSymbol={bridgeConfig.from.token?.symbol ?? 'USDC'}
-                        tokenDecimals={bridgeConfig.from.token?.decimals ?? 6}
-                        tokenAddress={bridgeConfig.from.token?.l1TokenContract ?? ''}
-                        onToggle={setFuelEnabled}
-                        onAmountChange={setFuelAmount}
-                        feeJuiceBalance={feeJuiceBalance}
-                        privateFeeJuiceBalance={privateFeeJuiceBalance}
-                        feeJuiceBalanceLoading={feeJuiceBalanceLoading}
-                        privateFeeJuiceBalanceLoading={privateFeeJuiceBalanceLoading}
-                        fuelType={fuelType}
-                        onFuelTypeChange={setFuelType}
-                        onSufficiencyChange={setFuelSufficient}
-                        onRecipientValidityChange={setFuelRecipientValid}
-                        onFuelAmountValidChange={setFuelAmountValid}
-                        isPrivacyModeEnabled={isPrivacyModeEnabled}
-                        selfAztecAddress={aztecAddress ?? ''}
-                        fuelRecipientOverride={fuelRecipientOverride}
-                        onFuelRecipientOverrideChange={setFuelRecipientOverride}
-                      />
-                    )}
-                  <TransactionBreakdown isOpen={false} onToggle={() => setShowBreakdown(true)} />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="breakdown"
-                  initial="hidden"
-                  animate="enter"
-                  exit="exit"
-                  variants={variants}
-                  transition={{ ease: 'easeInOut', duration: 0.5 }}
-                >
-                  <TransactionBreakdown
-                    isOpen={true}
-                    onToggle={() => setShowBreakdown(false)}
-                    bridgeFee={portalFeeToken}
-                    bridgeFeeUsd={portalFeeUsd}
-                    receiveAmount={youWillReceiveAmount}
-                    tokenSymbol={feeTokenSymbol}
-                  />
-                </motion.div>
+          {/* Scrolls internally (never the page) if an expanded accordion can't fit. */}
+          <div className="px-5 min-h-0 overflow-y-auto">
+            <BridgeSection
+              bridgeConfig={bridgeConfig}
+              setIsFromSection={setIsFromSection}
+              setSelectNetwork={setSelectNetwork}
+              setSelectToken={setSelectToken}
+              inputAmount={bridgeConfig.amount}
+              setInputAmount={handleAmountChange}
+              l1NativeBalance={l1NativeBalance}
+              l1Balance={l1Balance}
+              l2Balance={l2Balance}
+              direction={bridgeConfig.direction}
+              inputRef={inputRef as React.RefObject<HTMLInputElement>}
+              onSwap={swapDirection}
+              isPrivacyModeEnabled={isPrivacyModeEnabled}
+              feeJuiceBalance={feeJuiceBalance}
+              feeJuiceLoading={feeJuiceBalanceLoading}
+              attestationMethod={attestationData?.method ?? null}
+              passportMaxAmount={attestationData?.passportMaxAmount}
+              youWillReceive={youWillReceiveAmount}
+            />
+            {bridgeConfig.direction === BridgeDirection.L1_TO_L2 &&
+              !!SWAP_BRIDGE_ROUTER_ADDRESS &&
+              (!isPrivacyModeEnabled || !!BRIDGED_FPC_ADDRESS) && (
+                <FuelToggle
+                  fuelEnabled={fuelEnabled}
+                  fuelAmount={fuelAmount}
+                  bridgeAmount={bridgeConfig.amount}
+                  tokenSymbol={bridgeConfig.from.token?.symbol ?? 'USDC'}
+                  tokenDecimals={bridgeConfig.from.token?.decimals ?? 6}
+                  tokenAddress={bridgeConfig.from.token?.l1TokenContract ?? ''}
+                  onToggle={setFuelEnabled}
+                  onAmountChange={setFuelAmount}
+                  feeJuiceBalance={feeJuiceBalance}
+                  privateFeeJuiceBalance={privateFeeJuiceBalance}
+                  feeJuiceBalanceLoading={feeJuiceBalanceLoading}
+                  privateFeeJuiceBalanceLoading={privateFeeJuiceBalanceLoading}
+                  fuelType={fuelType}
+                  onFuelTypeChange={setFuelType}
+                  onSufficiencyChange={setFuelSufficient}
+                  onRecipientValidityChange={setFuelRecipientValid}
+                  onFuelAmountValidChange={setFuelAmountValid}
+                  isPrivacyModeEnabled={isPrivacyModeEnabled}
+                  selfAztecAddress={aztecAddress ?? ''}
+                  fuelRecipientOverride={fuelRecipientOverride}
+                  onFuelRecipientOverrideChange={setFuelRecipientOverride}
+                />
               )}
-            </AnimatePresence>
+            <TransactionBreakdown
+              isOpen={showBreakdown}
+              onToggle={() => setShowBreakdown((prev) => !prev)}
+              bridgeFee={portalFeeToken}
+              bridgeFeeUsd={portalFeeUsd}
+              receiveAmount={youWillReceiveAmount}
+              tokenSymbol={feeTokenSymbol}
+            />
           </div>
 
           <div className="self-end">
-            <div className="rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[16px] pt-[16px] pr-[10px] pb-0 pl-[10px] w-full">
+            <div className="sticky bottom-0 rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[12px] pt-[12px] pr-[10px] pb-0 pl-[10px] w-full">
               <BridgeActionButton
                 // Fuel gating only applies once both wallets are connected — otherwise it
                 // disables the Connect CTAs the button itself drives.

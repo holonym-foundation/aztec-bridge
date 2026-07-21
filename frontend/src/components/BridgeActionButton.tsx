@@ -308,7 +308,7 @@ function BridgeActionButton({
               React.createElement(
                 'a',
                 {
-                  href: 'https://id.human.tech/sandbox/clean-hands',
+                  href: 'https://id.human.tech/clean-hands',
                   target: '_blank',
                   rel: 'noopener noreferrer',
                   style: { color: '#BF1254', textDecoration: 'underline' },

@@ -85,7 +85,7 @@ const SCREENS: Screen[] = [
             Human Passport
           </a>
           <a
-            href="https://id.human.tech/sandbox/clean-hands"
+            href="https://id.human.tech/clean-hands"
             target="_blank"
             rel="noopener noreferrer"
             className="ob-pill ob-pill-outline"
@@ -453,45 +453,34 @@ const ZK_NODES: [number, number][] = [
 ]
 
 function ZkPulse() {
-  const reduce = useReducedMotion() ?? false
+  const items = [
+    'Proofs are generated locally on your device',
+    'Only what a rule requires is ever checked',
+    'Nothing else is seen or stored',
+  ]
   return (
-    <div className="ob-zk" aria-hidden="true">
-      <svg className="ob-zk-svg" viewBox="0 0 140 52" width="140" height="52">
-        <path d="M14 26L64 10M14 26L64 42M64 10L112 26M64 42L112 26" stroke={BRAND} strokeWidth="1" opacity="0.22" fill="none" />
-        {ZK_NODES.map(([cx, cy], i) =>
-          reduce ? (
-            <circle key={i} cx={cx} cy={cy} r="3.5" fill={BRAND} opacity="0.55" />
-          ) : (
-            <motion.circle
-              key={i}
-              cx={cx}
-              cy={cy}
-              r="3.5"
-              fill={BRAND}
-              animate={{ opacity: [0.3, 0.85, 0.3] }}
-              transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
-            />
-          )
-        )}
-        <circle cx="112" cy="26" r="6" fill="none" stroke={BRAND} strokeWidth="1.4" opacity="0.5" />
-        {reduce ? (
-          <path d="M108.5 26l2.5 2.6l5.5 -6" stroke={BRAND} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        ) : (
-          <motion.path
-            d="M108.5 26l2.5 2.6l5.5 -6"
-            stroke={BRAND}
-            strokeWidth="1.6"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            initial={{ pathLength: 0, opacity: 0 }}
-            animate={{ pathLength: [0, 1, 1, 0], opacity: [0, 1, 1, 0] }}
-            transition={{ duration: 3.6, repeat: Infinity, times: [0, 0.4, 0.85, 1], ease: 'easeInOut' }}
-          />
-        )}
-      </svg>
-      <span className="ob-zk-caption">Proofs generate and verify locally</span>
-    </div>
+    <ul
+      style={{
+        listStyle: 'none',
+        margin: '20px auto 0',
+        padding: 0,
+        maxWidth: 400,
+        textAlign: 'left',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 11,
+      }}
+    >
+      {items.map((t) => (
+        <li key={t} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14.5, lineHeight: 1.4, color: '#5a4650' }}>
+          <svg viewBox="0 0 20 20" width={20} height={20} style={{ flex: 'none', marginTop: 1 }} aria-hidden="true">
+            <circle cx="10" cy="10" r="9" fill={BRAND} opacity="0.12" />
+            <path d="M6 10.5l2.5 2.5L14.5 7" fill="none" stroke={BRAND} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>{t}</span>
+        </li>
+      ))}
+    </ul>
   )
 }
 

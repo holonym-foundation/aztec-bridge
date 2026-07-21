@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { AztecAddress } from '@aztec/stdlib/aztec-address'
 import { formatFjAmount, getFeeJuicePriceUsd, usdToTokenAmount } from '@/utils/fuelPricing'
 import { buildSwapCandidates, getBestRoute } from '@/utils/fuelPricing'
@@ -191,6 +191,12 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
   const isValid = fuelNum > 0 && fuelNum < bridgeNum
   const netBridge = bridgeNum - fuelNum
   const hasBridgedFpc = !!BRIDGED_FPC_ADDRESS
+  const shouldReduceMotion = useReducedMotion()
+
+  // The enable switch and the detail accordion are independent: fuel top-up defaults ON
+  // (business logic), but its editing UI (public/private, amount, send-to) stays collapsed
+  // until the user asks for it — this is what keeps the card in-viewport by default.
+  const [detailOpen, setDetailOpen] = useState(false)
 
   // In private mode, fuel is always via BridgedFPC (private). Sync the store if needed.
   useEffect(() => {
@@ -282,11 +288,41 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
   // Check which USD preset is currently selected (if any)
   const activePreset = USD_PRESETS.find((usd) => fuelAmount === usdToTokenAmount(usd, tokenSymbol, prices))
 
+  const detailId = 'fuel-toggle-detail'
+
   return (
     <div className="bg-[#F5F5F5] rounded-md p-3 mt-3 overflow-hidden">
-      <div className="flex items-center justify-between cursor-pointer" onClick={() => onToggle(!fuelEnabled)}>
-        <span className="text-sm font-medium text-latest-grey-700">Top up gas balance</span>
-        <div className="relative">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          className="flex items-center gap-1.5 min-w-0 text-left disabled:cursor-default"
+          onClick={() => setDetailOpen((open) => !open)}
+          disabled={!fuelEnabled}
+          aria-expanded={fuelEnabled && detailOpen}
+          aria-controls={detailId}
+        >
+          <span className="text-sm font-medium text-latest-grey-700">Top up gas balance</span>
+          {fuelEnabled && (
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+              className={`shrink-0 transition-transform ${detailOpen ? 'rotate-180' : ''}`}
+              aria-hidden="true"
+            >
+              <path d="M1 3L5 7L9 3" stroke="#747474" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={fuelEnabled}
+          aria-label="Enable gas top-up"
+          className="relative shrink-0"
+          onClick={() => onToggle(!fuelEnabled)}
+        >
           <div
             className="w-9 h-5 rounded-full transition-colors"
             style={{ backgroundColor: fuelEnabled ? '#81133B' : '#d1d5db' }}
@@ -297,42 +333,51 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
               transform: fuelEnabled ? 'translateX(1rem)' : 'translateX(0)',
             }}
           />
-        </div>
-      </div>
-      <div className="text-xs text-latest-grey-500 mt-1 space-y-0.5">
-        <div className="flex justify-between items-center h-4">
-          <span>Public Fee Juice:</span>
-          <span className="font-semibold">
-            {feeJuiceBalanceLoading ? (
-              <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
-            ) : (
-              (feeJuiceBalance ?? '--')
-            )}
-          </span>
-        </div>
-        {hasBridgedFpc && (
-          <div className="flex justify-between items-center h-4">
-            <span>Private Fee Juice:</span>
-            <span className="font-semibold">
-              {privateFeeJuiceBalanceLoading ? (
-                <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
-              ) : (
-                (privateFeeJuiceBalance ?? '--')
-              )}
-            </span>
-          </div>
-        )}
+        </button>
       </div>
 
+      {fuelEnabled && !detailOpen && (
+        <p className="text-xs text-latest-grey-500 mt-1">
+          {fuelNum > 0 ? `${fuelAmount} ${tokenSymbol} reserved for gas — tap to edit` : 'Tap to set an amount'}
+        </p>
+      )}
+
       <AnimatePresence initial={false}>
-        {fuelEnabled && (
+        {fuelEnabled && detailOpen && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            id={detailId}
+            key="fuel-detail"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: 'easeInOut' }}
+            className="overflow-hidden"
           >
             <div className="mt-3 space-y-2">
+              <div className="text-xs text-latest-grey-500 space-y-0.5">
+                <div className="flex justify-between items-center h-4">
+                  <span>Public Fee Juice:</span>
+                  <span className="font-semibold">
+                    {feeJuiceBalanceLoading ? (
+                      <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
+                    ) : (
+                      (feeJuiceBalance ?? '--')
+                    )}
+                  </span>
+                </div>
+                {hasBridgedFpc && (
+                  <div className="flex justify-between items-center h-4">
+                    <span>Private Fee Juice:</span>
+                    <span className="font-semibold">
+                      {privateFeeJuiceBalanceLoading ? (
+                        <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
+                      ) : (
+                        (privateFeeJuiceBalance ?? '--')
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
               {pricesError && <p className="text-xs text-amber-600">Live prices unavailable — using fallback prices</p>}
               {hasBridgedFpc && !isPrivacyModeEnabled && (
                 <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">

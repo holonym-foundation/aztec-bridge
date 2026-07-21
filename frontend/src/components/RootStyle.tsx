@@ -24,9 +24,14 @@ export default function RootStyle({ children, className, aside }: RootStyleProps
     return <div className={`flex items-center min-h-[90vh] justify-center py-10`}>{card}</div>
   }
 
+  // The wrapper is sized to the CARD, not the card+aside pair, so centering the
+  // wrapper centers the card. On mobile the aside stacks below in normal flow;
+  // at md+ the aside renders itself as an absolutely-positioned drawer (see
+  // BridgeStepsRail) that peeks out from the wrapper's left edge without
+  // contributing to its layout width.
   return (
     <div className={`flex items-center min-h-[90vh] justify-center py-10 px-4`}>
-      <div className='flex w-full flex-col items-center justify-center gap-4 max-w-full md:flex-row md:items-start md:gap-6'>
+      <div className='relative flex w-full flex-col items-center gap-4 md:w-[360px] md:gap-0'>
         {card}
         {aside}
       </div>

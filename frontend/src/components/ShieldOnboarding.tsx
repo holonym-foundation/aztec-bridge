@@ -482,7 +482,7 @@ export default function ShieldOnboarding() {
             <AnimatePresence mode="wait">
               <motion.div
                 key={index}
-                className="ob-card"
+                className={`ob-card${index === 0 ? '' : ' ob-card-top'}`}
                 initial={{ opacity: 0, y: 22 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -22 }}
@@ -641,6 +641,9 @@ export default function ShieldOnboarding() {
         .ob-card-region { position: relative; width: 100%; height: clamp(430px, 60vh, 540px); }
         .ob-card { position: absolute; inset: 0; width: 100%; text-align: center; display: flex;
           flex-direction: column; align-items: center; justify-content: center; }
+        /* Non-hero screens top-align so the minimized cryptex sits at the same Y on every
+           screen instead of drifting with each screen's content height. */
+        .ob-card-top { justify-content: flex-start; padding-top: 30px; }
         .ob-visual { height: 72px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; width: 100%; }
         .ob-eyebrow { font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: ${BRAND};
           font-weight: 600; margin: 0 0 14px; white-space: pre-line; line-height: 1.7; }

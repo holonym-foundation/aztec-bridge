@@ -43,7 +43,7 @@ const BridgeStepsRail: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-[360px] rounded-[16px] border border-[#D4D4D4] bg-white p-4 md:w-[260px]">
+    <div className="w-full max-w-[360px] shrink-0 rounded-[16px] border border-[#D4D4D4] bg-white p-4 md:w-[260px]">
       <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge in 4 steps</p>
 
       <ol className="flex flex-col">

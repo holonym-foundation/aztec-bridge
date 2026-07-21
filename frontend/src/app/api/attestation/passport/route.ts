@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     if (!passing) {
       return NextResponse.json(
         {
-          error: 'Passport score too low',
+          error: 'Human Passport score too low',
           score,
           threshold: getPassportScoreThreshold(),
           passing: false,

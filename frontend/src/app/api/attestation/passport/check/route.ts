@@ -105,12 +105,12 @@ export async function GET(request: NextRequest) {
       ...(travelRule.enabled ? { travelRuleRemainingUsd: travelRule.remainingUsd } : {}),
       reason: passing
         ? undefined
-        : `Passport score too low (${score}/${getPassportScoreThreshold()} required)`,
+        : `Human Passport score too low (${score}/${getPassportScoreThreshold()} required)`,
     })
   } catch (error) {
     console.error('[attestation/passport/check]', error)
     return NextResponse.json(
-      { error: 'Failed to check Passport eligibility' },
+      { error: 'Failed to check Human Passport eligibility' },
       { status: 500 }
     )
   }

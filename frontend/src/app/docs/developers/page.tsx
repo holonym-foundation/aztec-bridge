@@ -190,7 +190,7 @@ const walletAdapter: WalletAdapterInterface = {
       <>
         <P>
           Every deposit and withdrawal — public or private — is gated on an attestation (Proof of Clean Hands, with a
-          Passport fallback). The SDK fetches it automatically inside <Code>bridgeL1ToL2</Code> and{' '}
+          Human Passport fallback). The SDK fetches it automatically inside <Code>bridgeL1ToL2</Code> and{' '}
           <Code>withdrawL2ToL1</Code>; the calls below are optional pre-checks for your own UI.
         </P>
         <CodeBlock>{`// Full status: binding, nonce counts, attester config
@@ -247,7 +247,7 @@ const result = await bridge.resume(operationId, {
           <tbody>
             <tr><Td><Code>operation_created</Code></Td><Td>The backend operation record is created</Td></tr>
             <tr><Td><Code>secrets_generated</Code></Td><Td>Claim secrets generated (hashes + encrypted payload only)</Td></tr>
-            <tr><Td><Code>attestation_fetch</Code></Td><Td>Fetching a POCH or Passport attestation</Td></tr>
+            <tr><Td><Code>attestation_fetch</Code></Td><Td>Fetching a Proof of Clean Hands or Human Passport attestation</Td></tr>
             <tr><Td><Code>do_not_reload</Code></Td><Td>An irreversible on-chain tx is imminent — show a warning</Td></tr>
             <tr><Td><Code>deposit_sent</Code></Td><Td>L1 deposit transaction sent</Td></tr>
             <tr><Td><Code>claim_attempt</Code></Td><Td>L2 claim attempt starting</Td></tr>

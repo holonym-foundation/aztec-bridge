@@ -21,7 +21,7 @@
     "db:reset": "prisma migrate reset --force --skip-seed && prisma db push"
   },
   "dependencies": {
-    "@alejoamiras/aztec-fee-payment": "5.0.1",
+    "@alejoamiras/private-fee-juice": "5.0.1",
     "@aztec-foundation/aztec-standards": "5.0.1",
     "@aztec/accounts": "5.0.1",
     "@aztec/aztec.js": "5.0.1",

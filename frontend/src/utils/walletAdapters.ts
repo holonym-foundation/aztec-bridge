@@ -41,7 +41,7 @@ async function getContractArtifact(type: ContractType) {
     return loadContractArtifact(proxyJson.default ?? proxyJson)
   }
   if (type === 'bridged_fpc') {
-    const { PrivateFPCContractArtifact } = await import('@alejoamiras/aztec-fee-payment')
+    const { PrivateFPCContractArtifact } = await import('@alejoamiras/private-fee-juice')
     return PrivateFPCContractArtifact
   }
   if (type === 'fee_juice') {
@@ -148,7 +148,7 @@ class WalletAdapter {
     // locally and register it with the wallet's PXE.
     if (BRIDGED_FPC_ADDRESS) {
       try {
-        const { registerPrivateContract } = await import('@alejoamiras/aztec-fee-payment')
+        const { registerPrivateContract } = await import('@alejoamiras/private-fee-juice')
         await registerPrivateContract(this.wallet, Fr.ZERO)
       } catch {
         // May already be registered

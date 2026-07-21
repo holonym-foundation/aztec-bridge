@@ -1236,7 +1236,7 @@ export async function bridgeL1ToL2(
       // `fuelAmount >= maxGasCost`, so we need the fee-rate cap applied here
       // to match what checkFuelSufficiency('private') validated earlier.
       const { PrivateMintAndPayFeePaymentMethod, maxFeesPerGasFromBaseFees } =
-        await import('@alejoamiras/aztec-fee-payment')
+        await import('@alejoamiras/private-fee-juice')
       const { Gas, GasFees } = await import('@aztec/stdlib/gas')
       const baseFees = await aztecNode.getCurrentMinFees()
       const gasLimits = Gas.from({ l2Gas: 2_000_000, daGas: 50_000 })

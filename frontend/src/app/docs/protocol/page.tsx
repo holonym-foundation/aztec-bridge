@@ -283,17 +283,30 @@ const sections: DocsSection[] = [
           addresses. That way this page can never drift from the live deployment.
         </Callout>
         <H4>Audit status</H4>
+        <P>Shield&apos;s components are independently audited, each scoped to that component:</P>
+        <Table>
+          <thead>
+            <tr>
+              <Th>Component</Th>
+              <Th>Auditor</Th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><Td>Bridge contracts (Ethereum L1 and Aztec L2 Noir)</Td><Td>Nethermind Security (NM-0756, May 2026)</Td></tr>
+            <tr><Td>Clean Hands ZK circuits</Td><Td>Hexens (2024)</Td></tr>
+            <tr><Td>Human Network threshold cryptography</Td><Td>Halborn (2024)</Td></tr>
+          </tbody>
+        </Table>
         <P>
-          Shield has been audited by <strong>Nethermind Security</strong> and <strong>Hexens</strong>. Nethermind
-          covered the bridge contracts and circuits (report NM-0756, May 2026: 1 critical, 2 high, and 3 medium
-          findings, all resolved before deployment); Hexens covered the ZK identity circuits and the Human Network.
-          Shield still carries early-network risk regardless (see the{' '}
+          No single firm reviewed all of Shield; each audit covers only its own component. Shield still carries
+          early-network risk regardless (see the{' '}
           <a href="/docs/users#alpha" className="text-latest-blue-100 underline">alpha risk notice</a>).
         </P>
         <SmeReview who="Caleb, eng">
-          Nethermind and Hexens are the confirmed Shield auditors (Nethermind: bridge contracts and circuits; Hexens: ZK
-          ID circuits and Human Network). Halborn is a WaaP (wallet) auditor and is intentionally not listed here.
-          Attach the published report references or links when they are available for public docs.
+          Keep this scoping exact. Nethermind reviewed the bridge contracts; Hexens the Clean Hands ZK circuits; Halborn
+          the Human Network threshold cryptography. Do not cross-attribute (Hexens and Halborn did not audit the bridge
+          contracts), do not present a single full-scope Shield contract review, and do not publish finding/severity
+          counts or link the NM-0756 report until the artifact is confirmed shareable.
         </SmeReview>
       </>
     ),

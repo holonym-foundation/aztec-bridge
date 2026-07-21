@@ -42,8 +42,9 @@ const sections: DocsSection[] = [
         </P>
         <UL>
           <li>
-            <strong>Shield&apos;s own code has been audited.</strong> The bridge contracts and identity system were
-            reviewed by Nethermind and Hexens, and the findings were resolved before launch.
+            <strong>Shield&apos;s own code has been audited.</strong> Independent security firms reviewed the different
+            parts: the bridge contracts (Nethermind Security), the Clean Hands identity circuits (Hexens), and the Human
+            Network cryptography (Halborn). Each firm looked at its own part.
           </li>
           <li>
             <strong>The Aztec network is still an early (alpha) network.</strong> Aztec is young software under ongoing

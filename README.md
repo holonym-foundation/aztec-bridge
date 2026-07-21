@@ -20,7 +20,7 @@ version string from this README.
 
 **Bridge-specific:**
 
-- Audited by **Nethermind Security** (NM-0756, May 2026: 1 critical / 2 high / 3 medium, all resolved before deployment; bridge contracts, circuits, and cross-chain flow) and **Hexens** (ZK identity circuits and Human Network)
+- Independently audited per component: bridge contracts (Ethereum L1 + Aztec L2 Noir) by **Nethermind Security** (NM-0756, May 2026); Clean Hands ZK circuits by **Hexens** (2024); Human Network threshold cryptography by **Halborn** (2024). Each audit is scoped to its component; no single firm reviewed all of Shield.
 - Public marketing launch aligned with the Aztec v5 release
 
 Prior testnet deployments remain in `bridge-script/deployments/` for historical reference but are no longer the active deployment.
@@ -173,7 +173,7 @@ forge deploy       # Deploy contracts
 **Shield is live on Aztec v5, an early (alpha) network. Bridge only what you can afford to lose.**
 
 Where the risk actually sits (see the top of this README for the current status):
-- ✅ Shield's own contracts and identity system were independently audited (Nethermind and Hexens); findings resolved before deployment
+- ✅ Shield's components were independently audited, each scoped to its component: bridge contracts by Nethermind Security, Clean Hands ZK circuits by Hexens, Human Network threshold cryptography by Halborn
 - ⚠️ The Aztec network is still an early network under ongoing audit and a bug bounty; undiscovered bugs are possible
 - ⚠️ Non-custodial and final: the smart contracts hold funds in transit; there are no refunds, warranties, or insurance
 - ⚠️ Aztec itself advises users to only deposit funds they can afford to lose

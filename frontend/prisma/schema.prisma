@@ -92,6 +92,33 @@ model AuthNonce {
 }
 
 // ---------------------------------------------------------------------------
+// AttestationReservation: a per-human budget "hold" written when a passport
+// deposit attestation is SIGNED — before the on-chain deposit exists. Deposit
+// usage is otherwise summed only over confirmed (funds-locked) deposits, so
+// without this ledger N parallel attestation requests each read "$0 used" and
+// each receive a full-budget signature (TOCTOU race). The reservation is written
+// under a per-user advisory lock so a concurrent request sees it and is charged
+// for it. Rows expire at the attestation deadline (<= 1h); only non-expired rows
+// count toward usage, after which the confirmed-deposit sum is authoritative
+// (a confirmed deposit is transiently double-counted for <= the deadline, which
+// is conservative — it can only refuse, never over-issue).
+// ---------------------------------------------------------------------------
+
+model AttestationReservation {
+  id         String   @id @default(cuid(2))
+  fkUserId   String   // FK to User.id (the bound L1+L2 human)
+  nonce      String   @unique // attestation nonce (decimal string); one row per issued attestation
+  amountUsd  Float    // USD ceiling this attestation can authorize (its signed maxAmount)
+  method     String   // issuing tier, currently always 'passport'
+  expiresAt  DateTime // attestation deadline; only rows with expiresAt > now count toward usage
+  createdAt  DateTime @default(now())
+
+  @@index([fkUserId, expiresAt])
+  @@index([expiresAt])
+  @@map("attestation_reservations")
+}
+
+// ---------------------------------------------------------------------------
 // BridgeActivity: one bridge activity (L1→L2 or L2→L1) with encrypted backup
 // ---------------------------------------------------------------------------
 

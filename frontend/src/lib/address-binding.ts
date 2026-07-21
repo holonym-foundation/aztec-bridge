@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { BridgeDirection, BridgeOperationStatus } from '@prisma/client'
+import { BridgeDirection, BridgeOperationStatus, Prisma } from '@prisma/client'
 import { prisma } from './prisma'
 import { getTokenPriceUsd } from '@/utils/fuelPricing'
 import { getBridgeMaxDepositUsd, getTravelRuleThresholdUsd } from './attestation'
@@ -76,8 +76,9 @@ export const DEPOSIT_CAP_WINDOW_MS = 24 * 60 * 60 * 1000
 export async function getConfirmedDepositUsd(
   userId: string,
   windowMs: number | null = DEPOSIT_CAP_WINDOW_MS,
+  client: Prisma.TransactionClient = prisma,
 ): Promise<number> {
-  const rows = await prisma.bridgeActivity.findMany({
+  const rows = await client.bridgeActivity.findMany({
     where: {
       fkUserId: userId,
       direction: BridgeDirection.L1_TO_L2,
@@ -103,6 +104,115 @@ export function usdToTokenBaseUnits(usd: number, tokenSymbol: string, decimals: 
   const price = getTokenPriceUsd(tokenSymbol, null)
   if (price <= 0 || usd <= 0) return 0n
   return BigInt(Math.floor((usd / price) * 10 ** decimals))
+}
+
+/**
+ * Sum a user's outstanding (non-expired) attestation budget reservations, in USD.
+ *
+ * A reservation is written when a passport deposit attestation is signed, so this
+ * counts budget that is authorized but not yet confirmed on-chain. Added to the
+ * confirmed-deposit sum it closes the TOCTOU race where concurrent attestation
+ * requests each read only confirmed usage and each receive a full-budget signature.
+ */
+export async function getReservedDepositUsd(
+  userId: string,
+  client: Prisma.TransactionClient = prisma,
+): Promise<number> {
+  const rows = await client.attestationReservation.findMany({
+    where: { fkUserId: userId, expiresAt: { gt: new Date() } },
+    select: { amountUsd: true },
+  })
+  return rows.reduce((sum, r) => sum + r.amountUsd, 0)
+}
+
+export interface PassportReservationResult {
+  ok: boolean
+  reason?: 'travel_rule' | 'deposit_limit'
+  thresholdUsd: number
+  limitUsd: number
+  /** 24h confirmed usage, for the deposit_limit error message. */
+  confirmedUsd: number
+  /** The signed maxAmount to authorize (capped to the smaller remaining budget). */
+  maxAmount: bigint
+}
+
+/**
+ * Atomically evaluate the passport deposit caps AND reserve the resulting budget.
+ *
+ * Runs under a per-user advisory lock inside a transaction so the read (confirmed
+ * deposits + outstanding reservations) and the write (this attestation's reservation)
+ * cannot be interleaved by concurrent requests — the fix for the cumulative-cap
+ * TOCTOU race. Usage counts confirmed deposits plus non-expired reservations against
+ * both the lifetime Travel Rule threshold and the rolling-24h Alpha cap; the signed
+ * maxAmount is capped to the smaller remaining budget, and that ceiling is reserved.
+ */
+export async function reservePassportBudget(params: {
+  userId: string
+  nonce: bigint
+  expiresAt: Date
+  perTxMaxAmount: bigint
+  tokenSymbol: string
+  tokenDecimals: number
+}): Promise<PassportReservationResult> {
+  const thresholdUsd = getTravelRuleThresholdUsd()
+  const limitUsd = getBridgeMaxDepositUsd()
+  const price = getTokenPriceUsd(params.tokenSymbol, null)
+
+  return prisma.$transaction(async (tx) => {
+    // Hold a per-user lock until commit so a concurrent request for the same user
+    // blocks here and then reads the reservation this transaction wrote.
+    // $executeRaw, not $queryRaw: pg_advisory_xact_lock returns void, which the
+    // query deserializer rejects ("cannot deserialize column of type 'void'").
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.userId}))`
+
+    const reservedUsd = await getReservedDepositUsd(params.userId, tx)
+    let maxAmount = params.perTxMaxAmount
+    let confirmedUsd = 0
+
+    if (thresholdUsd > 0) {
+      const lifetimeUsd = await getConfirmedDepositUsd(params.userId, null, tx)
+      const remainingUsd = Math.max(0, thresholdUsd - (lifetimeUsd + reservedUsd))
+      if (remainingUsd <= 0) {
+        return { ok: false, reason: 'travel_rule', thresholdUsd, limitUsd, confirmedUsd, maxAmount: 0n }
+      }
+      const remainingBaseUnits = usdToTokenBaseUnits(remainingUsd, params.tokenSymbol, params.tokenDecimals)
+      if (remainingBaseUnits < maxAmount) maxAmount = remainingBaseUnits
+    }
+
+    if (limitUsd > 0) {
+      confirmedUsd = await getConfirmedDepositUsd(params.userId, DEPOSIT_CAP_WINDOW_MS, tx)
+      const remainingUsd = Math.max(0, limitUsd - (confirmedUsd + reservedUsd))
+      if (remainingUsd <= 0) {
+        return { ok: false, reason: 'deposit_limit', thresholdUsd, limitUsd, confirmedUsd, maxAmount: 0n }
+      }
+      const remainingBaseUnits = usdToTokenBaseUnits(remainingUsd, params.tokenSymbol, params.tokenDecimals)
+      if (remainingBaseUnits < maxAmount) maxAmount = remainingBaseUnits
+    }
+
+    if (maxAmount <= 0n) {
+      return {
+        ok: false,
+        reason: thresholdUsd > 0 ? 'travel_rule' : 'deposit_limit',
+        thresholdUsd,
+        limitUsd,
+        confirmedUsd,
+        maxAmount: 0n,
+      }
+    }
+
+    const amountUsd = price > 0 ? (Number(maxAmount) / 10 ** params.tokenDecimals) * price : 0
+    await tx.attestationReservation.create({
+      data: {
+        fkUserId: params.userId,
+        nonce: params.nonce.toString(),
+        amountUsd,
+        method: 'passport',
+        expiresAt: params.expiresAt,
+      },
+    })
+
+    return { ok: true, thresholdUsd, limitUsd, confirmedUsd, maxAmount }
+  })
 }
 
 export interface DepositLimitResult {

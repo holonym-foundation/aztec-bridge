@@ -81,10 +81,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3b. Alpha per-day (rolling 24h) deposit cap (L1→L2 only). POCH has no
-    // on-chain amount binding, so this refuses to issue a signature once the user
-    // is over budget — the honest-client / UI guardrail.
-    if (data.direction === 'L1_TO_L2') {
+    // 3b. Alpha per-day (rolling 24h) deposit cap. POCH has no on-chain amount
+    // binding, so this refuses to issue the deposit (L1) signature once the user is
+    // over budget. `direction` is client-controlled and must never relax the check:
+    // anything but an explicit withdrawal is treated as a deposit, and the L1
+    // signature — the only artifact a TokenPortal deposit consumes — is issued for
+    // deposits only, so a withdrawal request can't skip the cap and still deposit.
+    const isDeposit = data.direction !== 'L2_TO_L1'
+
+    if (isDeposit) {
       const limit = await evaluateDepositLimit({
         userId: authResult.user.id,
         amount: data.amount,
@@ -106,12 +111,17 @@ export async function POST(request: NextRequest) {
     const circuitId = getCircuitId()
     const nonce = getNextNonce()
 
-    const l1Signature = await signCleanHandsAttestation({
-      nonce,
-      circuitId,
-      actionId,
-      userAddress: l1Address,
-    })
+    // Only a deposit needs the L1 (portal) CleanHands signature; a withdrawal is
+    // verified by the L2 Schnorr signature below. Issuing an L1 signature for a
+    // withdrawal would let it authorize a deposit that skipped the cap above.
+    const l1Signature = isDeposit
+      ? await signCleanHandsAttestation({
+          nonce,
+          circuitId,
+          actionId,
+          userAddress: l1Address,
+        })
+      : null
 
     const l2Signature = await signL2CleanHandsAttestation({
       circuitId,

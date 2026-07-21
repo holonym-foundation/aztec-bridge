@@ -7,7 +7,7 @@ const AppLoadingScreen = () => {
     <div 
       className="min-h-screen flex items-center justify-center"
       style={{ 
-        background: 'radial-gradient(#E3E6FF, #FFFFFF)' 
+        background: 'radial-gradient(#FDE7F3, #FFFFFF)'
       }}
     >
       <div className="text-center">
@@ -19,8 +19,8 @@ const AppLoadingScreen = () => {
           className="mb-8"
         >
           <img
-            src="/assets/svg/aztec-wallet-logo.svg"
-            alt="Aztec Bridge"
+            src="/assets/svg/shield-symbol-maroon.svg"
+            alt="Shield"
             width={120}
             height={120}
             className="mx-auto"
@@ -35,7 +35,7 @@ const AppLoadingScreen = () => {
           className="text-2xl font-semibold text-gray-900 mb-2"
           style={{ fontFamily: 'Suisse Intl, sans-serif' }}
         >
-          Bridge to Aztec
+          Shield
         </motion.h1>
 
         {/* Subtitle */}
@@ -46,7 +46,7 @@ const AppLoadingScreen = () => {
           className="text-gray-600 mb-8"
           style={{ fontFamily: 'Suisse Intl, sans-serif' }}
         >
-          Pay and Transact Privately
+          Private, accountable transfers on Aztec
         </motion.p>
 
         {/* Loading Animation */}
@@ -60,7 +60,7 @@ const AppLoadingScreen = () => {
             {[0, 1, 2].map((index) => (
               <motion.div
                 key={index}
-                className="w-2 h-2 bg-[#FF990A] rounded-full"
+                className="w-2 h-2 bg-[#81133B] rounded-full"
                 animate={{
                   scale: [1, 1.2, 1],
                   opacity: [0.5, 1, 0.5],

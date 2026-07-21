@@ -79,6 +79,19 @@ const nextConfig: NextConfig = {
           process: 'process/browser',
         }),
       )
+
+    }
+
+    // pnpm nests @aztec/aztec.js under its dependents, so packages that import
+    // its subpath exports (e.g. @aztec-foundation/aztec-standards' generated
+    // Token.js -> '@aztec/aztec.js/abi') can't resolve them. serverExternalPackages
+    // only externalizes the bare package, not these subpaths. Alias them to the
+    // hoisted package so both the server and client bundles resolve.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@aztec/aztec.js/abi': require.resolve('@aztec/aztec.js/abi'),
+      '@aztec/aztec.js/contracts': require.resolve('@aztec/aztec.js/contracts'),
+      '@aztec/aztec.js/fields': require.resolve('@aztec/aztec.js/fields'),
     }
 
     return config

@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-pink-5: #FEF6FA;
+  --color-pink-10: #FDE7F3;
+  --color-pink-20: #FCD4EA;
+  --color-pink-30: #FDB4DA;
+  --color-pink-40: #FA8FC4;
+  --color-pink-50: #F462A6;
+  --color-pink-60: #E3357E;
+  --color-pink-70: #BF1254;
+  --color-pink-80: #9B1247;
+  --color-pink-90: #81133B;
+  --color-pink-95: #4D051F;
+
+  --brand-accent: var(--color-pink-90);
+  --brand-accent-soft: var(--color-pink-10);
+  --brand-glow: color-mix(in srgb, var(--color-pink-50) 45%, transparent);
+  --brand-surface: rgba(255, 255, 255, 0.8);
+  --anchor-navy: #17235E;
+}
+
 /* Suisse Intl */
 @font-face {
   font-family: 'Suisse Intl';

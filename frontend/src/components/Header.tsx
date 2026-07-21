@@ -113,7 +113,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
         className="flex pr-[8px] justify-center items-center gap-[12px] rounded-[8px] border border-[#D4D4D4] bg-white cursor-pointer hover:shadow-md transition-shadow duration-200"
         onClick={handleClick}
       >
-        <div className="flex w-8 h-8 p-1 justify-center items-center rounded-[8px] bg-[#E5EFFF]">
+        <div className="flex w-8 h-8 p-1 justify-center items-center rounded-[8px] bg-[#FDE7F3]">
           <Image src={walletIcon} alt="Wallet" width={32} height={32} />
         </div>
         {networkIcon && <Image src={networkIcon} alt="Network" width={20} height={20} />}
@@ -304,7 +304,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
       <header className="w-full px-4 flex justify-between items-center">
         <div className="flex-shrink-0">
           <Link href="/" className="hover:opacity-80 transition-opacity duration-200">
-            <Image src="/assets/svg/human.tech.logo.svg" alt="human.tech" width={120} height={30} />
+            <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={112} height={30} />
           </Link>
         </div>
       </header>
@@ -316,7 +316,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
       <header className="w-full px-4 pt-3 flex justify-between items-center relative">
         <div className="flex-shrink-0">
           <Link href="/" className="hover:opacity-80 transition-opacity duration-200">
-            <Image src="/assets/svg/human.tech.logo.svg" alt="human.tech" width={120} height={30} />
+            <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={112} height={30} />
           </Link>
         </div>
       </header>
@@ -327,7 +327,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
     <header className="w-full px-4 pt-3 flex justify-between items-center relative">
       <div className="flex-shrink-0">
         <Link href="/" className="hover:opacity-80 transition-opacity duration-200">
-          <Image src="/assets/svg/human.tech.logo.svg" alt="human.tech" width={120} height={30} />
+          <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={112} height={30} />
         </Link>
       </div>
 
@@ -367,7 +367,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
                 if (!isPrivacyModeEnabled) {
                   setTimeout(() => {
                     notify('privacy-mode', {
-                      message: 'Transactions are masked and untraceable, unlike public mode',
+                      message: 'Your balance, counterparties, and history stay private on Aztec',
                       heading: 'Private mode activated',
                     })
                   }, 1500)
@@ -469,7 +469,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
                 if (!isPrivacyModeEnabled) {
                   setTimeout(() => {
                     notify('privacy-mode', {
-                      message: 'Transactions are masked and untraceable, unlike public mode',
+                      message: 'Your balance, counterparties, and history stay private on Aztec',
                       heading: 'Private mode activated',
                     })
                   }, 1500)

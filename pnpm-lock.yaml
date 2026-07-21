@@ -68,6 +68,9 @@ importers:
       '@noble/hashes':
         specifier: ^2.0.1
         version: 2.0.1
+      '@paper-design/shaders-react':
+        specifier: ^0.0.77
+        version: 0.0.77(@types/react@19.2.14)(react@19.2.4)
       '@prisma/client':
         specifier: ^6.15.0
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
@@ -342,6 +345,7 @@ packages:
   '@alejoamiras/aztec-fee-payment@5.0.1':
     resolution: {integrity: sha512-jSChEwN6nDRFohFrO87y0xOUE4NQ9a1fcGUd47R1jL8OFKoVz/1RorwELeifsLi5+f1F6ws0RkW5R/lsYXfnqQ==}
     engines: {node: '>=22.0.0'}
+    deprecated: Renamed to @alejoamiras/private-fee-juice (functionally equivalent to aztec-fee-payment@5.0.1-revision.1) — migrate package + import specifiers.
     peerDependencies:
       '@aztec/aztec.js': 5.0.1
       '@aztec/protocol-contracts': 5.0.1
@@ -1863,6 +1867,18 @@ packages:
 
   '@oxc-project/types@0.126.0':
     resolution: {integrity: sha512-oGfVtjAgwQVVpfBrbtk4e1XDyWHRFta6BS3GWVzrF8xYBT2VGQAk39yJS/wFSMrZqoiCU4oghT3Ch0HaHGIHcQ==}
+
+  '@paper-design/shaders-react@0.0.77':
+    resolution: {integrity: sha512-VCjhK7k6GT1BMjq7kLsDHMnMy1ryjCTALdhOVIf2Z5b1jh5eEHXqHdQCvMAJ7v6evjiN1twzjM1KUNOg2RoXBw==}
+    peerDependencies:
+      '@types/react': ^18 || ^19
+      react: ^18 || ^19
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+
+  '@paper-design/shaders@0.0.77':
+    resolution: {integrity: sha512-y0mR3brBu6qvVgbnvBdXX3zL/hajdamkECLt8NbexaEc1L46W3a+ZIEwxu1NJ2/bqwxAgjJC0o2+4CAii5wp/w==}
 
   '@paulmillr/qr@0.2.1':
     resolution: {integrity: sha512-IHnV6A+zxU7XwmKFinmYjUcwlyK9+xkG3/s9KcQhI9BjQKycrJ1JRO+FbNYPwZiPKW3je/DR0k7w8/gLa5eaxQ==}
@@ -9976,6 +9992,15 @@ snapshots:
   '@opentelemetry/semantic-conventions@1.40.0': {}
 
   '@oxc-project/types@0.126.0': {}
+
+  '@paper-design/shaders-react@0.0.77(@types/react@19.2.14)(react@19.2.4)':
+    dependencies:
+      '@paper-design/shaders': 0.0.77
+      react: 19.2.4
+    optionalDependencies:
+      '@types/react': 19.2.14
+
+  '@paper-design/shaders@0.0.77': {}
 
   '@paulmillr/qr@0.2.1': {}
 

@@ -509,9 +509,11 @@ export default function Home() {
           <div className="p-5">
             <BridgeHeader
               onClick={async () => {
+                // Explicit reset only. Never blanket-clear localStorage — encrypted
+                // recovery data for pending transfers lives there.
+                if (!window.confirm('Disconnect your wallets and reset? Pending transfers stay recoverable from Activity.')) return
                 await disconnectWaapWallet()
                 await disconnectAztecWallet()
-                localStorage.clear()
                 window.location.reload()
               }}
             />

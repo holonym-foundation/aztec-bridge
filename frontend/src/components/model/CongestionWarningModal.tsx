@@ -61,7 +61,7 @@ const CongestionWarningModal: React.FC<CongestionWarningModalProps> = ({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className='bg-[#E5EFFF] py-2 px-2 rounded-lg mb-6 flex items-center gap-4'>
+                className='bg-[#FDE7F3] py-2 px-2 rounded-lg mb-6 flex items-center gap-4'>
                 <img
                   src='/assets/svg/IconContainer.svg'
                   alt='Warning'

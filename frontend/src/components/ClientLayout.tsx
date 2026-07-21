@@ -4,9 +4,11 @@ import BannerAztecNodeError from '@/components/BannerAztecNodeError'
 import BannerAztecTestnet from '@/components/BannerAztecTestnet'
 import Footer from '@/components/Footer'
 import Header from '@/components/Header'
+import ShieldOnboarding from '@/components/ShieldOnboarding'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { motion } from 'framer-motion'
+import { MeshGradient } from '@paper-design/shaders-react'
 import { usePathname } from 'next/navigation'
 export default function ClientLayout({
   children,
@@ -19,17 +21,25 @@ export default function ClientLayout({
   const showPrivacyBackground = isPrivacyModeEnabled && !(pathname?.startsWith('/docs') ?? false)
   return (
     <div className="relative min-h-screen flex flex-col w-full min-w-0" style={{ minHeight: '100vh', minWidth: 0 }}>
-      {/* Gradient background */}
-      <motion.div
-        className="absolute inset-0 z-0"
-        animate={{
-          background: showPrivacyBackground
-            ? 'radial-gradient(#6B6E88, #8B89A8)'
-            : 'radial-gradient(#E3E6FF, #FFFFFF)',
-        }}
-        transition={{ duration: 0.7, ease: 'easeInOut' }}
-        style={{ willChange: 'background' }}
-      />
+      <ShieldOnboarding />
+      {/* Paper-shader background */}
+      <div className="absolute inset-0 z-0" aria-hidden="true">
+        <MeshGradient
+          colors={['#fff6fa', '#fde7f3', '#fcd4ea', '#fa8fc4']}
+          speed={0.16}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+        />
+        <motion.div
+          className="absolute inset-0"
+          animate={{
+            background: showPrivacyBackground
+              ? 'rgba(31,8,22,0.66)'
+              : 'linear-gradient(180deg, rgba(255,246,250,0.30), rgba(255,246,250,0.62))',
+          }}
+          transition={{ duration: 0.6, ease: 'easeInOut' }}
+          style={{ willChange: 'background' }}
+        />
+      </div>
       {/* Grain overlay */}
       {/* <motion.div
         className="absolute inset-0 z-10 pointer-events-none"

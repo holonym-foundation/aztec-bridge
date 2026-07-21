@@ -2,7 +2,7 @@ import Link from 'next/link'
 import React from 'react'
 
 export const metadata = {
-  title: 'Docs · Aztec Bridge',
+  title: 'Docs · Shield',
   description: 'Documentation for the Aztec Token Bridge — user guides and SDK reference.',
 }
 
@@ -34,7 +34,7 @@ export default function DocsLandingPage() {
       <h1 className="text-36 font-bold text-latest-black-100">Documentation</h1>
       <p className="mt-2 text-16 text-latest-grey-500">
         Guides for bridging ERC-20 tokens from Ethereum to Aztec, and a reference for the{' '}
-        <span className="font-medium text-latest-black-100">@human.tech/shield.human.sdk</span>.
+        <span className="font-medium text-latest-black-100">@human.tech/clean.sdk</span>.
       </p>
 
       <div className="mt-10 grid gap-6 md:grid-cols-2">

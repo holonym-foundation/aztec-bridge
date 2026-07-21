@@ -304,7 +304,7 @@ function BridgeActionButton({
                   href: 'https://id.human.tech/sandbox/clean-hands',
                   target: '_blank',
                   rel: 'noopener noreferrer',
-                  style: { color: '#2563eb', textDecoration: 'underline' },
+                  style: { color: '#BF1254', textDecoration: 'underline' },
                 },
                 'get a Proof of Clean Hands',
               ),

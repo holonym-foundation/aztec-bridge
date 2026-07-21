@@ -561,6 +561,12 @@ export interface L2ClaimDeps {
   walletAdapter: WalletAdapterInterface
   aztecAddress: string
   isPrivacyModeEnabled: boolean
+  /**
+   * Aztec node client used to resolve the fate of a submitted-but-pending
+   * claim tx (getTxReceipt) before ever re-submitting a duplicate. Without
+   * it, a pending-timeout falls back to blind resubmission.
+   */
+  aztecNode?: { getTxReceipt(txHash: any): Promise<any> }
 }
 
 export interface MessageSyncResult {

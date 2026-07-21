@@ -33,6 +33,31 @@ export interface ProgressCardProps {
   toNetwork: string
   /** Bridge direction — used for export button */
   direction?: 'L1_TO_L2' | 'L2_TO_L1'
+  /** Raw failure text (mutation error message), when the page can surface it. Used to
+      classify a Fee-Juice/gas shortfall so recovery routes to the top-up flow. */
+  errorMessage?: string | null
+}
+
+// A stuck L2 claim that can't pay its gas out of the bridged Fee Juice surfaces as a
+// contract assertion / gas-cost revert. These substrings cover the shapes we've seen
+// (Aztec `Assertion failed`, `max_gas_cost`, `claim_and_end_setup`) plus generic
+// fee/gas/insufficient wording. Matching is intentionally broad — the recovery it
+// offers (top up FJ, then resume) is safe and non-destructive even on a false positive.
+const FUEL_ERROR_NEEDLES = [
+  'assertion failed',
+  'max_gas_cost',
+  'claim_and_end_setup',
+  'fee',
+  'insufficient',
+  'gas',
+  'feejuice',
+  'fuel',
+]
+
+function isFuelError(message?: string | null): boolean {
+  if (!message) return false
+  const m = message.toLowerCase()
+  return FUEL_ERROR_NEEDLES.some((needle) => m.includes(needle))
 }
 
 function formatSeconds(totalSeconds: number): string {
@@ -53,6 +78,7 @@ export default function ProgressCard({
   fromNetwork,
   toNetwork,
   direction,
+  errorMessage,
 }: ProgressCardProps) {
   const router = useRouter()
   const notify = useToast()
@@ -63,6 +89,23 @@ export default function ProgressCard({
   const [resuming, setResuming] = useState(false)
 
   const isAllComplete = steps.every((step) => step.status === 'completed')
+
+  // The L2 claim ("Claiming tokens on Aztec Network") is the step that spends bridged
+  // Fee Juice — the one that stalls when gas runs short. Detect it by label so both the
+  // in-progress escape hatch and the failure classifier can key off it.
+  const isL1ToL2 = direction === 'L1_TO_L2'
+  const claimStepActive = isL1ToL2 && steps.some((s) => s.status === 'active' && /claim/i.test(s.label))
+  const claimStepErrored = isL1ToL2 && steps.some((s) => s.status === 'error' && /claim/i.test(s.label))
+
+  // Fuel-specific recovery: promote the Fee-Juice top-up when the error text looks like a
+  // gas shortfall. When the page can't give us error text, still offer top-up (secondary)
+  // on an L1→L2 claim failure — an underfunded claim is the common cause.
+  const fuelErrorDetected = isL1ToL2 && isFuelError(errorMessage)
+  // Fall back to offering top-up only when the deposit already landed on L1 (l1TxUrl set)
+  // — i.e. we're at/after the claim boundary where Fee Juice matters. A pre-deposit
+  // failure moved no funds and needs no gas top-up.
+  const fuelTopUpSecondary =
+    isL1ToL2 && !fuelErrorDetected && (claimStepErrored || (!errorMessage && !!l1TxUrl))
 
   // Latest interrupted operation for THIS direction that can be resumed — the same
   // backend operations the Activity page/drawer resume from, so this button routes
@@ -307,9 +350,11 @@ export default function ProgressCard({
 
         {hasError && (
           <p className="text-center text-12 text-latest-grey-500 mt-1">
-            {l1TxUrl
-              ? 'Your deposit confirmed on L1 but a later step did not complete. Your funds are safe — resume the transfer below to finish it.'
-              : 'The transaction was cancelled or could not be completed. You can safely go back and try again.'}
+            {fuelErrorDetected
+              ? 'Your L2 gas (Fee Juice) ran short — top up to finish your claim. Your deposit is safe on L1 in the meantime.'
+              : l1TxUrl
+                ? 'Your deposit confirmed on L1 but a later step did not complete. Your funds are safe — resume the transfer below to finish it.'
+                : 'The transaction was cancelled or could not be completed. You can safely go back and try again.'}
           </p>
         )}
 
@@ -331,6 +376,20 @@ export default function ProgressCard({
               </div>
             )}
           </>
+        )}
+
+        {/* Escape hatch during the L2 claim: the claim pays gas from bridged Fee Juice and
+            can loop/retry when it runs short. Offer a top-up route so the user isn't forced
+            to wait out the retry loop. Subtle — the claim usually succeeds on its own. */}
+        {claimStepActive && (
+          <div className="mt-3 flex justify-center">
+            <button
+              onClick={() => router.push('/fee-juice?resume=1')}
+              className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"
+            >
+              Not enough gas? Top up Fee Juice
+            </button>
+          </div>
         )}
 
         {/* Backup export lives here in the transaction frame — recovery-critical,
@@ -407,13 +466,45 @@ export default function ProgressCard({
           the interrupted transfer right here instead of hunting for the Activity page. */}
       {hasError && direction && (
         <div className="mt-4 mb-6 flex flex-col items-center gap-2">
-          <button
-            onClick={handleResumeClick}
-            disabled={resuming}
-            className="w-full rounded-lg bg-[#17235E] py-[10px] font-semibold text-white transition-colors hover:bg-[#17235E]/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {resuming ? 'Resuming…' : resumeLabel}
-          </button>
+          {fuelErrorDetected ? (
+            <>
+              {/* Fuel shortfall is the diagnosed cause — top-up is the primary path, resume
+                  is the secondary step the user takes once Fee Juice has landed. */}
+              <button
+                onClick={() => router.push('/fee-juice?resume=1')}
+                className="w-full rounded-lg bg-[#81133B] py-[10px] font-semibold text-white transition-opacity hover:opacity-80"
+              >
+                Top up Fee Juice to finish claim
+              </button>
+              <button
+                onClick={handleResumeClick}
+                disabled={resuming}
+                className="w-full rounded-lg border border-[#17235E]/40 py-[10px] font-semibold text-[#17235E] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {resuming ? 'Resuming…' : 'Already topped up? ' + resumeLabel}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleResumeClick}
+                disabled={resuming}
+                className="w-full rounded-lg bg-[#17235E] py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {resuming ? 'Resuming…' : resumeLabel}
+              </button>
+              {/* Error text wasn't conclusive, but an underfunded L2 claim is the common cause —
+                  offer the top-up as a secondary path so the user isn't stuck re-resuming. */}
+              {fuelTopUpSecondary && (
+                <button
+                  onClick={() => router.push('/fee-juice?resume=1')}
+                  className="w-full rounded-lg border border-[#81133B]/40 py-[10px] font-semibold text-[#81133B] transition-opacity hover:opacity-80"
+                >
+                  Top up Fee Juice
+                </button>
+              )}
+            </>
+          )}
           <div className="mt-1 flex items-center justify-center">
             <TextButton
               className="!bg-transparent !text-latest-grey-100 hover:!bg-transparent hover:!text-latest-black-100 !font-medium"

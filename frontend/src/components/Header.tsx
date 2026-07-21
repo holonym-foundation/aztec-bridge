@@ -1212,7 +1212,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           the header row matches this column to the main pill's content-driven
           height. */}
       <div
-        className={`flex-shrink-0 flex flex-col items-center justify-center gap-1 min-h-12 sm:min-h-14 px-3 sm:px-5 py-2 rounded-[26px] ${glassPill(isDark)}`}
+        className={`relative z-40 flex-shrink-0 flex flex-col items-center justify-center gap-1 min-h-12 sm:min-h-14 px-3 sm:px-5 py-2 rounded-[26px] ${glassPill(isDark)}`}
       >
         <Link
           href="/"

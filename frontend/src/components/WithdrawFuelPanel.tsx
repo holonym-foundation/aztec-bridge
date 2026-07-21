@@ -37,7 +37,7 @@ const DS_EASE_DEFAULT: [number, number, number, number] = [0.4, 0, 0.2, 1]
  * debounced by 500ms. Mirrors FuelToggle's useV4FuelQuote so the top-up sizes
  * against the same pool rate the deposit-fuel carve uses.
  */
-function useTopUpQuote(
+export function useTopUpQuote(
   tokenAmount: string,
   tokenAddress: string,
   tokenDecimals: number,
@@ -92,7 +92,7 @@ function useTopUpQuote(
 }
 
 /** Whether the quoted FJ output covers the claim fee for `fuelType`. Debounced on fjOutput. */
-function useTopUpSufficiency(
+export function useTopUpSufficiency(
   fjOutput: bigint | null,
   fuelType: 'public' | 'private',
 ): { sufficient: boolean | null; feeLimitFj: string | null; loading: boolean } {

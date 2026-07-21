@@ -38,7 +38,7 @@ const RESOURCE_LINKS: TextLink[] = [
   { label: 'Blog', href: 'https://human.tech/blog', external: true },
   {
     label: 'Press & Media Kit',
-    href: 'https://holonym.notion.site/human-tech-Media-Brand-Guidelines-18babe540a8f809f869ef817713db597',
+    href: 'https://holonym.notion.site/Shield-Brand-Kit-shield-human-tech-385abe540a8f811a80baf4111cd469cc',
     external: true,
   },
   // NOTE: /privacy and /terms pages are assumed on human.tech and may not exist yet — confirm before shipping.

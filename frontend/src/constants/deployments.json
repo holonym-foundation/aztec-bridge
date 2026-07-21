@@ -144,7 +144,7 @@
         "l1RpcUrl": "",
         "l1ChainId": 11155111,
         "l2ChainId": 1816023401,
-        "aztecVersion": "5.0.0",
+        "aztecVersion": "5.0.1",
         "rollupVersion": 1821665230
       },
       "l1ContractAddresses": {

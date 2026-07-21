@@ -1,8 +1,10 @@
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { AttestationStatus } from '@human.tech/clean.sdk'
 import { useWalletStore } from '@/stores/walletStore'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useBridge } from '@/hooks/useBridge'
+import { useLinkedPairStore } from '@/stores/useLinkedPairStore'
 
 /**
  * Authoritative L1↔L2 binding state for the CURRENTLY connected pair.
@@ -18,14 +20,42 @@ export function useBindingStatus() {
   const { isWaapConnected, isAztecConnected, waapAddress, aztecAddress } = useWalletStore()
   const token = useAuthStore((s) => s.token)
   const bridge = useBridge()
+  const recordPair = useLinkedPairStore((s) => s.recordPair)
 
-  return useQuery<AttestationStatus>({
+  const query = useQuery<AttestationStatus>({
     queryKey: ['bindingStatus', waapAddress, aztecAddress],
     queryFn: () => bridge.getAttestationStatus(),
     enabled: isWaapConnected && isAztecConnected && !!waapAddress && !!aztecAddress && !!token,
     staleTime: 60 * 1000,
     retry: false,
   })
+
+  // Persist any SERVER-disclosed L1↔L2 pair into the session store so the
+  // "Linked" badge survives after the transient conflict response clears. Both
+  // 'bound' (the connected pair itself) and 'conflict' (the disclosed stored
+  // counterpart) carry an authoritative l1Address/l2Address for the user's own
+  // wallets — privacy-safe to remember for this session only (never persisted).
+  const binding = query.data?.binding
+  useEffect(() => {
+    if (!binding) return
+    if (binding.status === 'bound' || binding.status === 'conflict') {
+      recordPair(binding.l1Address, binding.l2Address)
+    }
+  }, [binding, recordPair])
+
+  return query
+}
+
+/**
+ * The Aztec (L2) account the server has disclosed as the pair for the given EVM
+ * (L1) wallet at any point this session — from the in-memory store, so it
+ * persists across dropdown/modal reopens even after a conflict response has
+ * cleared. Returns null until something has actually been disclosed (no guess).
+ */
+export function useSessionLinkedL2(l1?: string | null): string | null {
+  const pairs = useLinkedPairStore((s) => s.pairs)
+  if (!l1) return null
+  return pairs[l1.toLowerCase()] ?? null
 }
 
 export interface AccountLike {

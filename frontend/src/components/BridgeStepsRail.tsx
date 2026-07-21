@@ -180,13 +180,15 @@ const BridgeStepsRail: React.FC = () => {
   )
 
   // A slim binder tab pinned to the viewport's right edge (stacked with the
-  // Activity tab by the dock in ClientLayout). Hover or click peeks the steps
-  // panel out to the LEFT of the tab. The whole drawer lives in a fixed dock, so
-  // it can't add page width or scroll and it persists across every app screen.
+  // Activity + Messages tabs by the dock in ClientLayout). Hover or click peeks
+  // the steps panel out to the LEFT of the tab. The panel is absolutely
+  // positioned so opening it never reflows (splits apart) the sibling tabs
+  // (#114). The whole drawer lives in a fixed dock, so it can't add page width or
+  // scroll and it persists across every app screen.
   return (
     <div
       ref={drawerRef}
-      className="pointer-events-auto flex items-start justify-end"
+      className="pointer-events-auto relative flex items-center justify-end"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -194,11 +196,11 @@ const BridgeStepsRail: React.FC = () => {
         {open && (
           <motion.div
             key="panel"
-            initial={{ width: 0, opacity: 0, marginRight: 0 }}
-            animate={{ width: 260, opacity: 1, marginRight: 12 }}
-            exit={{ width: 0, opacity: 0, marginRight: 0 }}
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 260, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
             transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
-            className="overflow-hidden"
+            className="absolute right-[calc(100%_+_12px)] top-1/2 -translate-y-1/2 overflow-hidden"
           >
             <div
               id={panelId}

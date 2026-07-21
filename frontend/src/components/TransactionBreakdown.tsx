@@ -1,5 +1,7 @@
 import React from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { Icon } from '@iconify/react'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
 import StyledImage from './StyledImage'
 
 interface TransactionBreakdownProps {
@@ -9,8 +11,14 @@ interface TransactionBreakdownProps {
   // the fee rate is still loading.
   bridgeFee?: string
   bridgeFeeUsd?: string
+  // Portal fee as a percentage of the fee base (e.g. "2.54"). Undefined while loading.
+  bridgeFeePercent?: string
   receiveAmount?: string
   tokenSymbol?: string
+  // Fee-juice carve-out summary (deposit + fuel only). `fuelReserveToken` is the token
+  // amount swapped to gas; `fuelReserveFj` is the resulting FeeJuice (already formatted).
+  fuelReserveToken?: string
+  fuelReserveFj?: string
 }
 
 // Motion values mirrored from the human-tech design system (docs/tokens.css):
@@ -25,10 +33,14 @@ const TransactionBreakdown: React.FC<TransactionBreakdownProps> = ({
   onToggle,
   bridgeFee,
   bridgeFeeUsd,
+  bridgeFeePercent,
   receiveAmount,
   tokenSymbol,
+  fuelReserveToken,
+  fuelReserveFj,
 }) => {
   const shouldReduceMotion = useReducedMotion()
+  const showFuel = !!fuelReserveToken && !!fuelReserveFj
 
   return (
     <div className='mt-3 bg-[#F5F5F5] rounded-md overflow-hidden'>
@@ -69,11 +81,17 @@ const TransactionBreakdown: React.FC<TransactionBreakdownProps> = ({
                   <p className='text-sm font-medium text-latest-grey-700'>
                     Bridge fee
                   </p>
-                  <StyledImage
-                    src='/assets/svg/info.svg'
-                    alt=''
-                    className='h-4 w-4'
-                  />
+                  <span
+                    className='inline-flex cursor-help'
+                    data-tooltip-id='bridge-fee-tooltip'
+                    aria-label='How the bridge fee is calculated'
+                  >
+                    <StyledImage
+                      src='/assets/svg/info.svg'
+                      alt=''
+                      className='h-4 w-4'
+                    />
+                  </span>
                 </div>
                 <p className='text-latest-grey-100 text-14 font-medium'>
                   {bridgeFee != null ? (
@@ -82,12 +100,60 @@ const TransactionBreakdown: React.FC<TransactionBreakdownProps> = ({
                       <span className='text-latest-black-300'>
                         {bridgeFee} {tokenSymbol}
                       </span>
+                      {bridgeFeePercent != null && (
+                        <span className='text-latest-grey-100'> ({bridgeFeePercent}%)</span>
+                      )}
                     </>
                   ) : (
                     <span className='text-latest-black-300'>—</span>
                   )}
                 </p>
               </div>
+              <ReactTooltip
+                id='bridge-fee-tooltip'
+                place='top'
+                className='z-[100] max-w-[240px]'
+                style={{ fontSize: '11px', padding: '6px 8px' }}
+                render={() => (
+                  <span>
+                    The bridge charges{' '}
+                    {bridgeFeePercent != null ? (
+                      <span className='font-semibold'>{bridgeFeePercent}%</span>
+                    ) : (
+                      'a percentage'
+                    )}{' '}
+                    of the amount you bridge
+                    {bridgeFee != null && (
+                      <>
+                        {' '}
+                        —{' '}
+                        <span className='font-semibold'>
+                          {bridgeFee} {tokenSymbol}
+                        </span>{' '}
+                        on this deposit
+                      </>
+                    )}
+                    . It is deducted from the tokens delivered on Aztec.
+                  </span>
+                )}
+              />
+              {showFuel && (
+                <div className='flex justify-between gap-3'>
+                  <div className='flex gap-1 items-center'>
+                    <Icon icon='ph:gas-pump-fill' width={14} height={14} className='shrink-0 text-[#17235E]' />
+                    <p className='text-sm font-medium text-latest-grey-700'>Fee juice (L2 gas)</p>
+                  </div>
+                  <p className='text-latest-black-300 text-14 font-medium text-right'>
+                    {fuelReserveToken} {tokenSymbol}
+                    <span className='text-latest-grey-100'> → ~{fuelReserveFj} FJ</span>
+                  </p>
+                </div>
+              )}
+              {showFuel && (
+                <p className='text-[11px] leading-[15px] text-latest-grey-500 -mt-2'>
+                  Swapped to Fee Juice for gas on Aztec — not a fee. You keep this as your L2 gas balance.
+                </p>
+              )}
               <div className='flex justify-between'>
                 <p className='text-sm font-medium text-latest-grey-700'>You receive</p>
                 <p className='text-latest-black-300 text-14 font-medium'>

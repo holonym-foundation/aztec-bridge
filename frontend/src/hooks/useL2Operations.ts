@@ -6,6 +6,7 @@ import { AztecAddress } from '@aztec/stdlib/aztec-address'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatUnits, parseUnits } from 'viem'
 import { useToast, useToastMutation } from './useToast'
+import { pushNotification } from '@/stores/useNotificationsStore'
 import { exportWithdrawalData, copyToClipboard, decryptStorageEntry, verifyEncryptionDomain } from '@/utils'
 import { useL2ErrorHandler } from '@/utils/l2ErrorHandler'
 import { estimateClaimFeeLimit } from '@/utils/fuelGasEstimate'
@@ -393,6 +394,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               },
               { autoClose: false },
             )
+            pushNotification({
+              type: 'withdrawal',
+              title: 'Withdrawal in progress',
+              message: `Your withdrawal of ${amountDisplayL2} is being processed on Aztec.`,
+            })
             break
           case BridgeEventType.BURN_CONFIRMED:
             logInfo('L2 burn confirmed', {
@@ -491,6 +497,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             const l1Url = event.l1TxHash ? `${getEtherscanUrl(L1_CHAIN_ID)}/tx/${event.l1TxHash}` : null
             const l2Url = event.l2TxHash ? `${getAztecscanUrl(L2_CHAIN_ID)}/tx-effects/${event.l2TxHash}` : null
             setTransactionUrls(l1Url, l2Url)
+            pushNotification({
+              type: 'withdrawal',
+              title: 'Withdrawal complete',
+              message: 'Your tokens have been withdrawn to Ethereum.',
+            })
             break
           }
           case BridgeEventType.ATTESTATION_FETCH:
@@ -577,6 +588,21 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                 userAction: errorUserAction,
               },
               event.error,
+            )
+            pushNotification(
+              event.fundsAtRisk
+                ? {
+                    type: 'error',
+                    title: isBlockNotProvenHint ? 'L1 withdraw blocked — try again later' : 'L1 withdraw failed — funds burned on L2',
+                    message: isBlockNotProvenHint
+                      ? errorMsgRaw.slice(0, 160)
+                      : 'Your tokens were burned on L2 but the L1 withdrawal did not complete. Go to Activity to resume.',
+                  }
+                : {
+                    type: 'error',
+                    title: 'Withdrawal failed',
+                    message: errorMsgRaw.slice(0, 160),
+                  },
             )
             if (event.fundsAtRisk) {
               notify(

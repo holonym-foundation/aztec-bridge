@@ -14,7 +14,7 @@ import {
   usePortalFeeBps,
 } from '@/hooks/useL1Operations'
 import { useTokenPrices } from '@/utils/coinGeckoPrice'
-import { computePortalFee, getTokenPriceUsd } from '@/utils/fuelPricing'
+import { computePortalFee, getTokenPriceUsd, formatFjAmount } from '@/utils/fuelPricing'
 import { parseUnits, formatUnits } from 'viem'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import {
@@ -58,6 +58,7 @@ import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModal
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useBindingStatus, describeConflict, shortAddr } from '@/hooks/useBindingStatus'
 import { useRouter } from 'next/navigation'
 import MaintenanceOverlay from '@/components/MaintenanceOverlay'
 import FuelToggle from '@/components/FuelToggle'
@@ -78,6 +79,12 @@ export default function Home() {
   const [selectToken, setSelectToken] = useState<boolean>(false)
   const [isFromSection, setIsFromSection] = useState<boolean>(true)
   const [showBreakdown, setShowBreakdown] = useState(false)
+  // Lifted so the bridge card runs a single mutually-exclusive accordion: opening the
+  // Transaction breakdown collapses the fuel detail (and vice-versa), yielding space so the
+  // card fits within its no-scroll budget instead of scrolling internally.
+  const [fuelDetailOpen, setFuelDetailOpen] = useState(false)
+  // Live FJ output for the current fuel amount, surfaced by FuelToggle for the breakdown summary.
+  const [fuelFjOutput, setFuelFjOutput] = useState<bigint | null>(null)
   const [showVerification, setShowVerification] = useState(false)
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -133,10 +140,11 @@ export default function Home() {
       return 0n
     }
   }
-  const { feeRaw: portalFeeRaw, receiveRaw: portalReceiveRaw } = computePortalFee({
+  const depositFuelEnabled = bridgeConfig.direction === BridgeDirection.L1_TO_L2 && fuelEnabled
+  const { baseRaw: portalBaseRaw, feeRaw: portalFeeRaw, receiveRaw: portalReceiveRaw } = computePortalFee({
     amount: parseTokenAmount(bridgeConfig.amount),
     fuelAmount: parseTokenAmount(fuelAmount),
-    fuelEnabled: bridgeConfig.direction === BridgeDirection.L1_TO_L2 && fuelEnabled,
+    fuelEnabled: depositFuelEnabled,
     feeBps: portalFeeBps ?? 0n,
   })
   const portalFeeKnown = portalFeeBps != null
@@ -144,7 +152,16 @@ export default function Home() {
   const portalFeeUsd = portalFeeKnown
     ? (Number(formatUnits(portalFeeRaw, feeTokenDecimals)) * getTokenPriceUsd(feeTokenSymbol, tokenPrices)).toFixed(2)
     : undefined
+  // Fee as a percentage of the fee base (amount net of any fuel carve-out) — computed from the
+  // actual fee, so integer-division rounding in the portal is reflected. e.g. 2.54 USDC / 100 → "2.54".
+  const bridgeFeePercent =
+    portalFeeKnown && portalBaseRaw > 0n
+      ? ((Number(portalFeeRaw) / Number(portalBaseRaw)) * 100).toFixed(2)
+      : undefined
   const youWillReceiveAmount = `${truncateDecimals(formatUnits(portalReceiveRaw, feeTokenDecimals), 6)}`
+  // Fee-juice carve summary for the breakdown (deposit + fuel only).
+  const fuelReserveToken = depositFuelEnabled && Number(fuelAmount) > 0 ? fuelAmount : undefined
+  const fuelReserveFj = fuelReserveToken && fuelFjOutput != null ? formatFjAmount(fuelFjOutput) : undefined
 
   // Get wallet state from useWalletStore. Modal-driving fields (walletConnectionPhase,
   // discoveredWallets, verificationEmojis, etc.) are consumed inside <AztecWalletConnectionModals />
@@ -170,6 +187,23 @@ export default function Home() {
   // backup POST to /api/bridge/operations would 401, aborting before any
   // on-chain tx but only after the user clicked through. Block at the button.
   const authFailed = useAuthStore((s) => s.authFailed)
+
+  // Binding button guard (issues #98/#130): if the connected (L1, L2) pair is a
+  // CONFLICT (mismatch — the EVM wallet is bound to a different Aztec account, or
+  // vice-versa), block the primary action up-front and name the linked wallet, so
+  // the user can't start a bridge into a guaranteed-failing pair. Only 'conflict'
+  // yields a non-null result here — a matched 'bound' pair or a fresh 'unbound'
+  // pair does NOT block. The query key includes waapAddress + aztecAddress, so
+  // switching to the linked Aztec account re-runs it and clears this instantly.
+  const { data: pairBindingStatus } = useBindingStatus()
+  const bindingConflict = describeConflict(pairBindingStatus?.binding, waapAddress, aztecAddress)
+  const bindingBlockedLabel = !bindingConflict
+    ? undefined
+    : bindingConflict.kind === 'evm-linked-elsewhere'
+      ? `Switch to your linked Aztec wallet ${shortAddr(bindingConflict.counterpart)}`
+      : bindingConflict.kind === 'aztec-linked-elsewhere'
+        ? `Reconnect your linked EVM wallet ${shortAddr(bindingConflict.counterpart)}`
+        : `Switch to your linked wallet pair ${shortAddr(bindingConflict.counterpart)}`
 
   // Success callbacks
   const mintL1SBTOnSuccess = (_data: any) => {
@@ -609,6 +643,13 @@ export default function Home() {
                   selfAztecAddress={aztecAddress ?? ''}
                   fuelRecipientOverride={fuelRecipientOverride}
                   onFuelRecipientOverrideChange={setFuelRecipientOverride}
+                  detailOpen={fuelDetailOpen}
+                  onDetailOpenChange={(open) => {
+                    setFuelDetailOpen(open)
+                    // Mutual exclusivity: opening the fuel detail collapses the breakdown.
+                    if (open) setShowBreakdown(false)
+                  }}
+                  onFuelQuoteChange={setFuelFjOutput}
                 />
               )}
             {bridgeConfig.direction === BridgeDirection.L2_TO_L1 && (
@@ -623,11 +664,22 @@ export default function Home() {
             )}
             <TransactionBreakdown
               isOpen={showBreakdown}
-              onToggle={() => setShowBreakdown((prev) => !prev)}
+              onToggle={() =>
+                setShowBreakdown((prev) => {
+                  const next = !prev
+                  // Mutual exclusivity: opening the breakdown collapses the fuel detail so the
+                  // card yields space instead of scrolling.
+                  if (next) setFuelDetailOpen(false)
+                  return next
+                })
+              }
               bridgeFee={portalFeeToken}
               bridgeFeeUsd={portalFeeUsd}
+              bridgeFeePercent={bridgeFeePercent}
               receiveAmount={youWillReceiveAmount}
               tokenSymbol={feeTokenSymbol}
+              fuelReserveToken={fuelReserveToken}
+              fuelReserveFj={fuelReserveFj}
             />
           </div>
 
@@ -649,6 +701,10 @@ export default function Home() {
                     (!fuelSufficient || !fuelRecipientValid || !fuelAmountValid)) ||
                   authFailed
                 }
+                // Binding conflict guard — disable + name the linked wallet
+                // before bridging into a guaranteed-failing pair.
+                bindingBlocked={!!bindingConflict}
+                bindingBlockedLabel={bindingBlockedLabel}
                 // Connection states
                 isWaapConnected={isWaapConnected}
                 connectWaapWallet={connectWaapWallet}

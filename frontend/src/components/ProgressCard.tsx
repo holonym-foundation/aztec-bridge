@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCountdown } from 'usehooks-ts'
 import LoadingStepsBars from '@/components/LoadingStepsBars'
@@ -8,7 +8,14 @@ import StyledImage from '@/components/StyledImage'
 import TextButton from '@/components/TextButton'
 import type { LoadingStep } from '@/stores/bridgeStore'
 import { STORAGE_KEYS } from '@human.tech/clean.sdk'
+import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
 import { exportClaimData, exportWithdrawalData } from '@/utils'
+import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
+import { useWalletStore } from '@/stores/walletStore'
+import { useBridgeStore } from '@/stores/bridgeStore'
+import { useToast } from '@/hooks/useToast'
+import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
+import { BridgeDirection } from '@/types/bridge'
 
 export interface ProgressCardProps {
   steps: LoadingStep[]
@@ -48,8 +55,135 @@ export default function ProgressCard({
   direction,
 }: ProgressCardProps) {
   const router = useRouter()
+  const notify = useToast()
+
+  const { waapAddress: l1Address, signWaapMessage } = useWalletStore()
+  const { setRecovery, setWithdrawalRecovery, setDirection } = useBridgeStore()
+  const { data: operations } = useBridgeOperations()
+  const [resuming, setResuming] = useState(false)
 
   const isAllComplete = steps.every((step) => step.status === 'completed')
+
+  // Latest interrupted operation for THIS direction that can be resumed — the same
+  // backend operations the Activity page/drawer resume from, so this button routes
+  // into the identical /progress/resume flow rather than making the user hunt for it.
+  const resumableOp = useMemo<BridgeOperation | null>(() => {
+    if (!direction || !operations) return null
+    return (
+      [...operations]
+        .filter((op) => op.direction === direction && (isResumable(op) || hasPossibleLockedFunds(op)))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
+    )
+  }, [operations, direction])
+
+  // Mirrors the Activity page/drawer resume handler (activity/page.tsx isn't importable):
+  // decrypt to prove wallet ownership, stash recovery data, then hand off to /progress/resume.
+  const handleResume = async (operation: BridgeOperation) => {
+    if (!l1Address) {
+      notify('error', 'Please connect your Ethereum wallet first')
+      return
+    }
+
+    setResuming(true)
+    try {
+      const decrypted = await decryptOperationPayload(operation, l1Address, signWaapMessage)
+
+      if (!decrypted) {
+        throw new Error(
+          'Could not decrypt operation data. Make sure you are using the same wallet that created this bridge.',
+        )
+      }
+
+      if (operation.direction === 'L2_TO_L1') {
+        const recoveryData: RecoveryWithdrawalData = {
+          operationId: operation.id,
+          amount: decrypted.amount ?? operation.amountL2 ?? operation.amountL1 ?? '0',
+          l1Address: decrypted.l1Address ?? l1Address,
+          l2Address: decrypted.l2Address ?? '',
+          l2TxHash: operation.l2TxHash,
+          l2TxUrl: operation.l2TxUrl,
+          l2BlockNumber: operation.l2BlockNumber,
+          l2BlockNumberBeforeTx: operation.l2BlockNumberBeforeTx,
+          l2ToL1MessageIndex: operation.l2ToL1MessageIndex,
+          siblingPath: operation.siblingPath,
+          epoch: operation.epoch,
+          numCheckpointsInEpoch: operation.numCheckpointsInEpoch,
+          recipientL1Address: operation.recipientL1Address ?? l1Address,
+          rollupVersion: operation.rollupVersion,
+          chainIdL1: operation.chainIdL1,
+          portalAddressL1: operation.portalAddressL1,
+          bridgeAddressL2: operation.bridgeAddressL2,
+          l1RollupAddress: operation.l1RollupAddress,
+          l1OutboxAddress: operation.l1OutboxAddress,
+          isPrivacyModeEnabled: operation.isPrivacyModeEnabled ?? false,
+          nodeInfo: operation.nodeInfo,
+          status: operation.status,
+          currentStep: operation.currentStep,
+        }
+
+        setDirection(BridgeDirection.L2_TO_L1)
+        setWithdrawalRecovery(operation.id, recoveryData)
+        router.push('/progress/resume')
+      } else {
+        if (!decrypted.claimSecret || !decrypted.claimSecretHash) {
+          throw new Error(
+            'Could not decrypt claim secret. Make sure you are using the same wallet that created this bridge.',
+          )
+        }
+
+        const recoveryData: RecoveryClaimData = {
+          operationId: operation.id,
+          claimSecret: decrypted.claimSecret,
+          claimSecretHash: decrypted.claimSecretHash,
+          messageHash: operation.messageHash,
+          messageLeafIndex: operation.messageLeafIndex,
+          amount: decrypted.amount ?? operation.amountL1 ?? '0',
+          claimAmount: operation.claimAmount ?? null,
+          l1Address: decrypted.l1Address ?? l1Address,
+          l2Address: decrypted.l2Address ?? '',
+          l1TxHash: operation.l1TxHash,
+          l1TxUrl: operation.l1TxUrl,
+          l1BlockNumberBeforeTx: operation.l1BlockNumberBeforeTx,
+          isPrivacyModeEnabled: operation.isPrivacyModeEnabled ?? false,
+          nodeInfo: operation.nodeInfo,
+          status: operation.status,
+          currentStep: operation.currentStep,
+          portalAddressL1: operation.portalAddressL1,
+          bridgeAddressL2: operation.bridgeAddressL2,
+          tokenAddressL1: operation.tokenAddressL1,
+          tokenAddressL2: operation.tokenAddressL2,
+          fuelSecret: decrypted.fuelSecret ?? null,
+          privateFuelSalt: decrypted.privateFuelSalt ?? null,
+          privateFuelSecret: decrypted.privateFuelSecret ?? null,
+          fuelMessageHash: operation.fuelMessageHash ?? null,
+          fuelMessageLeafIndex: operation.fuelMessageLeafIndex ?? null,
+          fuelAmount: operation.fuelAmount ?? null,
+        }
+
+        setDirection(BridgeDirection.L1_TO_L2)
+        setRecovery(operation.id, recoveryData)
+        router.push('/progress/resume')
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to decrypt'
+      notify('error', msg)
+    } finally {
+      setResuming(false)
+    }
+  }
+
+  const resumeLabel =
+    direction === 'L2_TO_L1' ? 'Resume withdrawal' : direction === 'L1_TO_L2' ? 'Resume claim' : 'Resume transfer'
+
+  const handleResumeClick = () => {
+    if (resumableOp) {
+      handleResume(resumableOp)
+    } else {
+      // Backend op not loaded yet or not found — fall back to the full Activity list
+      // so the user still has a path forward instead of a dead button.
+      router.push('/activity')
+    }
+  }
 
   // Track whether backup data is available in localStorage
   const [hasBackup, setHasBackup] = useState(false)
@@ -174,7 +308,7 @@ export default function ProgressCard({
         {hasError && (
           <p className="text-center text-12 text-latest-grey-500 mt-1">
             {l1TxUrl
-              ? 'Your deposit confirmed on L1 but a later step did not complete. Your funds are safe — go to Activity to resume.'
+              ? 'Your deposit confirmed on L1 but a later step did not complete. Your funds are safe — resume the transfer below to finish it.'
               : 'The transaction was cancelled or could not be completed. You can safely go back and try again.'}
           </p>
         )}
@@ -269,8 +403,37 @@ export default function ProgressCard({
         )}
       </div>
 
-      {/* Back to Main Screen */}
-      {showBackButton && (
+      {/* Error recovery actions — resume is the primary path, so the user can finish
+          the interrupted transfer right here instead of hunting for the Activity page. */}
+      {hasError && direction && (
+        <div className="mt-4 mb-6 flex flex-col items-center gap-2">
+          <button
+            onClick={handleResumeClick}
+            disabled={resuming}
+            className="w-full rounded-lg bg-[#17235E] py-[10px] font-semibold text-white transition-colors hover:bg-[#17235E]/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {resuming ? 'Resuming…' : resumeLabel}
+          </button>
+          <div className="mt-1 flex items-center justify-center">
+            <TextButton
+              className="!bg-transparent !text-latest-grey-100 hover:!bg-transparent hover:!text-latest-black-100 !font-medium"
+              onClick={() => router.push('/')}
+            >
+              Back to Main Screen
+            </TextButton>
+          </div>
+          <button
+            onClick={() => router.push('/activity')}
+            className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-latest-black-100 hover:underline"
+          >
+            View in Activity
+          </button>
+        </div>
+      )}
+
+      {/* Back to Main Screen — completion state, and the error fallback when no
+          direction is available to build the resume action above. */}
+      {showBackButton && !(hasError && direction) && (
         <div className="flex flex-row items-center justify-center mt-4 mb-6">
           <TextButton className="" onClick={() => router.push('/')}>
             Back to Main Screen

@@ -42,7 +42,7 @@ const RESOURCE_LINKS: TextLink[] = [
     external: true,
   },
   // NOTE: /privacy and /terms pages are assumed on human.tech and may not exist yet — confirm before shipping.
-  { label: 'Privacy Policy', href: 'https://human.tech/privacy', external: true },
+  { label: 'Privacy Policy', href: 'https://human.tech/policy', external: true },
   { label: 'Terms of Use', href: 'https://human.tech/terms', external: true },
 ]
 

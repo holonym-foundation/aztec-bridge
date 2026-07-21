@@ -12,6 +12,8 @@ A comprehensive bridge application for transferring tokens between Ethereum (L1)
 
 Active deployment: **Ethereum mainnet (L1) + Aztec Mainnet Alpha v5 (L2)** with real ZK proofs, live per `bridge-script/deployments/registry.json`.
 
+**Try without real funds:** a public testnet is live at [testnet.shield.human.tech](https://testnet.shield.human.tech/).
+
 **Aztec is in Alpha**, not full production:
 
 - ~1 TPS, ~6s block times (blocks bundled into ~72s checkpoints settled to L1)

@@ -8,7 +8,7 @@
  * so we must use this custom ABI for all encoding and event extraction.
  *
  * TokenPortal.json is generated — do not hand-edit. It is copied verbatim from the Forge
- * build output (l1-contracts/out/TokenPortal.sol/TokenPortal.json) by `pnpm run sync:abi`
+ * build output (l1-contracts/out/TokenPortal.sol/TokenPortal.json) by `pnpm run sync:artifacts`
  * in bridge-script, which runs after `forge build --force` as part of `pnpm build`. Regenerate
  * and commit it whenever TokenPortal.sol changes.
  */

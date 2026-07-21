@@ -52,7 +52,10 @@ export const CLEAN_HANDS_ACTION_ID = process.env.CLEAN_HANDS_ACTION_ID ?? '12345
 export const PASSPORT_SCORE_THRESHOLD = process.env.PASSPORT_SCORE_THRESHOLD ?? '20'
 export const PASSPORT_MAX_AMOUNT = process.env.PASSPORT_MAX_AMOUNT ?? '1000000000'
 // Alpha Mainnet per-user, per-day (rolling 24h) deposit cap (USD). '' or '0' disables it.
-export const BRIDGE_MAX_DEPOSIT_USD = process.env.BRIDGE_MAX_DEPOSIT_USD ?? '100'
+export const BRIDGE_MAX_DEPOSIT_USD = process.env.BRIDGE_MAX_DEPOSIT_USD ?? '25000'
+// Cumulative per-human lifetime volume (USD) above which the passport tier is
+// refused and POCH (Clean Hands) is required. '' or '0' disables it.
+export const TRAVEL_RULE_THRESHOLD_USD = process.env.TRAVEL_RULE_THRESHOLD_USD ?? '1000'
 export const HOLONYM_API_URL = process.env.HOLONYM_API_URL ?? 'https://api.holonym.io'
 export const PASSPORT_API_KEY = process.env.PASSPORT_API_KEY ?? ''
 export const PASSPORT_SCORER_ID = process.env.PASSPORT_SCORER_ID ?? ''
@@ -75,7 +78,7 @@ export const SANCTIONS_SCREENING_ENABLED = (process.env.SANCTIONS_SCREENING_ENAB
  * attacker present a SIWE message signed for evil.com and have the server
  * accept it. localhost connections still pass (dev exception).
  */
-export const AUTH_EXPECTED_DOMAIN = process.env.AUTH_EXPECTED_DOMAIN ?? 'bridge.human.tech'
+export const AUTH_EXPECTED_DOMAIN = process.env.AUTH_EXPECTED_DOMAIN ?? 'shield.human.tech'
 
 // ─── PostHog (client) ───────────────────────────────────────────────
 

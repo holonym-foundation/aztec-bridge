@@ -58,7 +58,7 @@ function InitializePostHog() {
 
 function BridgeProvider({ children }: { children: ReactNode }) {
   // apiUrl: '' uses same-origin (relative URLs) since this app hosts the API routes.
-  // External SDK consumers don't need to set this — it defaults to https://bridge.human.tech
+  // External SDK consumers don't need to set this — it defaults to https://shield.human.tech
   const bridge = useBridgeInstance({
     // Pin the SDK to the same deployment the frontend resolves, so the tx path never
     // falls back to the SDK bundle's default activeDeploymentId.

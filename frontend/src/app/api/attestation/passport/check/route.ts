@@ -5,7 +5,12 @@ import {
   getPassportScoreThreshold,
   getPassportMaxAmount,
 } from '@/lib/attestation'
-import { enforceAddressBinding, evaluateDepositLimit, usdToTokenBaseUnits } from '@/lib/address-binding'
+import {
+  enforceAddressBinding,
+  evaluateDepositLimit,
+  evaluateTravelRuleThreshold,
+  usdToTokenBaseUnits,
+} from '@/lib/address-binding'
 import { screenAddress, SanctionsScreeningUnavailableError } from '@/lib/sanctions'
 
 /**
@@ -66,6 +71,20 @@ export async function GET(request: NextRequest) {
     // Fetch Gitcoin Passport score
     const { score, passing } = await fetchPassportScore(l1Address)
 
+    // Cumulative per-human Travel Rule threshold: once lifetime volume reaches it,
+    // the passport tier is no longer eligible — the user must upgrade to POCH.
+    const travelRule = await evaluateTravelRuleThreshold({ userId: authResult.user.id })
+    if (travelRule.enabled && travelRule.exceeded) {
+      return NextResponse.json({
+        eligible: false,
+        score,
+        threshold: getPassportScoreThreshold(),
+        maxAmount: getPassportMaxAmount().toString(),
+        travelRuleExceeded: true,
+        reason: `You've reached the $${travelRule.thresholdUsd.toFixed(0)} verification threshold. Verify with Clean Hands to bridge more.`,
+      })
+    }
+
     // Reflect the Alpha per-day (rolling 24h) cap: the displayed per-tx max is the lesser
     // of the global Passport max and the user's remaining deposit budget.
     let maxAmount = getPassportMaxAmount()
@@ -83,14 +102,15 @@ export async function GET(request: NextRequest) {
       ...(limit.enabled
         ? { depositLimitReached: limit.remainingUsd <= 0, remainingUsd: limit.remainingUsd }
         : {}),
+      ...(travelRule.enabled ? { travelRuleRemainingUsd: travelRule.remainingUsd } : {}),
       reason: passing
         ? undefined
-        : `Passport score too low (${score}/${getPassportScoreThreshold()} required)`,
+        : `Human Passport score too low (${score}/${getPassportScoreThreshold()} required)`,
     })
   } catch (error) {
     console.error('[attestation/passport/check]', error)
     return NextResponse.json(
-      { error: 'Failed to check Passport eligibility' },
+      { error: 'Failed to check Human Passport eligibility' },
       { status: 500 }
     )
   }

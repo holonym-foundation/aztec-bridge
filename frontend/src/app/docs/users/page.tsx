@@ -115,7 +115,7 @@ const sections: DocsSection[] = [
             carries the highest limit.
           </li>
           <li>
-            <strong>Passport.</strong> A fallback that requires a Passport score of at least 20. It caps each
+            <strong>Human Passport.</strong> A fallback that requires a Human Passport score of at least 20. It caps each
             transaction (see <a href="#limits" className="text-latest-blue-100 underline">Rate Limits &amp; Caps</a>);
             completing Proof of Clean Hands removes that per-transaction cap.
           </li>
@@ -151,9 +151,9 @@ const sections: DocsSection[] = [
               <Td>Total deposits per rolling 24h window. Shown as &quot;Alpha Deposit Limit Reached&quot; once used up; budget frees up as deposits age past 24h.</Td>
             </tr>
             <tr>
-              <Td>Per-transaction (Passport)</Td>
+              <Td>Per-transaction (Human Passport)</Td>
               <Td>up to 1,000 USDC</Td>
-              <Td>Requires a Passport attestation with score ≥ 20.</Td>
+              <Td>Requires a Human Passport attestation with score ≥ 20.</Td>
             </tr>
           </tbody>
         </Table>

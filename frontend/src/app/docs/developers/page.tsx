@@ -46,7 +46,7 @@ const bridge = new HumanTechBridge({
   l1RpcUrl: 'https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY', // required
   deployment: ACTIVE_DEPLOYMENT_ID, // optional, defaults to the active deployment
   domain: window.location.origin,   // optional in the browser, required in Node.js
-  apiUrl: 'https://bridge.human.tech', // optional, this is the default
+  apiUrl: 'https://shield.human.tech', // optional, this is the default
   // l2NodeUrl: '...'               // optional, overrides the deployment default
 })`}</CodeBlock>
         <Callout tone="info">
@@ -190,10 +190,10 @@ const walletAdapter: WalletAdapterInterface = {
       <>
         <P>
           Every deposit and withdrawal — public or private — is gated on an attestation (Proof of Clean Hands, with a
-          Passport fallback). The SDK fetches it automatically inside <Code>bridgeL1ToL2</Code> and{' '}
+          Human Passport fallback). The SDK fetches it automatically inside <Code>bridgeL1ToL2</Code> and{' '}
           <Code>withdrawL2ToL1</Code>; the calls below are optional pre-checks for your own UI.
         </P>
-        <CodeBlock>{`// Full status: binding, nonce counts, attester config
+        <CodeBlock>{`// Full status: binding, attester config
 const status = await bridge.getAttestationStatus()
 
 // Lightweight pre-checks — no nonce consumed
@@ -247,7 +247,7 @@ const result = await bridge.resume(operationId, {
           <tbody>
             <tr><Td><Code>operation_created</Code></Td><Td>The backend operation record is created</Td></tr>
             <tr><Td><Code>secrets_generated</Code></Td><Td>Claim secrets generated (hashes + encrypted payload only)</Td></tr>
-            <tr><Td><Code>attestation_fetch</Code></Td><Td>Fetching a POCH or Passport attestation</Td></tr>
+            <tr><Td><Code>attestation_fetch</Code></Td><Td>Fetching a Proof of Clean Hands or Human Passport attestation</Td></tr>
             <tr><Td><Code>do_not_reload</Code></Td><Td>An irreversible on-chain tx is imminent — show a warning</Td></tr>
             <tr><Td><Code>deposit_sent</Code></Td><Td>L1 deposit transaction sent</Td></tr>
             <tr><Td><Code>claim_attempt</Code></Td><Td>L2 claim attempt starting</Td></tr>
@@ -321,7 +321,7 @@ try {
           </thead>
           <tbody>
             <tr><Td><Code>getOperation(id)</Code></Td><Td>A single operation by ID</Td></tr>
-            <tr><Td><Code>getAttestationStatus()</Code></Td><Td>Binding status, nonce counts, attester config</Td></tr>
+            <tr><Td><Code>getAttestationStatus()</Code></Td><Td>Binding status, attester config</Td></tr>
             <tr><Td><Code>getPortalFeeBasisPoints(portal)</Code></Td><Td>TokenPortal fee rate (bps), to compute the post-fee amount</Td></tr>
             <tr><Td><Code>getL1TokenBalances(address, chains)</Code></Td><Td>L1 token balances via the backend Alchemy proxy</Td></tr>
             <tr><Td><Code>getAztecNodeInfo()</Code></Td><Td>L2 node info (version, L1 contract addresses)</Td></tr>

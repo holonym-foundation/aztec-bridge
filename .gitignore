@@ -68,3 +68,4 @@ packages/*/dist
 
 .main-snapshot
 .gstack/
+.env*

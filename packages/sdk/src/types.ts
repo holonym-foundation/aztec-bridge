@@ -15,7 +15,7 @@ export interface HumanTechBridgeConfig {
   deployment?: string
   /** The dapp's domain used for encryption key derivation. Auto-detected from window.location.origin in browsers. Required in Node.js. */
   domain?: string
-  /** Backend API URL. Defaults to "https://bridge.human.tech". Use "" for same-origin. */
+  /** Backend API URL. Defaults to "https://shield.human.tech". Use "" for same-origin. */
   apiUrl?: string
   /** L1 (Ethereum) JSON-RPC URL. Required — the SDK does not bundle a default RPC endpoint. */
   l1RpcUrl: string
@@ -716,6 +716,10 @@ export interface PassportCheckResult {
   /** Alpha deposit cap: present only when the cap is enabled. */
   depositLimitReached?: boolean
   remainingUsd?: number
+  /** Travel Rule: true when lifetime volume reached the threshold — must upgrade to POCH. */
+  travelRuleExceeded?: boolean
+  /** Travel Rule: USD budget left before the threshold. Present only when enabled. */
+  travelRuleRemainingUsd?: number
 }
 
 // ─── L1 Token Balance Types ──────────────────────────────────────────
@@ -784,8 +788,6 @@ export interface AttestationStatus {
     l1Address: string | null
     l2Address: string | null
   }
-  poch: { noncesUsed: number }
-  passport: { noncesUsed: number }
   config: {
     attesterAddress: string
     passportSignerAddress: string

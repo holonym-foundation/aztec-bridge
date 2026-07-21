@@ -5,6 +5,7 @@ import BannerAztecTestnet from '@/components/BannerAztecTestnet'
 import Footer from '@/components/Footer'
 import Header from '@/components/Header'
 import ShieldOnboarding from '@/components/ShieldOnboarding'
+import HowItWorksModal from '@/components/model/HowItWorksModal'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { motion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
@@ -61,6 +62,7 @@ export default function ClientLayout({
         <div className='flex-grow'>{children}</div>
         <Footer className='' />
       </div>
+      <HowItWorksModal />
     </div>
   )
 }

@@ -7,11 +7,10 @@ import {
   getDepositById,
   getWithdrawalById,
 } from '@human.tech/clean.sdk'
+import { getAllowedAppOrigins, isAllowedAppOrigin, normalizeAppOrigin } from '@/lib/domainAllowlist'
 
 // Frontend-only anti-phishing guard: only prompt for encryption signatures on our domain.
 // This is NOT an SDK concern — the SDK is domain-agnostic.
-const ALLOWED_ENCRYPTION_DOMAIN = 'https://bridge.human.tech'
-
 function isDevelopmentOrigin(): boolean {
   if (typeof window === 'undefined') return false
   const h = window.location.hostname
@@ -25,11 +24,12 @@ function isDevelopmentOrigin(): boolean {
  */
 export function verifyEncryptionDomain(): void {
   if (typeof window === 'undefined') return // SSR — skip
-  const origin = window.location.origin
-  if (origin === ALLOWED_ENCRYPTION_DOMAIN || isDevelopmentOrigin()) return
+  const origin = normalizeAppOrigin(window.location.origin)
+  if (isAllowedAppOrigin(origin) || isDevelopmentOrigin()) return
+  const allowedOrigins = Array.from(getAllowedAppOrigins()).join(', ')
   throw new Error(
-    `Security Error: Encryption key derivation is only allowed on ${ALLOWED_ENCRYPTION_DOMAIN}. ` +
-      `Current origin: ${origin}. Please access the bridge at ${ALLOWED_ENCRYPTION_DOMAIN}`,
+    `Security Error: Encryption key derivation is only allowed on ${allowedOrigins}. ` +
+      `Current origin: ${origin}.`,
   )
 }
 

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateRequest, createAuthErrorResponse } from '@/lib/auth'
 import { PassportAttestationSchema } from '@/lib/validation'
-import { enforceAddressBinding, getNextNonce, evaluateDepositLimit, usdToTokenBaseUnits } from '@/lib/address-binding'
+import {
+  enforceAddressBinding,
+  getNextNonce,
+  evaluateDepositLimit,
+  evaluateTravelRuleThreshold,
+  usdToTokenBaseUnits,
+} from '@/lib/address-binding'
 import {
   fetchPassportScore,
   signPassportAttestation,
@@ -78,7 +84,7 @@ export async function POST(request: NextRequest) {
     if (!passing) {
       return NextResponse.json(
         {
-          error: 'Passport score too low',
+          error: 'Human Passport score too low',
           score,
           threshold: getPassportScoreThreshold(),
           passing: false,
@@ -87,7 +93,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3b. Alpha per-day (rolling 24h) deposit cap (L1→L2 only). Unlike POCH, the
+    // 3b. Cumulative per-human Travel Rule threshold (L1→L2 only). Once lifetime
+    // volume reaches the threshold, the light passport tier is refused — the user
+    // must hold a POCH (Clean Hands) attestation to continue. POCH is exempt.
+    if (data.direction === 'L1_TO_L2') {
+      const tr = await evaluateTravelRuleThreshold({
+        userId: authResult.user.id,
+        amount: data.amount,
+        tokenSymbol: data.tokenSymbol,
+        tokenDecimals: data.tokenDecimals,
+      })
+      if (tr.enabled && tr.exceeded) {
+        return NextResponse.json(
+          {
+            error: `You've reached the $${tr.thresholdUsd.toFixed(0)} verification threshold. Verify with Clean Hands to bridge more.`,
+            reason: 'travel_rule',
+          },
+          { status: 403 },
+        )
+      }
+    }
+
+    // 3c. Alpha per-day (rolling 24h) deposit cap (L1→L2 only). Unlike POCH, the
     // Passport maxAmount is enforced on-chain, so we both refuse when over budget
     // AND cap the signed maxAmount to the remaining budget for cryptographic enforcement.
     let maxAmount = getPassportMaxAmount()
@@ -118,7 +145,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Issue signed attestation (L1 ECDSA + L2 Schnorr)
-    const nonce = await getNextNonce(l1Address, 'passport')
+    const nonce = getNextNonce()
 
     // Default deadline: 1 hour from now
     const deadlineSeconds = data.deadline ? BigInt(data.deadline) : BigInt(Math.floor(Date.now() / 1000) + 3600)
@@ -126,7 +153,7 @@ export async function POST(request: NextRequest) {
     const l1Signature = await signPassportAttestation({
       userAddress: l1Address,
       maxAmount,
-      nonce: BigInt(nonce),
+      nonce,
       deadline: deadlineSeconds,
       // Zod schema now requires portalAddress; no `?? ''` wildcard fallback.
       portalAddress: data.portalAddress,
@@ -138,7 +165,7 @@ export async function POST(request: NextRequest) {
       l2Signature = await signL2PassportAttestation({
         userAztecAddress: l2Address,
         maxAmount,
-        nonce: BigInt(nonce),
+        nonce,
         deadline: deadlineSeconds,
         bridgeAddress,
       })
@@ -147,7 +174,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       l1Signature,
       l2Signature,
-      nonce,
+      nonce: nonce.toString(),
       maxAmount: maxAmount.toString(),
       deadline: deadlineSeconds.toString(),
       score,

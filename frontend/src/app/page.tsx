@@ -37,6 +37,8 @@ import BridgeSection from '@/components/BridgeSection'
 import TransactionBreakdown from '@/components/TransactionBreakdown'
 import BridgeFooter from '@/components/BridgeFooter'
 import BridgeHeader from '@/components/BridgeHeader'
+import BridgeStepsRail from '@/components/BridgeStepsRail'
+import VerificationStep from '@/components/VerificationStep'
 import { motion, AnimatePresence } from 'framer-motion'
 import BridgeActionButton from '@/components/BridgeActionButton'
 import {
@@ -82,6 +84,7 @@ export default function Home() {
   const [selectToken, setSelectToken] = useState<boolean>(false)
   const [isFromSection, setIsFromSection] = useState<boolean>(true)
   const [showBreakdown, setShowBreakdown] = useState(false)
+  const [showVerification, setShowVerification] = useState(false)
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const [inputAmount, setInputAmount] = useState('')
@@ -462,7 +465,7 @@ export default function Home() {
 
   return (
     <>
-      <RootStyle>
+      <RootStyle aside={<BridgeStepsRail />}>
         {/* Maintenance Overlay - blocks all interactions when enabled */}
         {MAINTENANCE_MODE && <MaintenanceOverlay title={MAINTENANCE_TITLE} message={MAINTENANCE_MESSAGE} />}
         <AztecWalletConnectionModals />
@@ -495,6 +498,8 @@ export default function Home() {
           />
         )}
         {/* Wallet selection is now handled by WalletDiscoveryModal above */}
+
+        {showVerification && <VerificationStep onClose={() => setShowVerification(false)} />}
 
         <div
           className={`grid grid-rows-[max-content_1fr_max-content] h-full ${
@@ -650,11 +655,12 @@ export default function Home() {
                 pochEligible={attestationData?.eligible}
                 pochLoading={attestationLoading}
                 pochReason={attestationData?.reason}
+                onRequestVerification={() => setShowVerification(true)}
                 attestationMethod={attestationData?.method ?? null}
                 passportMaxAmount={attestationData?.passportMaxAmount}
-                passportScore={attestationData?.passportScore}
-                passportThreshold={attestationData?.passportThreshold}
                 remainingDepositUsd={attestationData?.remainingDepositUsd}
+                travelRuleBlocked={attestationData?.travelRuleExceeded}
+                travelRuleRemainingUsd={attestationData?.travelRuleRemainingUsd}
                 // Operation completion state
                 bridgeCompleted={bridgeCompleted}
                 // Disable if L2 node error

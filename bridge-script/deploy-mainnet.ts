@@ -95,7 +95,7 @@ import UniswapFuelSwapJson from '../l1-contracts/out/UniswapFuelSwap.sol/Uniswap
 // @ts-ignore
 import SwapBridgeRouterJson from '../l1-contracts/out/SwapBridgeRouter.sol/SwapBridgeRouter.json'
 
-import { setupWallet } from './utils/setup_wallet.js'
+import { setupWallet, createNode } from './utils/setup_wallet.js'
 import { TOKEN_CONFIGS, TokenConfig } from './constants/tokens.js'
 import {
   createDeployment,
@@ -104,6 +104,7 @@ import {
   loadActiveDeployment,
   loadExistingTokens,
   copyToFrontend,
+  copyToSdk,
   type DeployedToken,
 } from './utils/save_contracts.js'
 import {
@@ -582,7 +583,7 @@ async function main() {
   // ── L1 client / node info ──
   const nodeUrl = getAztecNodeUrl()
   const L1_URL = getL1RpcUrl()
-  const node = createAztecNodeClient(nodeUrl)
+  const node = createNode()
   const nodeInfo = await node.getNodeInfo()
 
   if (nodeInfo.l1ChainId !== 1) {
@@ -753,9 +754,10 @@ async function main() {
 
     // L2 TokenMinterProxy (owner is immutable — set at deploy)
     logger.info('  Deploying L2 TokenMinterProxy…')
-    const { contract: l2Proxy } = await TokenMinterProxyContract.deploy(wallet).send({
+    const { contract: l2Proxy } = await TokenMinterProxyContract.deploy(wallet, {
+      salt: salts.proxySalt,
+    }).send({
       from: ownerAztecAddress,
-      contractAddressSalt: salts.proxySalt,
       wait: { timeout: getTimeouts().deployTimeout },
     })
     logger.info(`  TokenMinterProxy: ${l2Proxy.address}`)
@@ -763,7 +765,7 @@ async function main() {
     // L2 Token (Wonderland, constructor_with_minter)
     logger.info('  Deploying L2 Token (Wonderland)…')
     const { contract: l2Token } = await TokenContract.deployWithOpts(
-      { wallet, method: 'constructor_with_minter' },
+      { wallet, method: 'constructor_with_minter', instantiation: { salt: salts.tokenSalt } },
       tc.l2Name,
       tc.l2Symbol,
       tc.decimals,
@@ -771,7 +773,6 @@ async function main() {
       AztecAddress.ZERO,
     ).send({
       from: ownerAztecAddress,
-      contractAddressSalt: salts.tokenSalt,
       wait: { timeout: getTimeouts().deployTimeout },
     })
     logger.info(`  L2 Token: ${l2Token.address}`)
@@ -788,9 +789,9 @@ async function main() {
       CLEAN_HANDS_ACTION_ID,
       l2PassportPubkey.x,
       l2PassportPubkey.y,
+      { salt: salts.bridgeSalt },
     ).send({
       from: ownerAztecAddress,
-      contractAddressSalt: salts.bridgeSalt,
       wait: { timeout: getTimeouts().deployTimeout },
     })
     logger.info(`  TokenBridge: ${l2Bridge.address}`)
@@ -874,6 +875,7 @@ async function main() {
   }
 
   copyToFrontend()
+  copyToSdk()
 
   // ── Summary ──
   logger.info('\n=== Mainnet Deployment Summary ===')

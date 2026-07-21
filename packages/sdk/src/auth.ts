@@ -13,7 +13,9 @@ import { SiweMessage } from 'siwe'
 import { getAddress } from 'viem'
 import type { BridgeApiClient } from './api'
 
-export const L2_RESOURCE_PREFIX = 'https://bridge.human.tech/aztec/address/'
+export function getL2ResourcePrefix(uri: string): string {
+  return `${new URL(uri).origin}/aztec/address/`
+}
 
 /**
  * Authenticate with the bridge backend using SIWE.
@@ -62,6 +64,7 @@ export async function authenticate(
 
   // Build SIWE message — EIP-55 checksum required by SIWE spec
   const checksumAddress = getAddress(l1Address)
+  const l2ResourcePrefix = getL2ResourcePrefix(uri)
   const siweMessage = new SiweMessage({
     domain,
     address: checksumAddress,
@@ -71,7 +74,7 @@ export async function authenticate(
     chainId,
     nonce,
     expirationTime: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-    resources: [`${L2_RESOURCE_PREFIX}${l2Address.toLowerCase()}`],
+    resources: [`${l2ResourcePrefix}${l2Address.toLowerCase()}`],
   })
 
   const messageStr = siweMessage.prepareMessage()

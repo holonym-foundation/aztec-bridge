@@ -14,6 +14,7 @@ import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { silkUrl } from '@/config/l1.config'
 import { L1_CHAIN_ID } from '@/config'
 import DeploymentSelector from '@/components/DeploymentSelector'
+import { useExplainerStore } from '@/stores/useExplainerStore'
 
 /** Delay before auto-starting Aztec wallet discovery after WaaP connects. */
 const AZTEC_AUTO_CONNECT_DELAY_MS = 2000
@@ -25,7 +26,7 @@ const AZTEC_AUTO_CONNECT_DELAY_MS = 2000
 // response arrives. Module-level + window-guard so it runs once per page in
 // the browser only.
 if (typeof window !== 'undefined') {
-  loadIcons(['ph:copy', 'majesticons:open', 'ph:wallet', 'ph:sign-out'])
+  loadIcons(['ph:copy', 'majesticons:open', 'ph:wallet', 'ph:sign-out', 'ph:question'])
 }
 
 type WalletDisplayProps = {
@@ -244,6 +245,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
   } = useWalletStore()
 
   const { isPrivacyModeEnabled, setPrivacyModeEnabled } = useBridgeStore()
+  const { openModal: openHowItWorks } = useExplainerStore()
   const notify = useToast()
 
   // The docs pages are a standalone reading view — no wallet, privacy toggle, or
@@ -338,6 +340,14 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
         )}
 
         <div className="flex items-center gap-4">
+          <button
+            onClick={openHowItWorks}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-[#D4D4D4] bg-white hover:shadow-sm transition-shadow duration-200"
+          >
+            <Icon icon="ph:question" width={16} height={16} className="text-[#737373]" />
+            How it works
+          </button>
+
           <DeploymentSelector />
 
           {/* Privacy Mode Toggle */}
@@ -432,6 +442,17 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
               {credentials}
             </div>
           )}
+
+          <button
+            onClick={() => {
+              openHowItWorks()
+              setMobileMenuOpen(false)
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-[#D4D4D4] bg-white w-max"
+          >
+            <Icon icon="ph:question" width={16} height={16} className="text-[#737373]" />
+            How it works
+          </button>
 
           <DeploymentSelector />
 

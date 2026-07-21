@@ -13,6 +13,11 @@ interface AttestationCheckResult {
   // Alpha deposit cap (L1→L2 only). undefined when the cap is disabled.
   depositLimitReached?: boolean
   remainingDepositUsd?: number
+  // Travel Rule: passport tier blocked because lifetime volume reached the threshold.
+  travelRuleExceeded?: boolean
+  // Travel Rule: USD budget left before the threshold (undefined = disabled). Lets the UI
+  // pre-block a deposit that would cross, before the user submits.
+  travelRuleRemainingUsd?: number
 }
 
 /**
@@ -60,6 +65,7 @@ export function useAttestationCheck() {
             passportMaxAmount: BigInt(passportData.maxAmount),
             depositLimitReached: passportData.depositLimitReached,
             remainingDepositUsd: passportData.remainingUsd,
+            travelRuleRemainingUsd: passportData.travelRuleRemainingUsd,
           }
         }
 
@@ -72,6 +78,8 @@ export function useAttestationCheck() {
           passportMaxAmount: BigInt(passportData.maxAmount),
           depositLimitReached: passportData.depositLimitReached,
           remainingDepositUsd: passportData.remainingUsd,
+          travelRuleExceeded: passportData.travelRuleExceeded,
+          travelRuleRemainingUsd: passportData.travelRuleRemainingUsd,
         }
       } catch (err: any) {
         const parsed = err?.parsedBody as { reason?: string; error?: string } | null | undefined

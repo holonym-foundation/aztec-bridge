@@ -79,28 +79,6 @@ model AddressBinding {
 }
 
 // ---------------------------------------------------------------------------
-// AttestationNonce: server-managed auto-incrementing nonces per user per type.
-// The on-chain contract tracks used nonces; we mirror that here to avoid
-// the frontend needing to query the contract for the next nonce.
-// ---------------------------------------------------------------------------
-
-enum AttestationType {
-  poch
-  passport
-}
-
-model AttestationNonce {
-  id         String          @id @default(cuid(2))
-  l1Address  String
-  type       AttestationType
-  nonce      Int             @default(0) // current nonce (incremented after each issuance)
-  updatedAt  DateTime        @updatedAt
-
-  @@unique([l1Address, type])
-  @@map("attestation_nonces")
-}
-
-// ---------------------------------------------------------------------------
 // AuthNonce: server-managed SIWE nonces with TTL for replay protection
 // ---------------------------------------------------------------------------
 
@@ -131,7 +109,7 @@ model BridgeActivity {
 
   // --- Key derivation: same deterministic message/signature needed to decrypt ---
   keyDerivationMessage   String  // Deterministic message user signed (same for all ops per wallet+domain)
-  keyDerivationDomain    String  // e.g. "https://bridge.human.tech/"
+  keyDerivationDomain    String  // e.g. "https://shield.human.tech/"
 
   // --- Plaintext metadata (for querying only) ---
   // l1Address/l2Address: use activity.user.l1Address, activity.user.l2Address (User relation)

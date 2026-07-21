@@ -13,6 +13,8 @@ import { z } from 'zod'
 /** Ethereum address: 0x followed by 40 hex chars. */
 export const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
 
+export const AZTEC_ADDRESS_REGEX = /^0x[a-fA-F0-9]{64}$/
+
 /** Ethereum tx hash: 0x followed by 64 hex chars. */
 export const TX_HASH_REGEX = /^0x[a-fA-F0-9]{64}$/
 
@@ -59,7 +61,7 @@ export const AuthenticateSchema = z.object({
 export const PassportAttestationSchema = z.object({
   l2Address: z.string().min(1).optional(),
   isPrivate: z.boolean().optional().default(false),
-  bridgeAddress: z.string().regex(ETH_ADDRESS_REGEX, 'bridgeAddress must be 0x + 40 hex chars').optional(),
+  bridgeAddress: z.string().regex(AZTEC_ADDRESS_REGEX, 'bridgeAddress must be 0x + 64 hex chars').optional(),
   portalAddress: z.string().regex(ETH_ADDRESS_REGEX, 'portalAddress must be 0x + 40 hex chars'),
   deadline: z.number().int().nonnegative().optional(),
   ...DepositLimitFields,

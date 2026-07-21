@@ -67,7 +67,7 @@ export {
 } from './encryption'
 
 // Auth
-export { L2_RESOURCE_PREFIX } from './auth'
+export { getL2ResourcePrefix } from './auth'
 
 // API
 export { BridgeApiError } from './api'

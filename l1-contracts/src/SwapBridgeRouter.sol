@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.27;
 
 import {IERC20} from "@oz/token/ERC20/IERC20.sol";

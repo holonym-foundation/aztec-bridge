@@ -302,7 +302,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
       <header className="w-full px-4 flex justify-between items-center">
         <div className="flex-shrink-0">
           <Link href="/" className="hover:opacity-80 transition-opacity duration-200">
-            <Image src="/assets/svg/human.tech.logo.svg" alt="human.tech" width={120} height={30} />
+            <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={112} height={30} />
           </Link>
         </div>
       </header>
@@ -314,7 +314,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
       <header className="w-full px-4 pt-3 flex justify-between items-center relative">
         <div className="flex-shrink-0">
           <Link href="/" className="hover:opacity-80 transition-opacity duration-200">
-            <Image src="/assets/svg/human.tech.logo.svg" alt="human.tech" width={120} height={30} />
+            <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={112} height={30} />
           </Link>
         </div>
       </header>
@@ -325,7 +325,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
     <header className="w-full px-4 pt-3 flex justify-between items-center relative">
       <div className="flex-shrink-0">
         <Link href="/" className="hover:opacity-80 transition-opacity duration-200">
-          <Image src="/assets/svg/human.tech.logo.svg" alt="human.tech" width={120} height={30} />
+          <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={112} height={30} />
         </Link>
       </div>
 

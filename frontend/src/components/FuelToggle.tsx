@@ -502,9 +502,13 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
       <ReactTooltip id="fj-warning" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
 
       {fuelEnabled && !detailOpen && (
-        <p className="text-xs text-latest-grey-500 mt-1">
+        <button
+          type="button"
+          onClick={() => setDetailOpen(true)}
+          className="text-xs text-latest-grey-500 mt-1 text-left w-full cursor-pointer hover:text-latest-black-100 transition-colors"
+        >
           {fuelNum > 0 ? `${fuelAmount} ${tokenSymbol} reserved for gas — tap to edit` : 'Tap to set an amount'}
-        </p>
+        </button>
       )}
 
       <AnimatePresence initial={false}>

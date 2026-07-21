@@ -13,9 +13,30 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick }) => {
   const router = useRouter()
   const {
     getHeaderSteps,
+    getProgressSteps,
     headerStep,
     setHeaderStep
   } = useBridgeStore()
+
+  // A transfer is in progress once an operation step is active and the flow is not terminal.
+  // The reset/disconnect action (passed by consumers as `onClick`) tears down wallets and
+  // reloads, which would drop the live progress view, so confirm before running it mid-flight.
+  const progressSteps = getProgressSteps()
+  const isTransferInProgress =
+    progressSteps.some((s) => s.status === 'active') && !progressSteps.every((s) => s.status === 'completed')
+
+  const handleResetClick = () => {
+    if (!onClick) return
+    if (
+      isTransferInProgress &&
+      !window.confirm(
+        "Leave now? Your in-progress transfer's recovery data could be lost — export a backup first.",
+      )
+    ) {
+      return
+    }
+    onClick()
+  }
 
   const {
     isWaapConnected,
@@ -50,11 +71,7 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick }) => {
       <LoadingBar steps={steps} currentStep={headerStep} />
       <p
         className={`text-center text-[#0A0A0A] font-[700] text-[16px] leading-[24px] tracking-[0.32px] uppercase font-['Suisse_Intl']`}
-        onClick={() => {
-          if (onClick) {
-            onClick()
-          }
-        }}>
+        onClick={handleResetClick}>
         BRIDGE
       </p>
       <button

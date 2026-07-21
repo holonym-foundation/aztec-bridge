@@ -923,6 +923,193 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
 
 // -----------------------------------
 
+// Dedicated toast ids for the standalone Fee Juice top-up (withdraw side). Kept
+// separate from the deposit flow's ids so a top-up never dismisses a real
+// deposit's banners and vice-versa.
+const TOAST_ID_FJ_TOPUP_PROGRESS = 'fj-topup-progress'
+
+/**
+ * Standalone "buy + bridge Fee Juice" top-up for the WITHDRAW side.
+ *
+ * A user sitting on L2 with 0 Fee Juice can't pay the L2 burn a withdrawal needs.
+ * There is no direct L2 FJ mint, but the deposit path already knows how to buy FJ
+ * on L1 and bridge it to L2: `bridgeL1ToL2` with a `fuel` carve routes a slice of
+ * the bridged token through the SwapBridgeRouter (token → ETH → FeeJuice on V4)
+ * and claims the FeeJuice on L2. This hook reuses that EXACT SDK primitive as a
+ * standalone action — same `bridge.bridgeL1ToL2(...)` call, same wallet callbacks,
+ * same private-fuel (BridgedFPC) enforcement — it just sizes the bridge so almost
+ * all of it becomes Fee Juice instead of a token deposit.
+ *
+ * The SDK requires `fuel.amount < amount` strictly, so the caller passes a
+ * `spendAmount` (total L1 token to spend) and a `fuelAmount` (< spend) to carve
+ * into FeeJuice; a negligible token remainder lands on L2 as the paired token.
+ */
+export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void) {
+  const { waapAddress: l1Address, aztecAddress, signWaapMessage } = useWalletStore()
+  const { isPrivacyModeEnabled } = useBridgeStore()
+  const queryClient = useQueryClient()
+  const notify = useToast()
+  const walletAdapter = useWalletAdapter()
+  const bridge = useBridge()
+
+  const mutationFn = async (params: {
+    /** L1 funding token symbol (defaults to the primary L1 token, e.g. USDC). */
+    tokenSymbol?: string
+    /** Total L1 token amount to spend (human units). Must exceed fuelAmount. */
+    spendAmount: string
+    /** Token amount to carve into FeeJuice (human units). Must be > 0 and < spendAmount. */
+    fuelAmount: string
+    fuelType: 'public' | 'private'
+    /** Optional third-party L2 recipient (public fuel only; FJ is non-transferable). */
+    recipient?: string
+  }): Promise<string | undefined> => {
+    if (!l1Address) throw new Error('Ethereum wallet not connected')
+    if (!aztecAddress) throw new Error('Aztec wallet not connected')
+    if (!walletAdapter) throw new Error('Aztec wallet adapter not ready')
+
+    const tokenSymbol = params.tokenSymbol ?? L1_TOKENS[0]?.symbol ?? 'USDC'
+    const spendNum = Number(params.spendAmount)
+    const fuelNum = Number(params.fuelAmount)
+    if (!(spendNum > 0)) throw new Error('Enter an amount to convert to Fee Juice')
+    // Mirror the deposit-fuel guard: fuel is carved out of the bridge, so it must be
+    // strictly less than the amount bridged.
+    if (!(fuelNum > 0 && fuelNum < spendNum)) {
+      throw new Error('Fee Juice amount must be greater than 0 and less than the amount spent')
+    }
+
+    // Privacy mode forces private (BridgedFPC) fuel — same enforcement as the deposit path,
+    // so the topped-up Fee Juice stays private and the L2 claim doesn't deanonymize the user.
+    const effectiveFuelType: 'public' | 'private' = isPrivacyModeEnabled ? 'private' : params.fuelType
+
+    logInfo('Fee Juice top-up (L1→L2) initiated', {
+      direction: 'L1_TO_L2',
+      context: 'withdraw_fuel_topup',
+      fromToken: tokenSymbol,
+      spendAmount: params.spendAmount,
+      fuelAmount: params.fuelAmount,
+      fuelType: effectiveFuelType,
+      isPrivate: isPrivacyModeEnabled ?? false,
+      l1Address,
+      l2Address: aztecAddress,
+      userAction: DatadogUserAction.BRIDGE_L1_TO_L2_INITIATED,
+    })
+
+    const result = await bridge.bridgeL1ToL2({
+      token: tokenSymbol,
+      amount: params.spendAmount,
+      l1Address,
+      l2Address: aztecAddress,
+      isPrivate: isPrivacyModeEnabled ?? false,
+      fuel: {
+        enabled: true,
+        amount: params.fuelAmount,
+        fuelType: effectiveFuelType,
+        ...(params.recipient ? { recipient: params.recipient } : {}),
+      },
+      sendTransaction: async (tx) => {
+        return (await requestWaapWallet(WAAP_METHOD.eth_sendTransaction, [tx])) as string
+      },
+      walletAdapter: walletAdapter as any,
+      signMessage: async (msg: string) => {
+        verifyEncryptionDomain()
+        const sig = await signWaapMessage(msg)
+        if (!sig) throw new Error('Failed to sign message')
+        return sig
+      },
+      signTypedData: async (address: string, typedDataJson: string) => {
+        return (await requestWaapWallet(WAAP_METHOD.eth_signTypedData_v4, [address, typedDataJson])) as string
+      },
+      onEvent: (event: BridgeEvent) => {
+        switch (event.type) {
+          case BridgeEventType.DEPOSIT_SENT:
+            notify(
+              'warn',
+              {
+                heading: 'Buying Fee Juice',
+                message: 'Your Fee Juice top-up is on L1. Keep this page open while it bridges to Aztec.',
+              },
+              { autoClose: false, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
+            )
+            break
+          case BridgeEventType.DEPOSIT_CONFIRMED:
+            notify(
+              'info',
+              'Top-up confirmed on L1 — claiming Fee Juice on Aztec…',
+              { autoClose: 15000, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
+            )
+            break
+          case BridgeEventType.SYNC_POLL:
+            notify(
+              'info',
+              `Aztec is syncing your Fee Juice from L1 (~5–15 min). ${event.elapsedMinutes.toFixed(0)} min elapsed.`,
+              { autoClose: 15000, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
+            )
+            break
+          case BridgeEventType.CLAIM_ATTEMPT:
+            notify('info', `Claiming Fee Juice on Aztec (attempt ${event.attempt}/${event.maxAttempts})…`, {
+              autoClose: 15000,
+              toastId: TOAST_ID_FJ_TOPUP_PROGRESS,
+            })
+            break
+          case BridgeEventType.ERROR:
+            logError(
+              event.error?.message ?? 'Fee Juice top-up error event',
+              {
+                direction: 'L1_TO_L2',
+                context: 'withdraw_fuel_topup',
+                fundsAtRisk: event.fundsAtRisk,
+                operationId: event.operationId,
+                l1Address,
+                l2Address: aztecAddress,
+                userAction: 'bridge_l1_to_l2_fj_topup_error',
+              },
+              event.error,
+            )
+            notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
+            break
+        }
+      },
+    })
+
+    notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
+    logInfo('Fee Juice top-up (L1→L2) completed', {
+      direction: 'L1_TO_L2',
+      context: 'withdraw_fuel_topup',
+      l1Address,
+      l2Address: aztecAddress,
+      l1TxHash: result.l1TxHash,
+      l2TxHash: result.l2TxHash,
+      isPrivacyModeEnabled,
+      userAction: DatadogUserAction.BRIDGE_L1_TO_L2_COMPLETED,
+    })
+
+    return result.l2TxHash
+  }
+
+  return useMutation({
+    mutationFn,
+    onSuccess: (txHash) => {
+      // Refresh the FJ balances the withdraw gate reads, plus L1 token balances.
+      queryClient.invalidateQueries({ queryKey: ['l2FeeJuiceBalance', aztecAddress] })
+      queryClient.invalidateQueries({ queryKey: ['l2PrivateFeeJuiceBalance', aztecAddress] })
+      queryClient.invalidateQueries({ queryKey: ['l2TokenBalance', aztecAddress] })
+      queryClient.invalidateQueries({ queryKey: ['l1TokenBalances', l1Address] })
+      queryClient.invalidateQueries({ queryKey: ['l1TokenBalance', l1Address] })
+      notify('success', 'Fee Juice added — you can complete your withdrawal now.')
+      onTopUpSuccess?.(txHash)
+    },
+    onError: (error) => {
+      notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
+      notify('error', {
+        heading: 'Fee Juice top-up failed',
+        message: extractErrorMessage(error) || 'The top-up could not be completed. Your balances are unchanged.',
+      })
+    },
+  })
+}
+
+// -----------------------------------
+
 /**
  * Hook to export L1→L2 claim data for backup
  *

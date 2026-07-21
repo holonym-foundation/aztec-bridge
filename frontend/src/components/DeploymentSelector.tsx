@@ -2,8 +2,17 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { ALL_DEPLOYMENTS, ACTIVE_DEPLOYMENT_ID, DEPLOYMENT_ID } from '@/config'
+import { useBridgeStore } from '@/stores/bridgeStore'
 
 const DeploymentSelector: React.FC = () => {
+  // Privacy Mode drops the nav onto the deep-maroon background; match the rest
+  // of the nav (see Header.tsx) by switching this pill to the glassy-dark
+  // surface + light text instead of staying an opaque white pill. Off-scale
+  // alphas use the bracket form (Header.tsx documents why: tailwind.config.js
+  // replaces the opacity scale with {0,20,40,60,80,100}, so `white/90`-style
+  // shorthand outside that set compiles to nothing).
+  const { isPrivacyModeEnabled } = useBridgeStore()
+  const isDark = isPrivacyModeEnabled
   const [open, setOpen] = useState(false)
   const [selectedId, setSelectedId] = useState(DEPLOYMENT_ID)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -47,15 +56,23 @@ const DeploymentSelector: React.FC = () => {
     <div className='relative' ref={dropdownRef}>
       <button
         onClick={() => hasMultiple && setOpen(!open)}
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-[#D4D4D4] bg-white transition-shadow duration-200 ${hasMultiple ? 'hover:shadow-sm cursor-pointer' : 'cursor-default'}`}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border ${
+          isDark
+            ? 'border-white/[0.14] bg-white/[0.07] backdrop-blur-md transition-all'
+            : 'border-[#D4D4D4] bg-white transition-shadow'
+        } duration-200 ${
+          hasMultiple
+            ? `cursor-pointer ${isDark ? 'hover:bg-white/[0.12] hover:border-white/[0.22]' : 'hover:shadow-sm'}`
+            : 'cursor-default'
+        }`}
         title={hasMultiple ? 'Switch deployment version' : `Deployment: ${versionLabel}`}>
-        <span className='text-gray-500'>v</span>
-        <span className='text-[#0A0A0A] max-w-[140px] truncate'>
+        <span className={isDark ? 'text-white/[0.65]' : 'text-gray-500'}>v</span>
+        <span className={`max-w-[140px] truncate ${isDark ? 'text-white/[0.90]' : 'text-[#0A0A0A]'}`}>
           {versionLabel}
         </span>
         {hasMultiple && (
           <svg
-            className={`w-3 h-3 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+            className={`w-3 h-3 transition-transform ${isDark ? 'text-white/[0.60]' : 'text-gray-400'} ${open ? 'rotate-180' : ''}`}
             fill='none'
             viewBox='0 0 24 24'
             stroke='currentColor'>

@@ -181,6 +181,8 @@ body {
 .Toastify__toast-container {
   z-index: 50 !important;
   pointer-events: none !important;
+  /* Push the toast stack below the top nav so it never overlaps/hides it. */
+  top: 88px !important;
 }
 
 .Toastify__toast-container .Toastify__toast {
@@ -188,7 +190,7 @@ body {
 }
 
 .Toastify__toast-container .Toastify__toast:first-child {
-  margin-top: 50px !important;
+  margin-top: 0 !important;
 }
 
 .privacy-mode-toast {

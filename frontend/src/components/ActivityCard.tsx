@@ -1,10 +1,13 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
+import { Icon } from '@iconify/react'
 import type { BridgeOperation } from '@human.tech/clean.sdk'
 import { formatUnits } from 'viem'
 import { L1_TOKEN_METADATA } from '@/config'
 import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
+import { copyToClipboard } from '@/utils'
+import { useToast } from '@/hooks/useToast'
 
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' },
@@ -23,6 +26,55 @@ function StatusBadge({ status }: { status: string }) {
     className: 'bg-gray-100 text-gray-800',
   }
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${style.className}`}>{style.label}</span>
+}
+
+// Above this length a 2-line clamp will very likely cut the message off, so
+// we only surface the "Show more" toggle when it's actually worth showing.
+const ERROR_EXPAND_THRESHOLD = 100
+
+/** Failed-operation error message: clamped by default, expandable + copyable in full. */
+function OperationError({ message }: { message: string }) {
+  const notify = useToast()
+  const [expanded, setExpanded] = useState(false)
+  const canExpand = message.length > ERROR_EXPAND_THRESHOLD
+
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(message)
+    notify(ok ? 'success' : 'error', ok ? 'Error copied to clipboard' : 'Failed to copy error')
+  }
+
+  return (
+    <div className="mt-1 flex items-start gap-1.5">
+      <p
+        className={`text-xs text-red-500 flex-1 min-w-0 ${
+          expanded ? 'whitespace-pre-wrap break-words' : 'line-clamp-2 break-words'
+        }`}
+      >
+        {message}
+      </p>
+      <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+        {canExpand && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Show less of error message' : 'Show full error message'}
+            className="text-[10px] font-semibold text-[#81133B] hover:underline px-1"
+          >
+            {expanded ? 'Show less' : 'Show more'}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label="Copy error message"
+          className="text-gray-400 hover:text-[#81133B] p-0.5 rounded"
+        >
+          <Icon icon="ph:copy" width={13} height={13} />
+        </button>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -92,7 +144,7 @@ export default function ActivityCard({
         {amount} {tokenSymbol}
       </p>
 
-      {operation.lastErrorMessage && <p className="text-xs text-red-500 mt-1 truncate">{operation.lastErrorMessage}</p>}
+      {operation.lastErrorMessage && <OperationError message={operation.lastErrorMessage} />}
 
       <div className="flex items-center gap-3 mt-3">
         {operation.l1TxUrl && (

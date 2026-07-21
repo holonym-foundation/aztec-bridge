@@ -22,9 +22,11 @@ export default function ClientLayout({
   const isDocs = pathname?.startsWith('/docs') ?? false
   // Docs is a neutral reading view — keep the light background even when privacy mode is on.
   const showPrivacyBackground = isPrivacyModeEnabled && !isDocs
-  // Only the bridge page (root route) enforces the no-scroll viewport budget. Other routes
-  // (docs, activity, progress) scroll normally, so the footer keeps its default position there.
-  const isBridgeRoute = pathname === '/'
+  // The bridge page (root route) and the transaction-progress screen both enforce the
+  // no-scroll viewport budget (card capped at 90vh-5rem with internal scroll; footer nested
+  // up into the card region's bottom padding). Other routes (docs, activity) scroll normally,
+  // so the footer keeps its default position there.
+  const isNoScrollRoute = pathname === '/' || pathname === '/progress'
   return (
     <div className="relative min-h-screen flex flex-col w-full min-w-0 overflow-x-hidden" style={{ minHeight: '100vh', minWidth: 0 }}>
       {/* Onboarding is skipped on docs so the guides render without connecting a wallet. */}
@@ -80,7 +82,7 @@ export default function ClientLayout({
             footer up into that padding so nav + card region + footer stay within 100vh and
             the page never scrolls. Footer content is unchanged; scoped to the bridge route so
             longer scrolling pages keep the footer in its normal flow position. */}
-        <Footer className={isBridgeRoute ? '-mt-8' : ''} />
+        <Footer className={isNoScrollRoute ? '-mt-8' : ''} />
       </div>
       <HowItWorksModal />
     </div>

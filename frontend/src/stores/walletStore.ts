@@ -1075,6 +1075,13 @@ const walletStore = create<WalletState>((set, get) => ({
         throw new Error('No wallet connected')
       }
 
+      // The wallet signature popup is easy to miss; nudge the user to check it.
+      // Stable toastId so rapid re-signs refresh in place instead of stacking.
+      showToast('info', 'Check your wallet — a signature is required to continue.', {
+        toastId: 'waap-sign-request',
+        autoClose: 8000,
+      })
+
       const signature = await requestWaapWallet(WAAP_METHOD.personal_sign, [message, waapAddress])
       return signature as string
     } catch (err) {

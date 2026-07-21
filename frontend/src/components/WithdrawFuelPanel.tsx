@@ -4,9 +4,14 @@ import React, { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Icon } from '@iconify/react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
-import { formatFjAmount } from '@/utils/fuelPricing'
-import { BRIDGED_FPC_ADDRESS } from '@/config'
+import { formatUnits, parseUnits } from 'viem'
+import { formatFjAmount, usdToTokenAmount, buildSwapCandidates, getBestRoute } from '@/utils/fuelPricing'
+import { checkFuelSufficiency } from '@/utils/fuelGasEstimate'
+import { BRIDGED_FPC_ADDRESS, L1_RPC_URL, L1_TOKENS, SWAP_BRIDGE_ROUTER_ADDRESS } from '@/config'
+import { useTokenPrices } from '@/utils/coinGeckoPrice'
 import { useClaimFeeEstimate } from '@/hooks/useL2Operations'
+import { useL1TopUpFeeJuice } from '@/hooks/useL1Operations'
+import { useWalletStore } from '@/stores/walletStore'
 
 interface WithdrawFuelPanelProps {
   /** Public L2 Fee Juice balance (what pays the L2 burn gas). */
@@ -20,18 +25,128 @@ interface WithdrawFuelPanelProps {
   bridgeAmount?: string
 }
 
+const USD_PRESETS = [1, 5, 10]
+
+/**
+ * Real V4 on-chain quote for `tokenAmount` of the L1 funding token → FeeJuice,
+ * debounced by 500ms. Mirrors FuelToggle's useV4FuelQuote so the top-up sizes
+ * against the same pool rate the deposit-fuel carve uses.
+ */
+function useTopUpQuote(
+  tokenAmount: string,
+  tokenAddress: string,
+  tokenDecimals: number,
+): { fjOutput: bigint | null; loading: boolean; error: string | null } {
+  const [fjOutput, setFjOutput] = useState<bigint | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const amount = Number(tokenAmount)
+    if (!tokenAmount || amount <= 0 || !tokenAddress) {
+      setFjOutput(null)
+      setError(null)
+      return
+    }
+
+    let inputRaw: bigint
+    try {
+      inputRaw = parseUnits(tokenAmount, tokenDecimals)
+    } catch {
+      setFjOutput(null)
+      return
+    }
+    if (inputRaw <= 0n) {
+      setFjOutput(null)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    const timeout = setTimeout(async () => {
+      try {
+        const candidates = buildSwapCandidates(tokenAddress as `0x${string}`)
+        const best = await getBestRoute({ candidates, inputAmount: inputRaw, l1RpcUrl: L1_RPC_URL })
+        setFjOutput(best.expectedOutput)
+        setError(null)
+      } catch (err) {
+        setFjOutput(null)
+        const errMsg = err instanceof Error ? err.message : String(err)
+        const isRevert = errMsg.includes('reverted') || errMsg.includes('execution reverted')
+        setError(isRevert ? 'Swap amount exceeds pool liquidity — try a smaller amount' : 'Quote failed')
+      } finally {
+        setLoading(false)
+      }
+    }, 500)
+
+    return () => clearTimeout(timeout)
+  }, [tokenAmount, tokenAddress, tokenDecimals])
+
+  return { fjOutput, loading, error }
+}
+
+/** Whether the quoted FJ output covers the claim fee for `fuelType`. Debounced on fjOutput. */
+function useTopUpSufficiency(
+  fjOutput: bigint | null,
+  fuelType: 'public' | 'private',
+): { sufficient: boolean | null; feeLimitFj: string | null; loading: boolean } {
+  const [sufficient, setSufficient] = useState<boolean | null>(null)
+  const [feeLimitFj, setFeeLimitFj] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (fjOutput === null || fjOutput === 0n) {
+      setSufficient(null)
+      setFeeLimitFj(null)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    ;(async () => {
+      try {
+        const result = await checkFuelSufficiency(fjOutput, fuelType)
+        if (!cancelled) {
+          setSufficient(result.sufficient)
+          setFeeLimitFj(result.feeLimitFj)
+        }
+      } catch {
+        if (!cancelled) {
+          setSufficient(null)
+          setFeeLimitFj(null)
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [fjOutput, fuelType])
+
+  return { sufficient, feeLimitFj, loading }
+}
+
+function QuoteSkeleton() {
+  return (
+    <div className="space-y-2 animate-pulse">
+      <div className="h-3 bg-neutral-300 rounded w-3/4" />
+      <div className="h-3 bg-neutral-300 rounded w-full" />
+    </div>
+  )
+}
+
 /**
  * Withdraw-direction gas panel (L2 → L1).
  *
  * On a withdrawal the user is already on L2 and the burn tx is paid from their
- * standing Fee Juice. A user with 0 FJ is stuck. Unlike the deposit direction —
- * where the SwapBridgeRouter can atomically carve a slice of the bridged token
- * into Fee Juice — the SDK exposes NO way to top up L2 Fee Juice inline on a
- * withdraw (see `withdrawL2ToL1` / `WithdrawL2ToL1Params`: no fuel field, and
- * `HumanTechBridge` has no mint/claim/FPC-topup method). So this panel is
- * informational: it surfaces the gas requirement, warns when the burn would be
- * underfunded, and tells the user how to get Fee Juice today. It auto-expands
- * when underfunded (mirrors the deposit-side auto-enable latch).
+ * standing Fee Juice. A user with 0 FJ is stuck. There is no direct L2 FJ mint,
+ * so this panel reuses the deposit path's mechanism as a standalone action: it
+ * buys Fee Juice on L1 and bridges it to L2 via `bridgeL1ToL2` with a `fuel`
+ * carve (token → ETH → FeeJuice on Uniswap V4, claimed on L2). Privacy mode
+ * routes the top-up through private (BridgedFPC) fuel, matching the deposit path.
+ * It auto-expands when the burn would be underfunded (mirrors the deposit-side
+ * auto-enable latch).
  */
 const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
   feeJuiceBalance,
@@ -45,9 +160,14 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
   const hasBridgedFpc = !!BRIDGED_FPC_ADDRESS
   const [open, setOpen] = useState(false)
 
-  // The L2 burn is paid from standing (public) Fee Juice regardless of privacy mode —
-  // the withdraw path sets no FeeJuicePaymentMethod, so it draws on the account's FJ.
-  const { data: claimFeeLimit, isLoading: claimFeeLoading } = useClaimFeeEstimate('public')
+  const { isWaapConnected, isAztecConnected } = useWalletStore()
+
+  // Privacy mode forces private (BridgedFPC) fuel so the topped-up FJ and its L2
+  // claim stay anonymous — same enforcement as the deposit-fuel path.
+  const fuelType: 'public' | 'private' = isPrivacyModeEnabled && hasBridgedFpc ? 'private' : 'public'
+
+  // The L2 claim fee for the top-up itself is paid via the fuel type in use.
+  const { data: claimFeeLimit, isLoading: claimFeeLoading } = useClaimFeeEstimate(fuelType)
   const claimFeeFj = claimFeeLimit != null ? formatFjAmount(claimFeeLimit, 2) : null
 
   const fjLoading = feeJuiceBalanceLoading
@@ -69,6 +189,60 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
       autoOpenedRef.current = false
     }
   }, [underfunded])
+
+  // ── Standalone "buy + bridge Fee Juice" top-up ──────────────────────
+  const fundingToken = L1_TOKENS[0]
+  const fundingSymbol = fundingToken?.symbol ?? 'USDC'
+  const fundingDecimals = fundingToken?.decimals ?? 6
+  const fundingAddress = fundingToken?.l1TokenContract ?? ''
+  const canTopUp = !!SWAP_BRIDGE_ROUTER_ADDRESS && (!isPrivacyModeEnabled || hasBridgedFpc) && !!fundingAddress
+
+  const { prices, error: pricesError } = useTokenPrices()
+  const [spendAmount, setSpendAmount] = useState('')
+
+  // Carve almost the entire spend into Fee Juice: the SDK requires fuel < amount
+  // strictly, so we leave a single base-unit of the token behind (negligible dust
+  // that lands on L2 as the paired token). The swap is quoted on this fuel amount.
+  const fuelAmount = (() => {
+    if (!spendAmount || Number(spendAmount) <= 0) return ''
+    try {
+      const raw = parseUnits(spendAmount, fundingDecimals)
+      if (raw <= 1n) return ''
+      return formatUnits(raw - 1n, fundingDecimals)
+    } catch {
+      return ''
+    }
+  })()
+
+  const { fjOutput, loading: quoteLoading, error: quoteError } = useTopUpQuote(fuelAmount, fundingAddress, fundingDecimals)
+  const { sufficient, feeLimitFj, loading: sufficiencyLoading } = useTopUpSufficiency(fjOutput, fuelType)
+
+  const topUp = useL1TopUpFeeJuice(() => {
+    setSpendAmount('')
+  })
+
+  const walletsReady = isWaapConnected && isAztecConnected
+  const amountValid = !!fuelAmount && Number(fuelAmount) > 0
+  const confirmDisabled =
+    !canTopUp ||
+    !walletsReady ||
+    !amountValid ||
+    quoteLoading ||
+    fjOutput === null ||
+    !!quoteError ||
+    sufficiencyLoading ||
+    sufficient === false ||
+    topUp.isPending
+
+  const handleConfirm = () => {
+    if (confirmDisabled) return
+    topUp.mutate({
+      tokenSymbol: fundingSymbol,
+      spendAmount,
+      fuelAmount,
+      fuelType,
+    })
+  }
 
   const detailId = 'withdraw-fuel-detail'
 
@@ -182,20 +356,120 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
                 </div>
               )}
 
-              {/* Stub: direct L2 top-up is not yet supported by the SDK on the withdraw path. */}
-              <div className="rounded-[8px] border border-dashed border-[#81133B]/40 bg-[#F9EEF3] px-2.5 py-2 space-y-1.5">
-                <p className="text-[11px] font-semibold text-[#81133B]">Add Fee Juice — coming soon</p>
-                <p className="text-[11px] leading-[15px] text-[#737373]">
-                  Direct Fee Juice top-up on withdrawals isn&apos;t available yet. To fund this withdrawal now:
-                </p>
-                <ul className="text-[11px] leading-[15px] text-[#737373] list-disc pl-4 space-y-0.5">
-                  <li>
-                    Switch to <span className="font-semibold">Deposit</span> and bridge in with{' '}
-                    <span className="font-semibold">Top up gas balance</span> enabled — that swaps a slice of your
-                    deposit into Fee Juice on L2.
-                  </li>
-                  <li>Then return here to withdraw.</li>
-                </ul>
+              {/* Real top-up: buy Fee Juice on L1 and bridge it to L2 (same mechanism as
+                  deposit-fuel — bridgeL1ToL2 with a fuel carve via SwapBridgeRouter). */}
+              <div className="rounded-[8px] border border-[#81133B]/40 bg-[#F9EEF3] px-2.5 py-2 space-y-2">
+                <p className="text-[11px] font-semibold text-[#81133B]">Add Fee Juice</p>
+
+                {!canTopUp ? (
+                  <p className="text-[11px] leading-[15px] text-[#737373]">
+                    Fee Juice top-up isn&apos;t available on this deployment. Bridge in with{' '}
+                    <span className="font-semibold">Top up gas balance</span> on the Deposit tab, then return to withdraw.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[11px] leading-[15px] text-[#737373]">
+                      Buy Fee Juice with {fundingSymbol} on Ethereum and bridge it to Aztec — no need to switch tabs.
+                      Almost all of it converts to Fee Juice; a negligible remainder lands on L2 as c{fundingSymbol}.
+                    </p>
+
+                    {isPrivacyModeEnabled && (
+                      <div className="flex items-start gap-1.5 rounded-[6px] bg-white/60 px-2 py-1.5">
+                        <Icon icon="ph:lock-key-fill" width={12} height={12} className="mt-0.5 flex-shrink-0 text-[#81133B]" />
+                        <p className="text-[11px] leading-[15px] text-[#737373]">
+                          <span className="font-semibold text-[#81133B]">Private Fee Juice.</span> Privacy mode routes the
+                          top-up through private (BridgedFPC) fuel so your withdrawal stays anonymous.
+                        </p>
+                      </div>
+                    )}
+
+                    {pricesError && (
+                      <p className="text-[11px] text-amber-600">Live prices unavailable — using fallback prices</p>
+                    )}
+
+                    <div className="flex items-center gap-1.5 max-w-full">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder={`Amount in ${fundingSymbol}`}
+                        value={spendAmount}
+                        disabled={topUp.isPending}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (v === '' || !isNaN(Number(v))) setSpendAmount(v)
+                        }}
+                        className="flex-1 min-w-0 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#81133B] disabled:opacity-60"
+                      />
+                      {USD_PRESETS.map((usd) => {
+                        const tokenEquiv = usdToTokenAmount(usd, fundingSymbol, prices)
+                        return (
+                          <button
+                            key={usd}
+                            type="button"
+                            disabled={topUp.isPending}
+                            onClick={() => setSpendAmount(tokenEquiv)}
+                            title={`${tokenEquiv} ${fundingSymbol}`}
+                            className={`shrink-0 px-1.5 py-1 text-xs rounded border transition-colors disabled:opacity-60 ${
+                              spendAmount === tokenEquiv
+                                ? 'border-[#81133B] bg-[#F9EEF3] text-[#81133B]'
+                                : 'border-gray-300 text-gray-600 hover:border-gray-400'
+                            }`}
+                          >
+                            ${usd}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {amountValid && (quoteLoading || (fjOutput === null && !quoteError)) && <QuoteSkeleton />}
+                    {amountValid && quoteError && <p className="text-[11px] text-red-500">{quoteError}</p>}
+                    {amountValid && !quoteLoading && !quoteError && fjOutput !== null && (
+                      <div className="text-[11px] leading-[15px] text-latest-grey-700 space-y-0.5">
+                        <p>
+                          {spendAmount} {fundingSymbol} → <span className="font-semibold">~{formatFjAmount(fjOutput)} FJ</span>
+                        </p>
+                        {!sufficiencyLoading && sufficient === false && (
+                          <p className="text-[#D92D20] font-medium">
+                            Not enough: ~{formatFjAmount(fjOutput)} FJ from this swap but ~{feeLimitFj} FJ needed for the L2
+                            claim. Increase the amount.
+                          </p>
+                        )}
+                        {!sufficiencyLoading && sufficient === true && (
+                          <p className="text-[#17235E]">Covers the L2 claim (~{feeLimitFj} FJ needed).</p>
+                        )}
+                      </div>
+                    )}
+
+                    {!walletsReady && (
+                      <p className="text-[11px] text-[#737373]">Connect both wallets to buy Fee Juice.</p>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleConfirm}
+                      disabled={confirmDisabled}
+                      className="w-full flex items-center justify-center gap-1.5 rounded-md bg-[#81133B] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {topUp.isPending ? (
+                        <>
+                          <Icon icon="ph:spinner-gap-bold" width={13} height={13} className="animate-spin" />
+                          Buying Fee Juice…
+                        </>
+                      ) : (
+                        <>
+                          <Icon icon="ph:lightning-fill" width={13} height={13} />
+                          Buy &amp; bridge Fee Juice
+                        </>
+                      )}
+                    </button>
+
+                    {topUp.isPending && (
+                      <p className="text-[11px] leading-[15px] text-[#737373]">
+                        Keep this page open — the bridge to Aztec can take ~5–15 minutes.
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

@@ -164,7 +164,7 @@ export default function ProgressCard({
         </div>
 
         <p
-          className={`text-center font-semibold text-md mt-5 ${
+          className={`text-center font-semibold text-md mt-4 ${
             hasError ? 'text-[#B91C1C]' : isAllComplete ? 'text-green-600' : ''
           }`}
         >
@@ -179,7 +179,7 @@ export default function ProgressCard({
           </p>
         )}
 
-        <div className="mt-5">
+        <div className="mt-4">
           <LoadingStepsBars steps={steps} currentStep={progressStep - 1} />
         </div>
 
@@ -206,30 +206,28 @@ export default function ProgressCard({
             <hr className="text-latest-grey-300 my-3" />
             <button
               onClick={handleExportBackup}
+              title="Optional. Your data is already encrypted and backed up — this saves a local copy for manual recovery."
               className="w-full text-13 font-semibold text-[#047857] bg-[#ecfdf5] hover:bg-[#d7f7e8] py-2 rounded-full transition-colors"
             >
               Export encrypted backup ↓
             </button>
-            <p className="text-center text-11 text-latest-grey-500 mt-1.5">
-              Optional. Your data is already encrypted and backed up — this saves a local copy for manual recovery.
-            </p>
           </>
         )}
       </div>
 
       {/* Transaction Details */}
-      <div className="bg-[#F5F5F5] rounded-md mt-4 p-4">
+      <div className="bg-[#F5F5F5] rounded-md mt-3 p-4">
         <div className="flex justify-between">
           <div>
             <p className="text-14 font-semibold text-latest-grey-100">From</p>
-            <div className="flex gap-2 mt-3">
+            <div className="flex gap-2 mt-2">
               <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-6 w-6" />
               <p className="text-16 font-medium text-latest-black-100 w-[106px]">{fromNetwork}</p>
             </div>
           </div>
           <div>
             <p className="text-14 font-semibold text-latest-grey-100">To</p>
-            <div className="flex gap-2 mt-3">
+            <div className="flex gap-2 mt-2">
               <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-6 w-6" />
               <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
             </div>

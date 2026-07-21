@@ -548,6 +548,7 @@ export default function Home() {
                     feeJuiceLoading={feeJuiceBalanceLoading}
                     attestationMethod={attestationData?.method ?? null}
                     passportMaxAmount={attestationData?.passportMaxAmount}
+                    travelRuleRemainingUsd={attestationData?.travelRuleRemainingUsd}
                     youWillReceive={youWillReceiveAmount}
                   />
                   {bridgeConfig.direction === BridgeDirection.L1_TO_L2 &&

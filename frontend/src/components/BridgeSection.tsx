@@ -25,6 +25,8 @@ interface BridgeSectionProps {
   feeJuiceLoading?: boolean
   attestationMethod?: 'poch' | 'passport' | null
   passportMaxAmount?: bigint
+  // USD budget left before the Travel Rule threshold forces Clean Hands verification.
+  travelRuleRemainingUsd?: number
   // Post-fee amount the user receives on the destination (net of the portal fee)
   youWillReceive?: string
 }
@@ -47,6 +49,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   feeJuiceLoading = false,
   attestationMethod,
   passportMaxAmount,
+  travelRuleRemainingUsd,
   youWillReceive,
 }) => {
   // Normalize balances to strings
@@ -154,7 +157,18 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
         {attestationMethod === 'passport' && passportMaxAmount != null && (
           <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 mt-2">
             <p className="text-12 text-blue-700">
-              Using Passport attestation. Max: {(Number(passportMaxAmount) / 1e6).toFixed(2)} USDC per transaction.
+              {travelRuleRemainingUsd != null ? (
+                <>
+                  Passport verification —{' '}
+                  <span className="font-semibold">
+                    ${travelRuleRemainingUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })} left
+                  </span>{' '}
+                  before Clean Hands is required (max ${(Number(passportMaxAmount) / 1e6).toLocaleString()} per
+                  transaction).
+                </>
+              ) : (
+                <>Using Passport verification. Max ${(Number(passportMaxAmount) / 1e6).toLocaleString()} per transaction.</>
+              )}
             </p>
           </div>
         )}

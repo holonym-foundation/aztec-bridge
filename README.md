@@ -10,7 +10,7 @@ A comprehensive bridge application for transferring tokens between Ethereum (L1)
 
 ## ⚠️ **Aztec Mainnet Alpha — Use Caution**
 
-Active deployment: **Ethereum mainnet (L1) + Aztec Mainnet Alpha v4.3.0 (L2)** with real ZK proofs, live since 2026-05-29 per `bridge-script/deployments/registry.json`.
+Active deployment: **Ethereum mainnet (L1) + Aztec Mainnet Alpha v5 (L2)** with real ZK proofs, live per `bridge-script/deployments/registry.json`.
 
 **Aztec is in Alpha**, not full production:
 
@@ -21,7 +21,7 @@ Active deployment: **Ethereum mainnet (L1) + Aztec Mainnet Alpha v4.3.0 (L2)** w
 **Bridge-specific:**
 
 - Audited by Nethermind Security (NM-0756, May 2026); all findings resolved
-- Public marketing launch aligned with Aztec v5 release (~July 2026)
+- Public launch shipped with Aztec v5 (21 July 2026)
 
 Prior testnet deployments (Sepolia + Aztec testnet 4.2.0-rc.1) remain in `bridge-script/deployments/` for historical reference but are no longer the active deployment.
 
@@ -146,7 +146,7 @@ forge deploy       # Deploy contracts
 - **Testnet**: Sepolia (historical/dev only)
 
 ### Layer 2 (Aztec)
-- **Mainnet**: Aztec Mainnet Alpha v4.3.0 (active deployment)
+- **Mainnet**: Aztec Mainnet Alpha v5 (active deployment)
 - **Testnet**: Aztec Testnet (historical/dev only)
 
 ## 🎨 Frontend Features

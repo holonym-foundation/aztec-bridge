@@ -113,7 +113,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             placeholder="0"
             value={inputAmount}
             onChange={(e) => setInputAmount(e.target.value)}
-            className="max-w-[130px] placeholder-latest-grey-400 outline-none bg-[transparent] text-32 font-medium"
+            className="min-w-0 flex-1 mr-3 placeholder-latest-grey-400 outline-none bg-[transparent] text-32 font-medium"
             autoFocus
           />
           <div className="flex flex-col gap-2">

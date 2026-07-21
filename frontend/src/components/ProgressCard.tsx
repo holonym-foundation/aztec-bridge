@@ -115,8 +115,8 @@ export default function ProgressCard({
     <div>
       {/* Warning banner — only when in progress */}
       {!isAllComplete && !hasError && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-md mt-2 px-3 py-2">
-          <p className="text-xs text-yellow-800 font-medium text-center">
+        <div className="bg-light-yellow border border-dark-yellow/20 rounded-md mt-2 px-3 py-2">
+          <p className="text-xs text-dark-yellow font-medium text-center">
             Please don't reload or close this page, or it may be difficult to recover your funds.
           </p>
         </div>

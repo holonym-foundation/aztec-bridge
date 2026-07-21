@@ -8,6 +8,7 @@ import { formatUnits, parseUnits } from 'viem'
 import { useToast, useToastMutation } from './useToast'
 import { exportWithdrawalData, copyToClipboard, decryptStorageEntry, verifyEncryptionDomain } from '@/utils'
 import { useL2ErrorHandler } from '@/utils/l2ErrorHandler'
+import { estimateClaimFeeLimit } from '@/utils/fuelGasEstimate'
 import { requestWaapWallet, WAAP_METHOD, useWalletStore } from '@/stores/walletStore'
 import { useWalletAdapter } from './useWalletAdapter'
 import { useBridge } from '@/hooks/useBridge'
@@ -191,6 +192,18 @@ export const useL2PrivateFeeJuiceBalance = () => {
   })
 }
 
+// Worst-case FeeJuice needed to pay for the L2 claim (the final bridge step).
+// Network-wide (not user-specific), so it runs without a wallet. Base fees move
+// slowly, so a 60s refresh keeps the figure live without hammering the node.
+export const useClaimFeeEstimate = (fuelType: 'public' | 'private' = 'public') => {
+  return useQuery<bigint, Error>({
+    queryKey: ['claimFeeEstimate', fuelType],
+    queryFn: () => estimateClaimFeeLimit(fuelType),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
+}
+
 export function useL1ContractAddresses() {
   const { isAztecConnected } = useWalletStore()
   const bridge = useBridge()
@@ -346,27 +359,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             break
           // Persist encrypted nonce payload (recovery-critical)
           case BridgeEventType.NONCE_GENERATED:
+            // Encrypted payload is persisted to localStorage by the SDK. The manual
+            // "export a local copy" affordance now lives inline in the progress frame
+            // (ProgressCard) instead of a persistent toast.
             console.log('[L2→L1] Nonce generated, encrypted payload persisted to localStorage via SDK')
-            notify(
-              'warn',
-              {
-                heading: 'Backup Available',
-                message:
-                  'Your withdrawal data is encrypted and backed up — only you can access it. For extra safety, click here to export a local copy — useful if you ever need to recover manually',
-              },
-              {
-                autoClose: false,
-                onClick: () => {
-                  try {
-                    const pending = getPendingWithdrawals()
-                    const latest = pending[pending.length - 1]
-                    if (latest) exportWithdrawalData(latest)
-                  } catch (e) {
-                    console.error('[L2→L1] Failed to export withdrawal data on toast click:', e)
-                  }
-                },
-              },
-            )
             break
           // Track operation ID for correlation
           case BridgeEventType.OPERATION_CREATED:

@@ -107,6 +107,25 @@ export default function ProgressCard({
   const timeTakenSeconds = estimatedTimeSeconds - count
   const formattedTimeTaken = formatSeconds(timeTakenSeconds)
 
+  const handleExportBackup = () => {
+    if (!direction) return
+    try {
+      const key = direction === 'L1_TO_L2' ? STORAGE_KEYS.deposits : STORAGE_KEYS.withdrawals
+      const raw = localStorage.getItem(key)
+      if (!raw) return
+      const entries = JSON.parse(raw)
+      const latest = entries.filter((e: any) => !e.success).pop()
+      if (!latest) return
+      if (direction === 'L1_TO_L2') {
+        exportClaimData(latest)
+      } else {
+        exportWithdrawalData(latest)
+      }
+    } catch (e) {
+      console.error('[ProgressCard] Export failed:', e)
+    }
+  }
+
   const heading = hasError ? 'Something went wrong' : isAllComplete ? 'Transaction complete' : 'Transaction in progress'
 
   const showBackButton = isAllComplete || hasError
@@ -115,8 +134,8 @@ export default function ProgressCard({
     <div>
       {/* Warning banner — only when in progress */}
       {!isAllComplete && !hasError && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-md mt-2 px-3 py-2">
-          <p className="text-xs text-yellow-800 font-medium text-center">
+        <div className="bg-light-yellow border border-dark-yellow/20 rounded-md mt-2 px-3 py-2">
+          <p className="text-xs text-dark-yellow font-medium text-center">
             Please don't reload or close this page, or it may be difficult to recover your funds.
           </p>
         </div>
@@ -179,6 +198,23 @@ export default function ProgressCard({
             )}
           </>
         )}
+
+        {/* Backup export lives here in the transaction frame — recovery-critical,
+            so it stays with the progress state rather than in a toast or the links row. */}
+        {direction && hasBackup && !isAllComplete && (
+          <>
+            <hr className="text-latest-grey-300 my-3" />
+            <button
+              onClick={handleExportBackup}
+              className="w-full text-13 font-semibold text-[#047857] bg-[#ecfdf5] hover:bg-[#d7f7e8] py-2 rounded-full transition-colors"
+            >
+              Export encrypted backup ↓
+            </button>
+            <p className="text-center text-11 text-latest-grey-500 mt-1.5">
+              Optional. Your data is already encrypted and backed up — this saves a local copy for manual recovery.
+            </p>
+          </>
+        )}
       </div>
 
       {/* Transaction Details */}
@@ -232,30 +268,6 @@ export default function ProgressCard({
           >
             View L2 Tx ↗
           </a>
-        )}
-        {direction && hasBackup && (
-          <button
-            onClick={() => {
-              try {
-                const key = direction === 'L1_TO_L2' ? STORAGE_KEYS.deposits : STORAGE_KEYS.withdrawals
-                const raw = localStorage.getItem(key)
-                if (!raw) return
-                const entries = JSON.parse(raw)
-                const latest = entries.filter((e: any) => !e.success).pop()
-                if (!latest) return
-                if (direction === 'L1_TO_L2') {
-                  exportClaimData(latest)
-                } else {
-                  exportWithdrawalData(latest)
-                }
-              } catch (e) {
-                console.error('[ProgressCard] Export failed:', e)
-              }
-            }}
-            className="text-14 font-semibold text-[#047857] bg-[#ecfdf5] hover:text-[#065f46] mt-2 block px-4 py-2 rounded-full transition-colors"
-          >
-            Export Backup ↓
-          </button>
         )}
       </div>
 

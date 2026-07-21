@@ -96,7 +96,7 @@ const ENV_CONFIG = {
     aztecNodeUrl: AZTEC_NODE_MAINNET,
     aztecscanUrl: 'https://aztecscan.xyz',
     aztecExplorerUrl: 'https://aztecexplorer.xyz/?network=mainnet',
-    chainName: 'Aztec Mainnet',
+    chainName: 'Aztec V5',
   },
 } as const
 

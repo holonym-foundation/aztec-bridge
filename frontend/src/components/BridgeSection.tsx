@@ -68,11 +68,11 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   return (
     <div className="flex flex-col">
       {/* From Section */}
-      <div className="bg-[#F5F5F5] rounded-md p-4 relative">
+      <div className="bg-[#F5F5F5] rounded-md p-3.5 relative">
         <p className="text-14 font-semibold text-latest-grey-100">From</p>
         <div className="flex justify-between">
           {/* Network selector */}
-          <div className="flex flex-col mt-3 gap-1">
+          <div className="flex flex-col mt-2.5 gap-1">
             <p className="text-12 text-[#747474]">Network</p>
             <div
               className="flex gap-2 items-center rounded-[12px] cursor-pointer bg-white p-[2px] max-w-[172px]"
@@ -87,7 +87,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             </div>
           </div>
           {/* Token selector */}
-          <div className="flex flex-col mt-3 gap-1">
+          <div className="flex flex-col mt-2.5 gap-1">
             <p className="text-12 text-[#747474]">Asset</p>
             <div
               className="flex gap-2 items-center rounded-md cursor-pointer bg-white p-[2px]"
@@ -105,7 +105,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             </div>
           </div>
         </div>
-        <hr className="text-latest-grey-300 my-3" />
+        <hr className="text-latest-grey-300 my-2.5" />
         <div className="flex justify-between my-1">
           <input
             ref={inputRef}
@@ -113,7 +113,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             placeholder="0"
             value={inputAmount}
             onChange={(e) => setInputAmount(e.target.value)}
-            className="max-w-[130px] placeholder-latest-grey-400 outline-none bg-[transparent] text-32 font-medium"
+            className="min-w-0 flex-1 mr-3 placeholder-latest-grey-400 outline-none bg-[transparent] text-32 font-medium"
             autoFocus
           />
           <div className="flex flex-col gap-2">
@@ -171,11 +171,11 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
       </div>
 
       {/* To Section */}
-      <div className="mt-2 bg-[#F5F5F5] rounded-md p-4">
+      <div className="mt-2 bg-[#F5F5F5] rounded-md p-3.5">
         <p className="text-14 font-semibold text-latest-grey-100">To</p>
         <div className="flex justify-between">
           {/* Network selector */}
-          <div className="flex flex-col mt-3 gap-1">
+          <div className="flex flex-col mt-2.5 gap-1">
             <p className="text-12 text-[#747474]">Network</p>
             <div
               className="flex gap-2 items-center rounded-[12px] cursor-pointer bg-white p-[2px] max-w-[172px]"
@@ -191,7 +191,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
           </div>
 
           {/* Token selector */}
-          <div className="flex flex-col mt-3 gap-1">
+          <div className="flex flex-col mt-2.5 gap-1">
             <p className="text-12 text-[#747474]">Asset</p>
             <div
               className="flex gap-2 items-center rounded-md cursor-pointer bg-white p-[2px]"
@@ -209,7 +209,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             </div>
           </div>
         </div>
-        <hr className="text-latest-grey-300 my-3" />
+        <hr className="text-latest-grey-300 my-2.5" />
         <div className="flex justify-between">
           <p className="text-14 font-medium text-latest-grey-100">You will receive</p>
           <p className="text-black text-14 font-semibold">

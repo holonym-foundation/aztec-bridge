@@ -76,6 +76,10 @@ interface BridgeActionButtonProps {
   setShowSBTModal: (show: boolean) => void
   setCurrentSBTChain: (chain: 'Ethereum' | 'Aztec') => void
 
+  // Claim-gas guard: the L2 claim would be paid from standing FeeJuice the user
+  // doesn't have. When true, the button becomes an "enable gas top-up" CTA.
+  needsClaimGas?: boolean
+  onAddClaimGas?: () => void
   // Compliance attestation
   pochEligible?: boolean
   pochLoading?: boolean
@@ -131,6 +135,8 @@ function BridgeActionButton({
   hasL2SBT,
   setShowSBTModal,
   setCurrentSBTChain,
+  needsClaimGas = false,
+  onAddClaimGas,
   pochEligible,
   pochLoading = false,
   pochReason,
@@ -250,6 +256,13 @@ function BridgeActionButton({
       return
     }
 
+    // Travel Rule: over the cumulative deposit cap — route to the Clean Hands / Passport
+    // upgrade screen instead of dead-ending on a disabled button.
+    if (travelRuleBlockedDeposit) {
+      onRequestVerification?.()
+      return
+    }
+
     // Step 3: Faucet if needed
     if (isStateInitialized && isEligibleForFaucet) {
       if (useExternalFaucet && handleExternalFaucet && needsGas && !needsTokensOnly) {
@@ -282,6 +295,14 @@ function BridgeActionButton({
     }
     if (!pochEligible) {
       onRequestVerification?.()
+      return
+    }
+
+    // Step 5b: Claim-gas guard — the L2 claim would have no FeeJuice to pay for
+    // itself. Steer the user into enabling gas top-up rather than letting them
+    // start a bridge that strands the funds at the claim step.
+    if (needsClaimGas) {
+      onAddClaimGas?.()
       return
     }
 
@@ -369,7 +390,6 @@ function BridgeActionButton({
     bridgeTokensToL2Pending ||
     isOperationPending ||
     depositLimitBlocked ||
-    travelRuleBlockedDeposit ||
     bridgeCompleted
 
   const isOperationInFlight =
@@ -432,6 +452,9 @@ function BridgeActionButton({
     // Attestation requirement applies to both public and private modes.
     if (pochLoading) return 'Checking eligibility...'
     if (!pochEligible) return 'Verify to continue'
+
+    // The L2 claim has no FeeJuice to pay for itself — turn on gas top-up first.
+    if (needsClaimGas) return 'Add gas to claim on Aztec'
 
     return getOperationLabel(direction)
   }

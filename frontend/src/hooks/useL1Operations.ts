@@ -527,31 +527,10 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             break
           // Persist encrypted payload on secrets_generated (recovery-critical)
           case BridgeEventType.SECRETS_GENERATED:
+            // Encrypted payload is persisted to localStorage by the SDK. The manual
+            // "export a local copy" affordance now lives inline in the progress frame
+            // (ProgressCard) instead of a persistent toast.
             console.log('[L1→L2] Secrets generated, encrypted payload persisted to localStorage via SDK')
-            notify(
-              'warn',
-              {
-                heading: 'Backup Available',
-                message:
-                  'Your deposit data is encrypted and backed up — only you can access it. For extra safety, click here to export a local copy — useful if you ever need to recover manually',
-              },
-              {
-                autoClose: false,
-                toastId: TOAST_ID_L1L2_BACKUP_AVAILABLE,
-                onClick: () => {
-                  try {
-                    const claims = localStorage.getItem(STORAGE_KEYS.deposits)
-                    if (claims) {
-                      const parsed = JSON.parse(claims)
-                      const latest = parsed.filter((c: any) => !c.success).pop()
-                      if (latest) exportClaimData(latest)
-                    }
-                  } catch (e) {
-                    console.error('[L1→L2] Failed to export claim data on toast click:', e)
-                  }
-                },
-              },
-            )
             break
           // Track operation ID for correlation
           case BridgeEventType.OPERATION_CREATED:

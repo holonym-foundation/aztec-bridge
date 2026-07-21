@@ -40,7 +40,7 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick }) => {
   const steps = getHeaderSteps()
 
   return (
-    <div className='flex flex-[1_0_0] items-center gap-[12px] rounded-[136px] border border-[#D4D4D4] bg-white px-[16px] py-[4px] pl-[8px]'>
+    <div className='flex w-full min-w-0 items-center gap-[12px] rounded-[136px] border border-[#D4D4D4] bg-white px-[16px] py-[4px] pl-[8px]'>
       <img
         src='/assets/svg/human.aztec.svg'
         alt=''

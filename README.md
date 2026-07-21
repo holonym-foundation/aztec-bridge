@@ -157,4 +157,4 @@ Contributions are welcome. Please open an issue to discuss substantial changes b
 
 ## License
 
-Licensing is specified per source file via SPDX identifiers; the codebase currently mixes MIT, Apache-2.0, and UNLICENSED headers across packages and contracts. A canonical repository license is being finalized. Until a root `LICENSE` is added, check individual file headers.
+Released under the [MIT License](LICENSE). Some individual source files carry their own SPDX license headers, which govern the files that bear them.

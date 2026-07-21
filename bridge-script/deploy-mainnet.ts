@@ -434,10 +434,14 @@ async function fundAndDeployL2Account(
 // packages/sdk/src/config.ts + frontend config — NOT by redeploying. This just surfaces the
 // real pool keys (and liquidity) for each leg of the fuel route before launch.
 const STATE_VIEW = '0x7ffe42c4a5deea5b0fec41c94c136cf115597227' as const
+// Mainnet V4 Quoter — mirror of packages/sdk/src/config.ts V4_ADDRESSES_BY_CHAIN[1].quoter.
+const QUOTER = '0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203' as const
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000' as const
-// MUST mirror packages/sdk/src/config.ts (FEE_POOL_FEE / tick spacing / FEE_POOL_USES_NATIVE_ETH).
-const ASSUMED_FEE = 10000
-const ASSUMED_TICK_SPACING = 200
+// MUST mirror packages/sdk/src/config.ts (FEE_POOL_FEE / tick spacing / FEE_POOL_HOOKS / FEE_POOL_USES_NATIVE_ETH).
+// Deep mainnet ETH/AZTEC pool (~$11M TVL, id 0xce2899b1…) is fee=500 / ts=10 with the CCA hook.
+const ASSUMED_FEE = 500
+const ASSUMED_TICK_SPACING = 10
+const ASSUMED_HOOKS = '0xd53006d1e3110fd319a79aeec4c527a0d265e080' as Hex
 const FEE_POOL_USES_NATIVE_ETH = true
 const V4_FEE_TIERS: { fee: number; tickSpacing: number }[] = [
   { fee: 100, tickSpacing: 1 },
@@ -464,6 +468,39 @@ const STATE_VIEW_ABI = [
     stateMutability: 'view',
     inputs: [{ name: 'poolId', type: 'bytes32' }],
     outputs: [{ name: 'liquidity', type: 'uint128' }],
+  },
+] as const
+const V4_QUOTER_ABI = [
+  {
+    type: 'function',
+    name: 'quoteExactInputSingle',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'params',
+        type: 'tuple',
+        components: [
+          {
+            name: 'poolKey',
+            type: 'tuple',
+            components: [
+              { name: 'currency0', type: 'address' },
+              { name: 'currency1', type: 'address' },
+              { name: 'fee', type: 'uint24' },
+              { name: 'tickSpacing', type: 'int24' },
+              { name: 'hooks', type: 'address' },
+            ],
+          },
+          { name: 'zeroForOne', type: 'bool' },
+          { name: 'exactAmount', type: 'uint128' },
+          { name: 'hookData', type: 'bytes' },
+        ],
+      },
+    ],
+    outputs: [
+      { name: 'amountOut', type: 'uint256' },
+      { name: 'gasEstimate', type: 'uint256' },
+    ],
   },
 ] as const
 
@@ -502,6 +539,36 @@ async function scanPair(stateView: any, label: string, a: Hex, b: Hex, logger: L
   return foundAssumed
 }
 
+// Source-of-truth liquidity probe: simulate the real terminal swap (base → AZTEC) at the
+// assumed key via the V4 Quoter. A nonzero output means the pool is usable NOW. StateView's
+// getLiquidity() only reports in-range-at-current-tick liquidity and reads 0 for a healthy
+// pool whose depth sits in adjacent ranges — so it cannot be trusted for the go/no-go call.
+async function probeFuelLeg(
+  l1Client: ExtendedViemWalletClient,
+  base: Hex,
+  feeJuice: Hex,
+  amountIn: bigint,
+): Promise<bigint> {
+  const quoter = getContract({ address: QUOTER, abi: V4_QUOTER_ABI, client: l1Client as any }) as any
+  const [c0, c1] = BigInt(base) < BigInt(feeJuice) ? [base, feeJuice] : [feeJuice, base]
+  const zeroForOne = c0.toLowerCase() === base.toLowerCase() // base in → AZTEC out
+  const poolKey = {
+    currency0: c0,
+    currency1: c1,
+    fee: ASSUMED_FEE,
+    tickSpacing: ASSUMED_TICK_SPACING,
+    hooks: ASSUMED_HOOKS,
+  }
+  try {
+    const { result } = await quoter.simulate.quoteExactInputSingle([
+      { poolKey, zeroForOne, exactAmount: amountIn, hookData: '0x' },
+    ])
+    return (Array.isArray(result) ? result[0] : result) as bigint
+  } catch {
+    return 0n
+  }
+}
+
 async function preflightPools(
   l1Client: ExtendedViemWalletClient,
   feeJuice: Hex,
@@ -516,8 +583,9 @@ async function preflightPools(
   const altBase = FEE_POOL_USES_NATIVE_ETH ? WETH : ZERO_ADDR
   const altLabel = FEE_POOL_USES_NATIVE_ETH ? 'WETH' : 'nativeETH'
 
-  // Terminal fuel leg (…→ AZTEC). Scan both bases so liquidity on the non-assumed side is visible.
-  const terminalOk = await scanPair(stateView, `${baseLabel}/AZTEC (terminal fuel leg)`, base, feeJuice, logger)
+  // Informational only — scanPair's liquidity column is in-range-at-current-tick and reads 0
+  // for healthy pools; the go/no-go decision below comes from the Quoter, not from these.
+  await scanPair(stateView, `${baseLabel}/AZTEC (terminal fuel leg)`, base, feeJuice, logger)
   await scanPair(stateView, `${altLabel}/AZTEC (alt base)`, altBase, feeJuice, logger)
 
   for (const tc of tokens) {
@@ -527,15 +595,20 @@ async function preflightPools(
     await scanPair(stateView, `${tc.symbol}/AZTEC (direct route)`, token, feeJuice, logger)
   }
 
-  if (!terminalOk) {
+  const probeIn = 10n ** 16n // 0.01 base units — small enough to route on a thin pool
+  const probeOut = await probeFuelLeg(l1Client, base, feeJuice, probeIn)
+  if (probeOut > 0n) {
+    logger.info(
+      `  ✅ Fuel pool usable — V4 Quoter routes 0.01 ${baseLabel} → ${probeOut} AZTEC at the assumed key (fee=${ASSUMED_FEE}, tickSpacing=${ASSUMED_TICK_SPACING}).`,
+    )
+  } else {
+    // Mainnet liquidity is provided by the market — this script never seeds pools.
     const msg =
-      `No liquid AZTEC fuel pool at the assumed key (fee=${ASSUMED_FEE}, tickSpacing=${ASSUMED_TICK_SPACING}, ${baseLabel}). ` +
-      'Fuel swaps will fail until a pool is seeded or the SDK/frontend pool-key config is updated to match a pool listed above.'
+      `V4 Quoter could not route ${baseLabel} → AZTEC at the assumed key (fee=${ASSUMED_FEE}, tickSpacing=${ASSUMED_TICK_SPACING}). ` +
+      'Fuel swaps will fail until the pool has liquidity or the SDK/frontend pool-key config is pointed at a liquid pool listed above.'
     if (process.env.STRICT_POOL_CHECK === 'true') throw new Error(msg)
     logger.warn(`  ⚠️  ${msg}`)
     logger.warn('  (Set STRICT_POOL_CHECK=true to abort on this. Plain bridging is unaffected.)')
-  } else {
-    logger.info(`  ✅ Liquid AZTEC fuel pool found at the assumed key (fee=${ASSUMED_FEE}, ${baseLabel}).`)
   }
 }
 

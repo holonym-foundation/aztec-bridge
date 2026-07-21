@@ -17,6 +17,7 @@ import {
   INTERMEDIATE_POOL_TICK_SPACING,
   FEE_POOL_FEE,
   FEE_POOL_TICK_SPACING,
+  FEE_POOL_HOOKS,
   FEE_POOL_USES_NATIVE_ETH,
   DIRECT_POOL_FEE,
   DIRECT_POOL_TICK_SPACING,
@@ -126,7 +127,13 @@ const ZERO_HOOKS = '0x0000000000000000000000000000000000000000' as `0x${string}`
 /**
  * Build a PoolKey with currencies sorted numerically (V4 requirement: currency0 < currency1).
  */
-function buildPoolKey(tokenA: string, tokenB: string, fee: number, tickSpacing: number): PoolKeyParam {
+function buildPoolKey(
+  tokenA: string,
+  tokenB: string,
+  fee: number,
+  tickSpacing: number,
+  hooks: `0x${string}` = ZERO_HOOKS,
+): PoolKeyParam {
   const a = BigInt(tokenA)
   const b = BigInt(tokenB)
   const [currency0, currency1] = a < b ? [tokenA, tokenB] : [tokenB, tokenA]
@@ -135,7 +142,7 @@ function buildPoolKey(tokenA: string, tokenB: string, fee: number, tickSpacing: 
     currency1: currency1 as `0x${string}`,
     fee,
     tickSpacing,
-    hooks: ZERO_HOOKS,
+    hooks,
   }
 }
 
@@ -173,7 +180,7 @@ export function buildSwapCandidates(inputToken: `0x${string}`): CandidateRoute[]
     // WETH only has one route: WETH → FeeJuice
     candidates.push({
       label: 'direct-weth',
-      poolKeys: [buildPoolKey(feePoolBase, aztec, FEE_POOL_FEE, FEE_POOL_TICK_SPACING)],
+      poolKeys: [buildPoolKey(feePoolBase, aztec, FEE_POOL_FEE, FEE_POOL_TICK_SPACING, FEE_POOL_HOOKS)],
       zeroForOnes: [isZeroForOne(feePoolBase, aztec)],
     })
     return candidates
@@ -199,7 +206,7 @@ export function buildSwapCandidates(inputToken: `0x${string}`): CandidateRoute[]
       label: `via-eth-${tier.fee}`,
       poolKeys: [
         buildPoolKey(inputToken, NATIVE_ETH, tier.fee, tier.tickSpacing),
-        buildPoolKey(feePoolBase, aztec, FEE_POOL_FEE, FEE_POOL_TICK_SPACING),
+        buildPoolKey(feePoolBase, aztec, FEE_POOL_FEE, FEE_POOL_TICK_SPACING, FEE_POOL_HOOKS),
       ],
       zeroForOnes: [isZeroForOne(inputToken, NATIVE_ETH), isZeroForOne(feePoolBase, aztec)],
     })

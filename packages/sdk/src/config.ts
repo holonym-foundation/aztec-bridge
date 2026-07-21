@@ -53,9 +53,12 @@ export const NATIVE_ETH = '0x0000000000000000000000000000000000000000' as const
 /** Fees and tick spacings for the canonical fuel swap pools */
 export const INTERMEDIATE_POOL_FEE = 3000 as const
 export const INTERMEDIATE_POOL_TICK_SPACING = 60 as const
-// Mainnet ETH/AZTEC V4 pool is fee=10000 / tickSpacing=200 (verified on-chain; fee=3000 is empty).
-export const FEE_POOL_FEE = 10000 as const
-export const FEE_POOL_TICK_SPACING = 200 as const
+// Mainnet ETH/AZTEC fuel pool: the deep pool (~$11M TVL, pool id 0xce2899b1…) is
+// fee=500 / tickSpacing=10 with the CCA token-sale hook 0xd53006d1…. The hookless
+// fee=10000/ts=200 pool also exists but is ~28x shallower. Verified on-chain via V4 Quoter.
+export const FEE_POOL_FEE = 500 as const
+export const FEE_POOL_TICK_SPACING = 10 as const
+export const FEE_POOL_HOOKS = '0xd53006d1e3110fd319a79aeec4c527a0d265e080' as const
 export const DIRECT_POOL_FEE = 3000 as const
 export const DIRECT_POOL_TICK_SPACING = 60 as const
 

@@ -357,19 +357,32 @@ export default function ShieldOnboarding() {
   const [leaving, setLeaving] = useState(false)
 
   useEffect(() => {
-    // First visit runs the full flow. A returning visitor who isn't connected yet
-    // gets the branded splash with a connect CTA. A connected visitor drops straight
-    // into the bridge. Reacting to isWaapConnected also auto-dismisses the splash the
-    // moment the wallet connects.
+    // First visit runs the full flow (once). Every subsequent page load — including a
+    // refresh by a connected user — lands on the branded splash; the user explicitly
+    // re-enters the bridge from there. Decided once on mount so a wallet reconnecting
+    // mid-session doesn't tear the splash down underneath the user.
     let onboarded = false
     try {
       onboarded = !!localStorage.getItem(ONBOARDED_KEY)
     } catch {
       onboarded = false
     }
-    if (!onboarded) setMode('flow')
-    else setMode(isWaapConnected ? 'hidden' : 'splash')
-  }, [isWaapConnected])
+    setMode(onboarded ? 'splash' : 'flow')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Signal the splash state to the app chrome via a root attribute. When the splash is
+  // up for a *connected* user, ClientLayout lifts the real nav bar above the overlay so
+  // they keep their account/nav; otherwise the splash covers everything.
+  useEffect(() => {
+    const root = document.documentElement
+    if (mode === 'splash') {
+      root.setAttribute('data-ob-splash', isWaapConnected ? 'connected' : 'active')
+    } else {
+      root.removeAttribute('data-ob-splash')
+    }
+    return () => root.removeAttribute('data-ob-splash')
+  }, [mode, isWaapConnected])
 
   const markOnboarded = () => {
     try {
@@ -400,7 +413,8 @@ export default function ShieldOnboarding() {
   }
 
   const connectFromSplash = () => {
-    connectWallet()
+    // Already-connected returning users just re-enter the bridge; otherwise open WaaP.
+    if (!isWaapConnected) connectWallet()
     setMode('hidden')
   }
 
@@ -505,7 +519,7 @@ export default function ShieldOnboarding() {
           </div>
           <div className="ob-controls">
             <div className="ob-btns">
-              <button className="ob-next" onClick={connectFromSplash}>Connect wallet</button>
+              <button className="ob-next" onClick={connectFromSplash}>{isWaapConnected ? 'Enter app' : 'Connect wallet'}</button>
             </div>
             <p className="ob-secured">
               Secured by <strong>human.tech</strong>
@@ -568,6 +582,9 @@ export default function ShieldOnboarding() {
         .ob-root { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column;
           overflow: hidden; font-family: 'Suisse Intl', system-ui, sans-serif;
           background: #fff6fa; color: #1c1116; }
+        /* Connected user on the splash: lift the real app nav bar above this overlay so
+           it stays usable. Toggled by data-ob-splash="connected" on <html>. */
+        html[data-ob-splash="connected"] .ob-header-elevate { z-index: 130 !important; }
         /* Inner content overlay: fades in over the persistent shader shell. */
         .ob-inner { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; }
         .ob-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; }

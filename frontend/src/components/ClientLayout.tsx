@@ -54,11 +54,15 @@ export default function ClientLayout({
           willChange: 'opacity',
         }}
       /> */}
-      {/* Main content */}
-      <div className="relative z-20 flex flex-col min-h-screen">
+      {/* Header — kept in its own stacking wrapper so it can be lifted above the
+          onboarding splash overlay (z-100) for connected users. See data-ob-splash. */}
+      <div className="ob-header-elevate relative z-20 flex flex-col">
         <BannerAztecTestnet />
         <BannerAztecNodeError />
         <Header />
+      </div>
+      {/* Main content */}
+      <div className="relative z-20 flex flex-col flex-grow min-h-0">
         <div className='flex-grow'>{children}</div>
         <Footer className='' />
       </div>

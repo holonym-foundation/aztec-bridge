@@ -249,6 +249,13 @@ function BridgeActionButton({
       return
     }
 
+    // Travel Rule: over the cumulative deposit cap — route to the Clean Hands / Passport
+    // upgrade screen instead of dead-ending on a disabled button.
+    if (travelRuleBlockedDeposit) {
+      onRequestVerification?.()
+      return
+    }
+
     // Step 3: Faucet if needed
     if (isStateInitialized && isEligibleForFaucet) {
       if (useExternalFaucet && handleExternalFaucet && needsGas && !needsTokensOnly) {
@@ -368,7 +375,6 @@ function BridgeActionButton({
     bridgeTokensToL2Pending ||
     isOperationPending ||
     depositLimitBlocked ||
-    travelRuleBlockedDeposit ||
     bridgeCompleted
 
   const isOperationInFlight =

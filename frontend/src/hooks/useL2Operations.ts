@@ -346,27 +346,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             break
           // Persist encrypted nonce payload (recovery-critical)
           case BridgeEventType.NONCE_GENERATED:
+            // Encrypted payload is persisted to localStorage by the SDK. The manual
+            // "export a local copy" affordance now lives inline in the progress frame
+            // (ProgressCard) instead of a persistent toast.
             console.log('[L2→L1] Nonce generated, encrypted payload persisted to localStorage via SDK')
-            notify(
-              'warn',
-              {
-                heading: 'Backup Available',
-                message:
-                  'Your withdrawal data is encrypted and backed up — only you can access it. For extra safety, click here to export a local copy — useful if you ever need to recover manually',
-              },
-              {
-                autoClose: false,
-                onClick: () => {
-                  try {
-                    const pending = getPendingWithdrawals()
-                    const latest = pending[pending.length - 1]
-                    if (latest) exportWithdrawalData(latest)
-                  } catch (e) {
-                    console.error('[L2→L1] Failed to export withdrawal data on toast click:', e)
-                  }
-                },
-              },
-            )
             break
           // Track operation ID for correlation
           case BridgeEventType.OPERATION_CREATED:

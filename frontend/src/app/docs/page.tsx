@@ -2,7 +2,7 @@ import Link from 'next/link'
 import React from 'react'
 
 export const metadata = {
-  title: 'Docs · Aztec Bridge',
+  title: 'Docs · Shield',
   description: 'Documentation for the Aztec Token Bridge — user guides and SDK reference.',
 }
 

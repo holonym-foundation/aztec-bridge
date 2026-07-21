@@ -64,7 +64,9 @@ const SCREENS: Screen[] = [
               <strong>Above $1,000</strong>
               <span>
                 Prove your hands are clean.{' '}
-                <a href={DOCS_CLEAN_HANDS} className="ob-link">Learn more</a>
+                <InfoTooltip href="https://human.tech/shield" label="Learn more about Proof of Clean Hands">
+                  Above $1,000 you verify a government ID in zero knowledge. Learn more at human.tech/shield.
+                </InfoTooltip>
               </span>
             </div>
           </div>
@@ -82,9 +84,7 @@ const SCREENS: Screen[] = [
         <p>
           Your privacy is enforced by zero knowledge proofs, not promises.
           <InfoTooltip label="Learn more about the privacy guarantee">
-            Your proofs are generated locally. Shield checks only what a rule requires and stores
-            nothing else. That is the data minimization guarantee zero knowledge proofs make
-            possible.
+            Your proofs are generated locally. Shield checks only what a rule requires and stores nothing else.
           </InfoTooltip>
         </p>
         <p>
@@ -287,27 +287,45 @@ function TierIcon({ kind }: { kind: 'unique' | 'clean' }) {
    hover or keyboard focus. No external positioning library, no portal, just a relatively
    positioned bubble anchored to the trigger. The trigger sits inline with the sentence
    and never forces a line break. */
-function InfoTooltip({ label, children }: { label: string; children: ReactNode }) {
+function InfoTooltip({ label, children, href }: { label: string; children: ReactNode; href?: string }) {
   const [open, setOpen] = useState(false)
   const tooltipId = useId()
+  const icon = (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="8" cy="4.7" r="0.95" fill="currentColor" />
+      <path d="M8 7.1v4.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
   return (
     <span className="ob-tooltip" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button
-        type="button"
-        className="ob-tooltip-trigger"
-        aria-label={label}
-        aria-describedby={tooltipId}
-        aria-expanded={open}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.3" />
-          <circle cx="8" cy="4.7" r="0.95" fill="currentColor" />
-          <path d="M8 7.1v4.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        </svg>
-      </button>
+      {href ? (
+        <a
+          className="ob-tooltip-trigger"
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={label}
+          aria-describedby={tooltipId}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+        >
+          {icon}
+        </a>
+      ) : (
+        <button
+          type="button"
+          className="ob-tooltip-trigger"
+          aria-label={label}
+          aria-describedby={tooltipId}
+          aria-expanded={open}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {icon}
+        </button>
+      )}
       <AnimatePresence>
         {open && (
           <motion.span

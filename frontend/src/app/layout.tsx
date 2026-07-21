@@ -24,8 +24,8 @@ export default function RootLayout({
     return (
       <html lang="en">
         <head>
-          <title>Bridge to Aztec</title>
-          <meta name="description" content="Pay and Transact Privately by Bridging to Aztec with human.tech" />
+          <title>Shield | Private Transactions via Aztec</title>
+          <meta name="description" content="Move your funds between Ethereum and Aztec with privacy. Shield is human.tech's programmable privacy bridge." />
         </head>
         <body className="">
           <AppLoadingScreen />
@@ -37,8 +37,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <title>Bridge to Aztec</title>
-        <meta name="description" content="Pay and Transact Privately by Bridging to Aztec with human.tech" />
+        <title>Shield | Private Transactions via Aztec</title>
+        <meta name="description" content="Move your funds between Ethereum and Aztec with privacy. Shield is human.tech's programmable privacy bridge." />
       </head>
       <body className="">
         <Providers>

@@ -17,7 +17,7 @@ import { screenAddress, SanctionsScreeningUnavailableError } from '@/lib/sanctio
  * 1. Authenticate user (JWT)
  * 2. Enforce 1:1 address binding (l1Address <-> l2Address)
  * 3. Sanctions screening (fail closed on vendor outage)
- * 4. Verify clean hands via Holonym sandbox API
+ * 4. Verify clean hands via Holonym (sandbox on testnet, production on mainnet)
  * 5. Issue signed attestation from our POCH attester (L1 ECDSA + L2 Schnorr)
  *
  * Body: { l2Address: string, isPrivate?: boolean }

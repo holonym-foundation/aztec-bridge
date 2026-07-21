@@ -8,6 +8,7 @@ import { extractErrorMessage } from '@/utils'
 import { parseUnits } from 'viem'
 import CongestionWarningModal from './model/CongestionWarningModal'
 import { useL2PendingTxCount, useNetworkHealth } from '@/hooks/useL2Operations'
+import { POCH_MINT_URL } from '@/config'
 
 function LoadingContent({ label }: { label: string }) {
   return (
@@ -301,7 +302,7 @@ function BridgeActionButton({
               React.createElement(
                 'a',
                 {
-                  href: 'https://id.human.tech/sandbox/clean-hands',
+                  href: POCH_MINT_URL,
                   target: '_blank',
                   rel: 'noopener noreferrer',
                   style: { color: '#BF1254', textDecoration: 'underline' },

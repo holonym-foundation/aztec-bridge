@@ -194,6 +194,9 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
   const claimFeeFj = claimFeeLimit != null ? formatFjAmount(claimFeeLimit, 2) : null
 
   const [spendAmount, setSpendAmount] = useState('')
+  // When the user is already covered we hide the top-up form, but keep a subtle opt-in
+  // so they can still add more Fee Juice on purpose.
+  const [optionalTopUpOpen, setOptionalTopUpOpen] = useState(false)
   const fuelAmount = deriveFuelAmount(spendAmount, fundingDecimals)
 
   const { fjOutput, loading: quoteLoading, error: quoteError } = useTopUpQuote(fuelAmount, fundingAddress, fundingDecimals)
@@ -286,14 +289,30 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
     spend(recommended)
   }
 
+  // Covered = the applicable-mode balance already meets the claim, so no top-up is required.
+  // Drives the headline (no "Add Fee Juice" call-to-action when nothing needs adding) and
+  // hides the form behind a subtle opt-in.
+  const covered = alreadyEnough
+  const showForm = !covered || optionalTopUpOpen
+  const modeIsPrivate = fuelType === 'private'
+  const modeIcon = modeIsPrivate ? 'ph:lock-key-fill' : 'ph:globe-hemisphere-west-fill'
+  const modeColor = modeIsPrivate ? '#81133B' : '#17235E'
+  const modeLabel = modeIsPrivate ? 'Private' : 'Public'
+  const haveBalance = applicableBalanceStr != null && applicableBalanceStr !== '--' ? applicableBalanceStr : '--'
+  const needLabel = claimFeeLoading || claimFeeFj == null ? '…' : `~${claimFeeFj} FJ`
+
   return (
     <div className="rounded-md border border-[#81133B]/40 bg-[#F9EEF3] px-3 py-3 space-y-2.5">
-      <div className="flex items-center justify-between">
-        <p className="text-13 font-semibold text-[#81133B]">Add Fee Juice</p>
-        <span className="flex items-center gap-1 text-11 text-latest-grey-500">
-          <Icon icon="ph:gas-pump-fill" width={12} height={12} className="text-[#17235E]" />
-          claim gas {claimFeeLoading || claimFeeFj == null ? '…' : `~${claimFeeFj} FJ`}
-        </span>
+      <div className="flex items-center gap-1.5">
+        <Icon
+          icon={covered ? 'ph:check-circle-fill' : 'ph:plus-circle-fill'}
+          width={16}
+          height={16}
+          style={{ color: covered ? '#17235E' : '#81133B' }}
+        />
+        <p className="text-13 font-semibold" style={{ color: covered ? '#17235E' : '#81133B' }}>
+          {covered ? 'You have enough Fee Juice' : 'Add Fee Juice'}
+        </p>
       </div>
 
       {!canTopUp ? (
@@ -310,76 +329,82 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
             .privacy-mode-toggle.fj-mode-hint { animation: fjModePulse 1s ease-in-out infinite; border-radius: 9999px; }
           `}</style>
 
-          {/* Mode indicator: which Fee Juice you're buying, and where to switch. Hovering it
-              pulses the Privacy Mode toggle in the top nav (we don't build a second toggle here). */}
-          <div
-            onMouseEnter={() => pulsePrivacyToggle(true)}
-            onMouseLeave={() => pulsePrivacyToggle(false)}
-            title="Switch modes with the Privacy Mode toggle in the top bar"
-            className={`flex cursor-help items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 ${
-              fuelType === 'private' ? 'border-[#81133B]/40 bg-[#81133B]/[0.06]' : 'border-[#17235E]/30 bg-[#17235E]/[0.06]'
-            }`}
-          >
-            <span
-              className={`flex items-center gap-1 text-12 font-semibold ${
-                fuelType === 'private' ? 'text-[#81133B]' : 'text-[#17235E]'
-              }`}
-            >
-              <Icon icon={fuelType === 'private' ? 'ph:lock-key-fill' : 'ph:globe-hemisphere-west-fill'} width={13} height={13} />
-              Buying {fuelType === 'private' ? 'private' : 'public'} Fee Juice
+          {/* Available vs required — one compact, mode-aware line (#204). Globe = public, lock = private. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-11 text-latest-grey-600">
+            <span className="flex items-center gap-1">
+              <Icon icon="ph:gas-pump-fill" width={12} height={12} className="text-[#17235E]" />
+              Need <span className="font-semibold text-latest-black-100">{needLabel}</span>
             </span>
-            <span className="flex items-center gap-0.5 text-11 text-latest-grey-500">
-              Privacy Mode
-              <Icon icon="ph:arrow-up-bold" width={11} height={11} />
+            <span className="text-latest-grey-400">·</span>
+            <span className="flex items-center gap-1">
+              You have <span className="font-semibold text-latest-black-100">{haveBalance} FJ</span>
+              <Icon icon={modeIcon} width={11} height={11} style={{ color: modeColor }} />
             </span>
           </div>
 
-          <p className="text-11 leading-[15px] text-[#737373]">
-            Buy with {fundingSymbol} on Ethereum, bridged to Aztec.
-          </p>
+          {/* Single mode indicator: which Fee Juice you're buying, with a worded pointer to the
+              Privacy Mode slider in the top nav. Hovering pulses that slider (no toggle built here). */}
+          <div
+            onMouseEnter={() => pulsePrivacyToggle(true)}
+            onMouseLeave={() => pulsePrivacyToggle(false)}
+            title="Change modes with the Privacy Mode slider in the top nav"
+            className={`cursor-help rounded-md border px-2.5 py-1.5 ${
+              modeIsPrivate ? 'border-[#81133B]/40 bg-[#81133B]/[0.06]' : 'border-[#17235E]/30 bg-[#17235E]/[0.06]'
+            }`}
+          >
+            <div className="flex items-center gap-1.5 text-12 font-semibold" style={{ color: modeColor }}>
+              <Icon icon={modeIcon} width={14} height={14} />
+              {modeLabel} Fee Juice
+            </div>
+            <div className="mt-0.5 flex items-center gap-1 text-11 text-latest-grey-500">
+              <Icon icon="ph:arrow-up-bold" width={10} height={10} />
+              Change in Privacy Mode (top nav)
+            </div>
+          </div>
 
           {pricesError && (
-            <p className="text-11 text-amber-600">Live prices unavailable — using fallback prices</p>
+            <p className="text-11 text-amber-600">Live prices unavailable, using fallback prices</p>
           )}
 
-          {/* Single coherent status — mode-specific, never two opposing statements (#184). */}
-          {landingClaimShort ? (
-            landingCovered ? (
-              <div className="flex items-start gap-1.5 rounded-md bg-[#17235E]/[0.08] px-2.5 py-1.5">
-                <Icon icon="ph:check-circle-fill" width={14} height={14} className="mt-0.5 flex-shrink-0 text-[#17235E]" />
-                <p className="text-11 leading-[15px] text-[#737373]">
-                  <span className="font-semibold text-[#17235E]">You have enough public Fee Juice</span> to cover this
-                  claim. No top-up needed, just resume.
-                </p>
-              </div>
-            ) : fuelType === 'private' ? (
-              <div className="flex items-start gap-1.5 rounded-md bg-[#D92D20]/[0.08] px-2.5 py-1.5">
-                <Icon icon="ph:warning-circle-fill" width={14} height={14} className="mt-0.5 flex-shrink-0 text-[#D92D20]" />
-                <p className="text-11 leading-[15px] text-[#737373]">
-                  <span className="font-semibold text-[#D92D20]">Claim ran short on L2 gas.</span> This claim needs fresh
-                  private Fee Juice; your existing private balance won&apos;t apply. Add some below, or switch to public
-                  mode with Privacy Mode.
-                </p>
-              </div>
-            ) : (
-              <div className="flex items-start gap-1.5 rounded-md bg-[#D92D20]/[0.08] px-2.5 py-1.5">
-                <Icon icon="ph:warning-circle-fill" width={14} height={14} className="mt-0.5 flex-shrink-0 text-[#D92D20]" />
-                <p className="text-11 leading-[15px] text-[#737373]">
-                  <span className="font-semibold text-[#D92D20]">Claim ran short on L2 gas.</span> Add Fee Juice below,
-                  then resume. Your funds stay safe.
-                </p>
-              </div>
-            )
-          ) : (
-            alreadyEnough && (
-              <p className="flex items-center gap-1 text-12 font-medium text-[#17235E]">
-                <Icon icon="ph:check-circle-fill" width={14} height={14} />
-                You have enough Fee Juice. No top-up needed.
+          {/* One coherent status line — mode-specific, never two opposing statements. */}
+          {covered ? (
+            <p className="flex items-center gap-1.5 text-11 leading-[15px] text-[#737373]">
+              <Icon icon="ph:check-circle-fill" width={13} height={13} className="flex-shrink-0 text-[#17235E]" />
+              {landingClaimShort ? 'You can resume now, no top-up needed.' : 'No top-up needed.'}
+            </p>
+          ) : selfFundLandingShort ? (
+            <div className="flex items-start gap-1.5 rounded-md bg-[#D92D20]/[0.08] px-2.5 py-1.5">
+              <Icon icon="ph:warning-circle-fill" width={14} height={14} className="mt-0.5 flex-shrink-0 text-[#D92D20]" />
+              <p className="text-11 leading-[15px] text-[#737373]">
+                <span className="font-semibold text-[#D92D20]">This claim needs fresh private Fee Juice.</span> Your
+                existing private balance won&apos;t apply. Add some below, or switch to public in Privacy Mode.
               </p>
-            )
+            </div>
+          ) : landingClaimShort ? (
+            <div className="flex items-start gap-1.5 rounded-md bg-[#D92D20]/[0.08] px-2.5 py-1.5">
+              <Icon icon="ph:warning-circle-fill" width={14} height={14} className="mt-0.5 flex-shrink-0 text-[#D92D20]" />
+              <p className="text-11 leading-[15px] text-[#737373]">
+                <span className="font-semibold text-[#D92D20]">Claim ran short on L2 gas.</span> Add Fee Juice below,
+                then resume. Your funds stay safe.
+              </p>
+            </div>
+          ) : (
+            <p className="text-11 leading-[15px] text-[#737373]">
+              Buy with {fundingSymbol} on Ethereum, bridged to Aztec.
+            </p>
           )}
 
-          {!alreadyEnough && (
+          {covered && !optionalTopUpOpen && (
+            <button
+              type="button"
+              onClick={() => setOptionalTopUpOpen(true)}
+              className="text-11 font-medium text-latest-grey-500 underline underline-offset-2 transition-colors hover:text-[#81133B]"
+            >
+              Top up anyway
+            </button>
+          )}
+
+          {showForm && (
             <>
               {/* One-tap auto: recommended amount + immediate top-up (single click, never silent).
                   Becomes an active connect prompt when a wallet is missing — never a dead button. */}
@@ -501,7 +526,7 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
 
           {topUp.isPending && (
             <p className="text-11 leading-[15px] text-[#737373]">
-              Keep this page open — the bridge to Aztec can take ~5–15 minutes.
+              Keep this page open. The bridge to Aztec can take ~5 to 15 minutes.
             </p>
           )}
         </>

@@ -37,6 +37,7 @@ export default function ProgressPage() {
     fuelEnabled,
     fuelAmount: fuelAmountStr,
     fuelType,
+    isPrivacyModeEnabled,
   } = useBridgeStore()
 
   const steps = getProgressSteps()
@@ -214,6 +215,8 @@ export default function ProgressPage() {
             toNetwork={toNetwork}
             direction={direction === BridgeDirection.L1_TO_L2 ? 'L1_TO_L2' : 'L2_TO_L1'}
             errorMessage={errorMessage}
+            isPrivate={isPrivacyModeEnabled}
+            currentPrivacyMode={isPrivacyModeEnabled}
           />
 
           <FuelClaimLinkPanel />

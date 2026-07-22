@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
 import {
   ALL_DEPLOYMENTS,
   ACTIVE_DEPLOYMENT_ID,
@@ -97,16 +98,30 @@ const DeploymentSelector: React.FC = () => {
 
   return (
     <div className={`relative flex justify-center ${open ? 'z-[120]' : ''}`} ref={dropdownRef}>
-      {/* Collapsed indicator — bare control (no pill of its own; it lives inside
-          the brand pill, #113). Shows the version + Aztec network, with a caret
-          that reveals the full network detail on open. */}
+      {/* Collapsed indicator — a soft, clearly-connected sub-panel that reads as
+          a sub-line of the Shield brand pill above it (#158): a subtle inset
+          fill + hairline border and a soft dropdown caret. Shows the version +
+          Aztec network; the caret reveals the full network detail on open. */}
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 max-w-full leading-none cursor-pointer"
+        className={`flex items-center gap-1 max-w-full leading-none cursor-pointer rounded-full px-2.5 py-1 transition-colors ${
+          isDark
+            ? 'bg-white/[0.06] border border-white/[0.10] hover:bg-white/[0.10]'
+            : 'bg-[#81133B]/[0.04] border border-[#81133B]/[0.08] hover:bg-[#81133B]/[0.07]'
+        }`}
         title={`${versionLabel} · ${L1_NETWORK?.title ?? ''} / ${L2_NETWORK?.title ?? ''}`}
       >
         <span className={`text-[10px] font-medium ${vColor}`}>v</span>
         <span className={`text-[10px] font-semibold ${versionColor}`}>{versionLabel}</span>
+        {/* Alpha badge (#159): Aztec runs on an early Alpha network. Amber (not
+            brand pink) so it reads as a caution, with hover detail + link. */}
+        <span
+          data-tooltip-id="deployment-alpha-tooltip"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center px-1 py-[1px] rounded-full text-[8px] font-bold uppercase tracking-wide cursor-help bg-[#C3811D]/[0.12] text-[#B0781F] border border-[#C3811D]/[0.30]"
+        >
+          Alpha
+        </span>
         {L2_NETWORK?.title && (
           <>
             <span className={`hidden sm:inline text-[10px] ${vColor}`}>·</span>
@@ -123,6 +138,27 @@ const DeploymentSelector: React.FC = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
+      <ReactTooltip
+        id="deployment-alpha-tooltip"
+        place="bottom"
+        clickable
+        className="z-[130] max-w-[220px]"
+        style={{ fontSize: '11px', padding: '6px 8px' }}
+        render={() => (
+          <span>
+            Aztec is in Alpha. This is an early network. Treat every transaction as final and bridge only what you can afford to lose.{' '}
+            <a
+              href="https://aztec.network/blog/introducing-alpha-v5"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-medium"
+            >
+              Learn about Alpha v5
+            </a>
+            .
+          </span>
+        )}
+      />
 
       {open && (
         <div
@@ -130,8 +166,23 @@ const DeploymentSelector: React.FC = () => {
             isDark ? 'bg-[#2A0E1C]/[0.97] border-white/[0.12] backdrop-blur-md' : 'bg-white border-[#E0E0E0]'
           }`}>
           {/* ── Current network (display-only) ─────────────────────────── */}
-          <div className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-white/[0.60]' : 'text-gray-400'}`}>
+          <div className={`flex items-center gap-1 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-white/[0.60]' : 'text-gray-400'}`}>
             Network
+            {/* (i) tooltip (#159) — the "one network per deployment" note now
+                lives in this hover so the panel stays compact and copy stays
+                short (no dashes). */}
+            <span
+              data-tooltip-id="deployment-network-tooltip"
+              data-tooltip-content="Each network runs on its own deployment. Only this one is switchable here."
+              className="inline-flex cursor-help"
+              aria-label="Why can't I switch networks here?"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.2" />
+                <circle cx="8" cy="5.1" r="0.85" fill="currentColor" />
+                <path d="M8 7.2v3.9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            </span>
           </div>
           {[L1_NETWORK, L2_NETWORK].filter(Boolean).map((n) => (
             <div key={n!.id} className="flex items-center gap-2.5 px-3 py-2">
@@ -152,11 +203,13 @@ const DeploymentSelector: React.FC = () => {
               </span>
             </div>
           ))}
-          <p className={`px-3 pt-1 pb-2 text-[10px] leading-snug ${isDark ? 'text-white/[0.50]' : 'text-gray-400'}`}>
-            This app is pinned to one network per deployment. Other networks
-            (e.g. mainnet) run on separate deployments — they can&apos;t be
-            switched here.
-          </p>
+          <ReactTooltip
+            id="deployment-network-tooltip"
+            place="top"
+            className="z-[130] max-w-[220px]"
+            style={{ fontSize: '11px', padding: '6px 8px' }}
+          />
+          <div className="h-1.5" />
 
           {/* ── Deployment version (dev-only switch, preserved) ────────── */}
           {hasMultiple && (

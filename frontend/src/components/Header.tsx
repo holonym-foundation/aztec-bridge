@@ -1083,18 +1083,19 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   const walletCluster = !isWaapConnected && !isAztecConnected ? (
     <ConnectWalletPill onClick={handleConnectWallet} connecting={isL1Connecting} isDark={isDark} />
   ) : (
-    // Merged wallet cluster — ONE rounded glass-pill container (the
-    // GLASS_PILL material lives here, once) holding the ETH row and Aztec
-    // row flush against each other, separated only by a glassy hairline
-    // divider (see below). Each row renders `flat` (see WalletDisplay/
-    // WalletConnectPill above) so it has no independent rounded
-    // border/shadow/blur of its own — previously each row carried its own
-    // full GLASS_PILL treatment, which read as two stacked pills rather
-    // than one unified control. Each row also carries `roundedEdge` so its
-    // own hover/active background is rounded to match this container's
-    // corners (top row rounds top, bottom row rounds bottom) instead of a
-    // square corner poking past the pill's curve (see issue #72).
-    <div className={`flex flex-col w-[150px] sm:w-[248px] flex-shrink-0 rounded-[20px] ${glassPill(isDark)}`}>
+    // Merged wallet cluster — a single FLAT segment, not a pill. It holds the
+    // ETH row and the Aztec row flush against each other, split by one hairline
+    // divider (below). Deliberately NOT a glass pill: a raised pill here read as
+    // a second pill sitting ON TOP of the nav's own pill ("pill on pill"), so it
+    // carries no fill/shadow/blur and is instead segmented off with a single
+    // vertical hairline on its left edge. Each row renders `flat` (plain
+    // rectangular rows, no rounded/border/shadow of their own) so the two
+    // addresses read as one clean flush segment.
+    <div
+      className={`flex flex-col w-[150px] sm:w-[252px] flex-shrink-0 pl-2 sm:pl-3 border-l ${
+        isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
+      }`}
+    >
       {isWaapConnected ? (
         <WalletDisplay
           address={waapAddress || undefined}
@@ -1106,7 +1107,6 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           walletType={WalletType.WAAP}
           loginMethod={loginMethod}
           flat
-          roundedEdge="top"
           isDark={isDark}
           actionsLocked={isTransferInProgress}
         />
@@ -1118,16 +1118,13 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           disabled={isL1Connecting}
           title="Connect Ethereum (L1) wallet"
           flat
-          roundedEdge="top"
           isDark={isDark}
         />
       )}
 
       {/* Single flush divider (#108/#109). Runs edge-to-edge across the full
-          width of the outer pill — a plain full-bleed hairline, NOT the old
-          center-weighted gradient that faded out before reaching the sides
-          (which read as a floating seam rather than one clean border between
-          the pill's two stacked sections). A subtle dark hairline on the light
+          width of the wallet segment — a plain full-bleed hairline separating
+          the EVM row from the Aztec row. A subtle dark hairline on the light
           glass / a faint white hairline on the dark privacy surface, so it
           reads as one crisp border in either theme without becoming a bright
           bar. */}
@@ -1149,7 +1146,6 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           linkedEvmAddress={waapAddress || undefined}
           walletType={WalletType.AZTEC}
           flat
-          roundedEdge="bottom"
           isDark={isDark}
           actionsLocked={isTransferInProgress}
         />
@@ -1161,7 +1157,6 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           disabled={isL2Connecting}
           title="Connect Aztec (L2) wallet"
           flat
-          roundedEdge="bottom"
           isDark={isDark}
         />
       )}
@@ -1225,7 +1220,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           the header row matches this column to the main pill's content-driven
           height. */}
       <div
-        className={`relative z-40 flex-shrink-0 flex flex-col items-center justify-center gap-1 min-h-12 sm:min-h-14 px-3 sm:px-5 py-2 rounded-[26px] ${glassPill(isDark)}`}
+        className={`relative z-40 flex-shrink-0 flex flex-col items-center justify-center gap-1.5 min-h-11 sm:min-h-12 px-3 sm:px-5 py-2 rounded-[26px] ${glassPill(isDark)}`}
       >
         <Link
           href="/"
@@ -1254,20 +1249,26 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           overflowing it — a fixed height here was clipping/spilling the
           2-pill stack outside the rounded pill shape. */}
       <div
-        className={`flex-1 min-w-0 flex items-center justify-between gap-2 min-h-12 sm:min-h-14 py-1.5 sm:py-2 px-2 sm:px-3 rounded-full ${glassPill(isDark)}`}
+        className={`flex-1 min-w-0 flex items-center justify-between gap-2 min-h-11 sm:min-h-12 py-1 sm:py-1.5 px-2 sm:px-3 rounded-full ${glassPill(isDark)}`}
       >
-        <nav className="hidden lg:flex items-center gap-1 min-w-0" aria-label="Secondary">
+        {/* Left: Privacy Mode pinned to the far left of the middle section (#159). */}
+        <div className="flex items-center flex-shrink-0">
+          {privacyToggle}
+        </div>
+
+        {/* Center: the remaining nav links, centered in the bar (#159). flex-1
+            fills the gap between the Privacy toggle and the right cluster while
+            justify-center pins the links to the middle. Hidden below lg, where
+            they move into the mobile panel. */}
+        <nav className="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0" aria-label="Secondary">
           {secondaryNav}
         </nav>
 
-        {/* Right cluster order: Privacy Mode (always visible) → humanity/points
-            chip → wallet cluster (chip now sits flush beside the wallet/account
-            stack, #111). The version + network selector moved out of here to
-            live under the Shield brand (#113). The chip collapses first on
-            narrow widths; Privacy Mode + the wallet cluster never collapse. */}
-        <div className="flex items-center gap-1.5 sm:gap-3 ml-auto min-w-0">
-          {privacyToggle}
-
+        {/* Right: humanity/points chip, then the wallet cluster and mobile
+            toggle (chip sits flush beside the wallet/account stack, #111). The
+            chip collapses first on narrow widths; the wallet cluster never
+            collapses. */}
+        <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0 min-w-0">
           <div className="hidden sm:block flex-shrink-0">
             <HumanityPointsChip
               method={humanitySource.method}

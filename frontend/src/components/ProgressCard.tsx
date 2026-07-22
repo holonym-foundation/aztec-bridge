@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Icon } from '@iconify/react'
 import { useCountdown } from 'usehooks-ts'
 import LoadingStepsBars from '@/components/LoadingStepsBars'
 import StyledImage from '@/components/StyledImage'
@@ -60,6 +61,75 @@ function isFuelError(message?: string | null): boolean {
   return FUEL_ERROR_NEEDLES.some((needle) => m.includes(needle))
 }
 
+// The wallet (WaaP / signer) never came back — a signature prompt was left hanging or the
+// request timed out. No funds moved beyond what already confirmed, so resume is safe.
+const WALLET_ERROR_NEEDLES = ['wallet did not respond', 'did not respond', 'timed out', 'timeout', 'user rejected', 'user denied']
+// The L1→L2 message was already spent — the claim actually went through on a prior attempt.
+// This is a "you're already done" signal, not a loss; point the user at their L2 balance.
+const CONSUMED_ERROR_NEEDLES = ['already consumed', 'already claimed', 'nullifier already', 'existing nullifier', 'already been consumed']
+
+type FailureKind = 'fuel' | 'wallet' | 'consumed' | 'deposit-landed' | 'pre-deposit' | 'unknown'
+
+interface FailureInfo {
+  kind: FailureKind
+  heading: string
+  message: string
+}
+
+function hasNeedle(m: string, needles: string[]): boolean {
+  return needles.some((n) => m.includes(n))
+}
+
+// Turn the raw mutation error into a specific, funds-safe explanation. Never "unknown error":
+// the genuinely-unclassifiable branch still states funds are safe and points to Resume/support
+// with the copyable error. Specific causes (wallet timeout, already-consumed) are checked before
+// the broad fuel needles so a precise match always wins over the catch-all gas keywords.
+function classifyFailure(args: { errorMessage?: string | null; isL1ToL2: boolean; l1TxUrl: string | null }): FailureInfo {
+  const { errorMessage, isL1ToL2, l1TxUrl } = args
+  const m = (errorMessage ?? '').toLowerCase()
+
+  if (m && hasNeedle(m, CONSUMED_ERROR_NEEDLES)) {
+    return {
+      kind: 'consumed',
+      heading: 'Claim already completed',
+      message: 'This claim already went through. Check your L2 balance.',
+    }
+  }
+  if (m && hasNeedle(m, WALLET_ERROR_NEEDLES)) {
+    return {
+      kind: 'wallet',
+      heading: "Wallet didn't respond",
+      message: 'Your wallet did not respond in time. Your funds are safe. Resume to finish.',
+    }
+  }
+  if (isL1ToL2 && isFuelError(errorMessage)) {
+    return {
+      kind: 'fuel',
+      heading: 'Claim ran short on gas',
+      message: 'Your claim ran short on L2 gas (Fee Juice). Your funds are safe. Top up and resume.',
+    }
+  }
+  if (l1TxUrl) {
+    return {
+      kind: 'deposit-landed',
+      heading: "Transfer didn't finish",
+      message: 'Your L1 deposit confirmed but a later step did not. Your funds are safe. Resume to finish.',
+    }
+  }
+  if (!m) {
+    return {
+      kind: 'pre-deposit',
+      heading: "Transfer didn't start",
+      message: 'The transfer stopped before any funds moved. You can safely try again.',
+    }
+  }
+  return {
+    kind: 'unknown',
+    heading: "Transfer didn't finish",
+    message: 'Something interrupted the transfer. Your funds are safe. Resume, or copy the error for support.',
+  }
+}
+
 function formatSeconds(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
@@ -97,10 +167,13 @@ export default function ProgressCard({
   const claimStepActive = isL1ToL2 && steps.some((s) => s.status === 'active' && /claim/i.test(s.label))
   const claimStepErrored = isL1ToL2 && steps.some((s) => s.status === 'error' && /claim/i.test(s.label))
 
-  // Fuel-specific recovery: promote the Fee-Juice top-up when the error text looks like a
-  // gas shortfall. When the page can't give us error text, still offer top-up (secondary)
-  // on an L1→L2 claim failure — an underfunded claim is the common cause.
-  const fuelErrorDetected = isL1ToL2 && isFuelError(errorMessage)
+  // Specific, funds-safe diagnosis of the failure — drives both the copy and which recovery
+  // action leads. Only evaluated when hasError, but cheap so computed unconditionally.
+  const failure = useMemo(
+    () => classifyFailure({ errorMessage, isL1ToL2, l1TxUrl }),
+    [errorMessage, isL1ToL2, l1TxUrl],
+  )
+  const fuelErrorDetected = failure.kind === 'fuel'
   // Fall back to offering top-up only when the deposit already landed on L1 (l1TxUrl set)
   // — i.e. we're at/after the claim boundary where Fee Juice matters. A pre-deposit
   // failure moved no funds and needs no gas top-up.
@@ -303,7 +376,15 @@ export default function ProgressCard({
     }
   }
 
-  const heading = hasError ? 'Something went wrong' : isAllComplete ? 'Transaction complete' : 'Transaction in progress'
+  const copyError = () => {
+    if (!errorMessage) return
+    navigator.clipboard
+      ?.writeText(errorMessage)
+      .then(() => notify('success', 'Error details copied'))
+      .catch(() => notify('error', 'Could not copy'))
+  }
+
+  const heading = hasError ? failure.heading : isAllComplete ? 'Transaction complete' : 'Transaction in progress'
 
   const showBackButton = isAllComplete || hasError
 
@@ -319,10 +400,24 @@ export default function ProgressCard({
       )}
 
       {/* Progress Card */}
-      <div className="bg-white rounded-md mt-2 p-4">
+      <div className="bg-white rounded-md mt-2 p-4 relative">
+        {/* Encrypted-backup export — a small icon affordance in the top-right rather than a
+            full-width button. Recovery-critical, so it stays in the transaction frame, but
+            it must not dominate the layout. The green dot marks it as an available action. */}
+        {direction && hasBackup && !isAllComplete && (
+          <button
+            onClick={handleExportBackup}
+            title="Export an encrypted local backup. Your data is already backed up. This saves a copy for manual recovery."
+            aria-label="Export an encrypted local backup"
+            className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-[#047857]/[0.10] text-[#047857] transition-colors hover:bg-[#047857]/[0.18]"
+          >
+            <Icon icon="ph:download-simple-bold" width={16} height={16} />
+            <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#047857]" />
+          </button>
+        )}
         <div className="flex items-center justify-center">
           {hasError ? (
-            <svg width="56" height="56" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg width="48" height="48" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M12.5004 8.99998V13M12.5004 17H12.5104M22.2304 18L14.2304 3.99998C14.056 3.69218 13.803 3.43617 13.4973 3.25805C13.1917 3.07993 12.8442 2.98608 12.4904 2.98608C12.1366 2.98608 11.7892 3.07993 11.4835 3.25805C11.1778 3.43617 10.9249 3.69218 10.7504 3.99998L2.75042 18C2.5741 18.3053 2.48165 18.6519 2.48243 19.0045C2.48321 19.3571 2.5772 19.7032 2.75486 20.0078C2.93253 20.3124 3.18757 20.5646 3.49411 20.7388C3.80066 20.9131 4.14783 21.0032 4.50042 21H20.5004C20.8513 20.9996 21.1959 20.9069 21.4997 20.7313C21.8035 20.5556 22.0556 20.3031 22.2309 19.9991C22.4062 19.6951 22.4985 19.3504 22.4984 18.9995C22.4983 18.6486 22.4059 18.3039 22.2304 18Z"
                 stroke="#B91C1C"
@@ -341,7 +436,7 @@ export default function ProgressCard({
         </div>
 
         <p
-          className={`text-center font-semibold text-md mt-4 ${
+          className={`text-center font-semibold text-md ${hasError ? 'mt-3' : 'mt-4'} ${
             hasError ? 'text-[#B91C1C]' : isAllComplete ? 'text-green-600' : ''
           }`}
         >
@@ -349,16 +444,41 @@ export default function ProgressCard({
         </p>
 
         {hasError && (
-          <p className="text-center text-12 text-latest-grey-500 mt-1">
-            {fuelErrorDetected
-              ? 'Your L2 gas (Fee Juice) ran short — top up to finish your claim. Your deposit is safe on L1 in the meantime.'
-              : l1TxUrl
-                ? 'Your deposit confirmed on L1 but a later step did not complete. Your funds are safe — resume the transfer below to finish it.'
-                : 'The transaction was cancelled or could not be completed. You can safely go back and try again.'}
-          </p>
+          <>
+            <p className="text-center text-12 text-latest-grey-500 mt-1 px-2">{failure.message}</p>
+            {/* Explorer links sit right under the status as small icon-links, not full-width
+                pills lower down. On a failure the L1 deposit tx is the reassuring "your funds
+                are here" anchor, so keep it close to the message. */}
+            {(l1TxUrl || l2TxUrl) && (
+              <div className="mt-2 flex items-center justify-center gap-4">
+                {l1TxUrl && (
+                  <a
+                    href={l1TxUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-200 hover:text-blue-100"
+                  >
+                    View L1 Tx
+                    <Icon icon="ph:arrow-square-out" width={13} height={13} />
+                  </a>
+                )}
+                {l2TxUrl && (
+                  <a
+                    href={l2TxUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#BF1254] hover:text-[#81133B]"
+                  >
+                    View L2 Tx
+                    <Icon icon="ph:arrow-square-out" width={13} height={13} />
+                  </a>
+                )}
+              </div>
+            )}
+          </>
         )}
 
-        <div className="mt-4">
+        <div className={hasError ? 'mt-3' : 'mt-4'}>
           <LoadingStepsBars steps={steps} currentStep={progressStep - 1} />
         </div>
 
@@ -392,127 +512,137 @@ export default function ProgressCard({
           </div>
         )}
 
-        {/* Backup export lives here in the transaction frame — recovery-critical,
-            so it stays with the progress state rather than in a toast or the links row. */}
-        {direction && hasBackup && !isAllComplete && (
-          <>
-            <hr className="text-latest-grey-300 my-3" />
-            <button
-              onClick={handleExportBackup}
-              title="Optional. Your data is already encrypted and backed up — this saves a local copy for manual recovery."
-              className="w-full text-13 font-semibold text-[#047857] bg-[#ecfdf5] hover:bg-[#d7f7e8] py-2 rounded-full transition-colors"
-            >
-              Export encrypted backup ↓
-            </button>
-          </>
-        )}
       </div>
 
-      {/* Transaction Details */}
-      <div className="bg-[#F5F5F5] rounded-md mt-3 p-4">
-        <div className="flex justify-between">
-          <div>
-            <p className="text-14 font-semibold text-latest-grey-100">From</p>
-            <div className="flex gap-2 mt-2">
-              <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-6 w-6" />
-              <p className="text-16 font-medium text-latest-black-100 w-[106px]">{fromNetwork}</p>
-            </div>
-          </div>
-          <div>
-            <p className="text-14 font-semibold text-latest-grey-100">To</p>
-            <div className="flex gap-2 mt-2">
-              <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-6 w-6" />
-              <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
-            </div>
-          </div>
+      {/* Transaction Details — on a failure this collapses to a single compact line
+          (from → to · amount) to stay inside the no-scroll budget while still anchoring
+          the user to "these are the funds, and they're accounted for". The full block is
+          reserved for the in-progress / success states where there is room. */}
+      {hasError ? (
+        <div className="bg-[#F5F5F5] rounded-md mt-3 px-4 py-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+          <span className="inline-flex items-center gap-1.5">
+            <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-5 w-5" />
+            <span className="text-14 font-medium text-latest-black-100">{fromNetwork}</span>
+          </span>
+          <Icon icon="ph:arrow-right-bold" width={13} height={13} className="text-latest-grey-100" />
+          <span className="inline-flex items-center gap-1.5">
+            <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-5 w-5" />
+            <span className="text-14 font-medium text-latest-black-100">{toNetwork}</span>
+          </span>
+          <span className="text-latest-grey-300">·</span>
+          <span className="text-16 font-semibold text-latest-black-100">{amountDisplay}</span>
         </div>
-        <hr className="text-latest-grey-300 my-3" />
-        <p className="text-32 text-black font-medium text-center">{amountDisplay}</p>
-        {fuelBreakdown && (
-          <p className="text-center text-12 font-medium text-latest-grey-500 mt-1">
-            {/* bridgeAmount/fuelAmount strings already include their own
-                token symbol and "to top up …" suffix from the producer at
-                app/progress/page.tsx — do NOT double-suffix here. */}
-            {fuelBreakdown.bridgeAmount} to bridge + {fuelBreakdown.fuelAmount}
-          </p>
-        )}
-      </div>
-
-      {/* Transaction Links */}
-      <div className="flex flex-row items-center justify-center mt-2 gap-4">
-        {l1TxUrl && (
-          <a
-            href={l1TxUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-14 font-semibold text-blue-200 bg-blue-300 hover:text-blue-100 mt-2 block px-4 py-2 rounded-full"
-          >
-            View L1 Tx ↗
-          </a>
-        )}
-        {l2TxUrl && (
-          <a
-            href={l2TxUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-14 font-semibold text-[#BF1254] bg-[#FDE7F3] hover:text-[#81133B] mt-2 block px-4 py-2 rounded-full"
-          >
-            View L2 Tx ↗
-          </a>
-        )}
-      </div>
-
-      {/* Error recovery actions — resume is the primary path, so the user can finish
-          the interrupted transfer right here instead of hunting for the Activity page. */}
-      {hasError && direction && (
-        <div className="mt-4 mb-6 flex flex-col items-center gap-2">
-          {fuelErrorDetected ? (
-            <>
-              {/* Fuel shortfall is the diagnosed cause — top-up is the primary path, resume
-                  is the secondary step the user takes once Fee Juice has landed. */}
-              <button
-                onClick={() => router.push('/fee-juice?resume=1')}
-                className="w-full rounded-lg bg-[#81133B] py-[10px] font-semibold text-white transition-opacity hover:opacity-80"
-              >
-                Top up Fee Juice to finish claim
-              </button>
-              <button
-                onClick={handleResumeClick}
-                disabled={resuming}
-                className="w-full rounded-lg border border-[#17235E]/40 py-[10px] font-semibold text-[#17235E] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {resuming ? 'Resuming…' : 'Already topped up? ' + resumeLabel}
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={handleResumeClick}
-                disabled={resuming}
-                className="w-full rounded-lg bg-[#17235E] py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {resuming ? 'Resuming…' : resumeLabel}
-              </button>
-              {/* Error text wasn't conclusive, but an underfunded L2 claim is the common cause —
-                  offer the top-up as a secondary path so the user isn't stuck re-resuming. */}
-              {fuelTopUpSecondary && (
-                <button
-                  onClick={() => router.push('/fee-juice?resume=1')}
-                  className="w-full rounded-lg border border-[#81133B]/40 py-[10px] font-semibold text-[#81133B] transition-opacity hover:opacity-80"
-                >
-                  Top up Fee Juice
-                </button>
-              )}
-            </>
-          )}
-          <div className="mt-1 flex items-center justify-center">
-            <TextButton
-              className="!bg-transparent !text-latest-grey-100 hover:!bg-transparent hover:!text-latest-black-100 !font-medium"
-              onClick={() => router.push('/')}
-            >
-              Back to Main Screen
-            </TextButton>
+      ) : (
+        <div className="bg-[#F5F5F5] rounded-md mt-3 p-4">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-14 font-semibold text-latest-grey-100">From</p>
+              <div className="flex gap-2 mt-2">
+                <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-6 w-6" />
+                <p className="text-16 font-medium text-latest-black-100 w-[106px]">{fromNetwork}</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-14 font-semibold text-latest-grey-100">To</p>
+              <div className="flex gap-2 mt-2">
+                <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-6 w-6" />
+                <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
+              </div>
+            </div>
           </div>
+          <hr className="text-latest-grey-300 my-3" />
+          <p className="text-32 text-black font-medium text-center">{amountDisplay}</p>
+          {fuelBreakdown && (
+            <p className="text-center text-12 font-medium text-latest-grey-500 mt-1">
+              {/* bridgeAmount/fuelAmount strings already include their own
+                  token symbol and "to top up …" suffix from the producer at
+                  app/progress/page.tsx — do NOT double-suffix here. */}
+              {fuelBreakdown.bridgeAmount} to bridge + {fuelBreakdown.fuelAmount}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Transaction Links — success/in-progress only. On a failure the explorer links move
+          up next to the status message as compact icon-links (see above), so we don't repeat
+          the big pills here. */}
+      {!hasError && (
+        <div className="flex flex-row items-center justify-center mt-2 gap-4">
+          {l1TxUrl && (
+            <a
+              href={l1TxUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-14 font-semibold text-blue-200 bg-blue-300 hover:text-blue-100 mt-2 block px-4 py-2 rounded-full"
+            >
+              View L1 Tx ↗
+            </a>
+          )}
+          {l2TxUrl && (
+            <a
+              href={l2TxUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-14 font-semibold text-[#BF1254] bg-[#FDE7F3] hover:text-[#81133B] mt-2 block px-4 py-2 rounded-full"
+            >
+              View L2 Tx ↗
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Error recovery actions — the primary CTA (resume, or top-up for a diagnosed fuel
+          shortfall) shares one row with a real back button in an ~80/20 split. The alternate
+          recovery path and the Activity link ride underneath as light text links, so the whole
+          block stays inside the no-scroll budget instead of stacking full-width pills. */}
+      {hasError && direction && (
+        <div className="mt-3 mb-6 flex flex-col items-center gap-2">
+          <div className="flex w-full items-stretch gap-2">
+            <button
+              onClick={fuelErrorDetected ? () => router.push('/fee-juice?resume=1') : handleResumeClick}
+              disabled={!fuelErrorDetected && resuming}
+              className={`flex-[8_1_0%] rounded-lg py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60 ${
+                fuelErrorDetected ? 'bg-[#81133B]' : 'bg-[#17235E]'
+              }`}
+            >
+              {fuelErrorDetected ? 'Top up Fee Juice' : resuming ? 'Resuming…' : resumeLabel}
+            </button>
+            <button
+              onClick={() => router.push('/')}
+              title="Back to main screen"
+              aria-label="Back to main screen"
+              className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"
+            >
+              <Icon icon="ph:arrow-left-bold" width={18} height={18} />
+            </button>
+          </div>
+
+          {/* Alternate recovery path as a light text link, sized to the diagnosis. */}
+          {fuelErrorDetected ? (
+            <button
+              onClick={handleResumeClick}
+              disabled={resuming}
+              className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#17235E] hover:underline disabled:opacity-60"
+            >
+              {resuming ? 'Resuming…' : `Already topped up? ${resumeLabel}`}
+            </button>
+          ) : fuelTopUpSecondary ? (
+            <button
+              onClick={() => router.push('/fee-juice?resume=1')}
+              className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"
+            >
+              Not enough gas? Top up Fee Juice
+            </button>
+          ) : failure.kind === 'unknown' && errorMessage ? (
+            <button
+              onClick={copyError}
+              className="inline-flex items-center gap-1 text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-latest-black-100 hover:underline"
+            >
+              <Icon icon="ph:copy" width={13} height={13} />
+              Copy error for support
+            </button>
+          ) : null}
+
           <button
             onClick={() => router.push('/activity')}
             className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-latest-black-100 hover:underline"

@@ -647,9 +647,10 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
         <button
           type="button"
           onClick={() => setDetailOpen(true)}
-          className="text-xs text-latest-grey-500 mt-0.5 text-left w-full cursor-pointer hover:text-latest-black-100 transition-colors"
+          className="mt-1 flex w-full items-center gap-1 text-left text-xs font-medium text-[#17235E] transition-colors hover:underline"
         >
-          {fuelNum > 0 ? `${fuelAmount} ${tokenSymbol} reserved for gas — tap to edit` : 'Tap to set an amount'}
+          <Icon icon="ph:sliders-horizontal-fill" width={12} height={12} className="flex-shrink-0" />
+          {fuelNum > 0 ? `${fuelAmount} ${tokenSymbol} reserved for gas. Edit amount` : 'Set an amount'}
         </button>
       )}
 

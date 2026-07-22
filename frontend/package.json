@@ -9,6 +9,7 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint",
+    "design-lint": "node ./scripts/design-lint.mjs",
     "db:validate": "prisma validate",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

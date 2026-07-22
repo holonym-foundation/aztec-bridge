@@ -3,6 +3,7 @@
 import React, { Suspense, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Icon } from '@iconify/react'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
 import RootStyle from '@/components/RootStyle'
 import BridgeHeader from '@/components/BridgeHeader'
 import FeeJuiceTopUp from '@/components/FeeJuiceTopUp'
@@ -33,6 +34,9 @@ function FeeJuicePageInner() {
 
   const [toppedUp, setToppedUp] = useState(false)
   const [resuming, setResuming] = useState(false)
+  // Set by FeeJuiceTopUp when the user's existing (mode-applicable) balance already
+  // covers the interrupted claim, so we can offer Resume without a redundant top-up.
+  const [landingCovered, setLandingCovered] = useState(false)
 
   // The latest interrupted L1→L2 claim we can resume — same backend operations the
   // Activity page/ProgressCard resume from, so "Resume claim" hands off to the
@@ -116,74 +120,79 @@ function FeeJuicePageInner() {
     }
   }
 
-  const showPrivate = isPrivacyModeEnabled && !!BRIDGED_FPC_ADDRESS
+  // Show both balances whenever private fuel exists on this deployment, so the
+  // one-line summary always reflects the full picture regardless of the active mode.
+  const showPrivate = !!BRIDGED_FPC_ADDRESS
 
   return (
     <RootStyle className="min-h-0 max-h-[calc(90vh-2rem)] overflow-hidden">
       <div className="flex h-full max-h-[calc(90vh-2rem)] flex-col overflow-hidden">
         <div className="px-5 pt-5">
           <div className="flex items-center gap-4">
-            <BridgeHeader />
+            <BridgeHeader title="TOP UP" />
           </div>
         </div>
 
         <div className="px-5 pb-5 min-h-0 flex-1 overflow-y-auto">
           <div className="mt-2 flex items-center gap-2">
             <Icon icon="ph:gas-pump-fill" width={20} height={20} className="text-[#17235E]" />
-            <h1 className="text-16 font-semibold text-latest-black-100">Fee Juice</h1>
+            <h1 className="text-16 font-semibold text-latest-black-100">Top up Fee Juice</h1>
+            <Icon
+              icon="ph:info"
+              width={15}
+              height={15}
+              className="cursor-help text-latest-grey-500"
+              data-tooltip-id="fj-purpose"
+              data-tooltip-content="Fee Juice is gas on Aztec. Top up here anytime."
+            />
+            <span className="ml-auto text-11 text-latest-grey-500">gas for Aztec</span>
           </div>
-          <p className="mt-1 text-12 leading-[16px] text-latest-grey-500">
-            Fee Juice is gas on Aztec. Top up here anytime.
-          </p>
+          <ReactTooltip id="fj-purpose" place="bottom" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
 
-          {/* Resume-after-topup context banner — only when arriving from a stuck claim. */}
-          {fromResume && (
-            <div className="mt-3 flex items-center gap-1.5 rounded-md bg-[#D92D20]/[0.08] px-2.5 py-2">
-              <Icon icon="ph:warning-circle-fill" width={14} height={14} className="flex-shrink-0 text-[#D92D20]" />
-              <p className="text-11 leading-[15px] text-[#737373]">
-                <span className="font-semibold text-[#D92D20]">Claim ran short on L2 gas.</span> Add Fee Juice, then
-                resume — your funds stay safe.
-              </p>
-            </div>
-          )}
-
-          {/* Current L2 Fee Juice balance */}
-          <div className="mt-3 rounded-md bg-[#F5F5F5] p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-13 font-medium text-latest-grey-700">Your L2 Fee Juice</span>
-              {fjLoading ? (
-                <span className="inline-block h-3 w-14 bg-neutral-300 rounded animate-pulse" />
-              ) : (
-                <span className="text-14 font-semibold text-latest-black-100">{feeJuiceBalance ?? '--'} FJ</span>
-              )}
-            </div>
+          {/* Current Fee Juice balances — one compact, consistently-sized line. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-md bg-[#F5F5F5] px-3 py-2 text-12">
+            <span className="font-medium text-latest-grey-700">Fee Juice</span>
+            {fjLoading ? (
+              <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
+            ) : (
+              <>
+                <span className="font-semibold text-latest-black-100">{feeJuiceBalance ?? '--'}</span>
+                <span className="text-latest-grey-500">public</span>
+              </>
+            )}
             {showPrivate && (
-              <div className="mt-1.5 flex items-center justify-between">
-                <span className="flex items-center gap-1 text-11 text-latest-grey-500">
-                  <Icon icon="ph:lock-key-fill" width={11} height={11} className="text-[#81133B]" />
-                  Private Fee Juice
-                </span>
+              <>
+                <span className="text-latest-grey-400">·</span>
                 {privateFjLoading ? (
-                  <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
+                  <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
                 ) : (
-                  <span className="text-12 font-semibold text-latest-black-100">{privateFeeJuiceBalance ?? '--'} FJ</span>
+                  <span className="font-semibold text-latest-black-100">{privateFeeJuiceBalance ?? '--'}</span>
                 )}
-              </div>
+                <span className="flex items-center gap-0.5 text-latest-grey-500">
+                  private
+                  <Icon icon="ph:lock-key-fill" width={11} height={11} className="text-[#81133B]" />
+                </span>
+              </>
             )}
           </div>
 
-          {/* Reusable buy + bridge Fee Juice form (auto + manual). */}
+          {/* Reusable buy + bridge Fee Juice form (auto + manual). Owns ALL top-up status
+              messaging (including the interrupted-claim banner) so the screen can never show
+              two contradictory statements. */}
           <div className="mt-3">
             <FeeJuiceTopUp
               isPrivacyModeEnabled={isPrivacyModeEnabled}
               feeJuiceBalance={feeJuiceBalance}
               privateFeeJuiceBalance={privateFeeJuiceBalance}
+              landingClaimShort={fromResume}
+              onLandingCoveredChange={setLandingCovered}
               onSuccess={() => setToppedUp(true)}
             />
           </div>
 
-          {/* Prominent "Resume claim" after a successful top-up, when we came from a stuck claim. */}
-          {fromResume && toppedUp && (
+          {/* Prominent "Resume claim" once the claim is fundable — either after a successful
+              top-up, or immediately when the existing balance already covers it (public mode). */}
+          {fromResume && (toppedUp || landingCovered) && (
             <button
               onClick={handleResume}
               disabled={resuming}

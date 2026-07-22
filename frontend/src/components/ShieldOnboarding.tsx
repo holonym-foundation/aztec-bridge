@@ -953,8 +953,8 @@ export default function ShieldOnboarding() {
         .ob-back { height: 54px; padding: 0 22px; border: 1px solid #eccfdc; border-radius: 14px; background: transparent;
           color: #5a4650; font-size: 16px; font-weight: 560; cursor: pointer; }
         .ob-back:hover { background: rgba(129,19,59,0.05); }
-        .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
-        .ob-secured strong { color: #5a4650; font-weight: 620; }
+        .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; justify-content: center; }
+        .ob-secured strong { color: #5a4650; font-family: 'PP Hatton', 'Suisse Intl', sans-serif; font-weight: 600; }
         .ob-dot { opacity: 0.5; }
         /* #157: splash trust-line footer, pinned to the bottom of the splash. */
         .ob-splash-footer { position: relative; z-index: 3; padding: 0 24px 20px; display: flex; justify-content: center; }

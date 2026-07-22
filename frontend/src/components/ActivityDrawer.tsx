@@ -463,9 +463,9 @@ const ActivityDrawer: React.FC = () => {
         }
         aria-controls={panelId}
         onClick={() => setPinned((p) => !p)}
-        className={`flex h-[120px] w-9 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-colors ${
+        className={`flex h-[120px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-[width,border-color] duration-200 ease-out ${
           open ? 'border-[#17235E]/40' : 'border-[#D4D4D4] hover:border-[#17235E]/30'
-        }`}
+        } ${open && !prefersReducedMotion ? 'w-[42px]' : 'w-9'}`}
       >
         {resumableCount > 0 ? (
           // Attention badge: a shield-pink count sits where the neutral status

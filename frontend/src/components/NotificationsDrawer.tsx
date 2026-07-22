@@ -503,9 +503,9 @@ const NotificationsDrawer: React.FC = () => {
         aria-controls={panelId}
         aria-label={unreadCount > 0 ? `Messages, ${unreadCount} unread` : 'Messages'}
         onClick={() => setPinned((p) => !p)}
-        className={`relative flex h-[120px] w-9 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-colors ${
+        className={`relative flex h-[120px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-[width,border-color] duration-200 ease-out ${
           open ? 'border-[#0A0A0A]/40' : 'border-[#D4D4D4] hover:border-[#0A0A0A]/[0.3]'
-        }`}
+        } ${open && !prefersReducedMotion ? 'w-[42px]' : 'w-9'}`}
       >
         {unreadCount > 0 ? (
           <motion.span

@@ -35,6 +35,7 @@ import NetworkModal from '@/components/model/Network'
 import TokensModal from '@/components/model/TokensModal'
 import { BridgeDirection, BridgeState, Network as NetworkType, Token as TokenType } from '@/types/bridge'
 import BridgeSection from '@/components/BridgeSection'
+import { Icon } from '@iconify/react'
 import TransactionBreakdown from '@/components/TransactionBreakdown'
 import BridgeFooter from '@/components/BridgeFooter'
 import BridgeHeader from '@/components/BridgeHeader'
@@ -58,6 +59,7 @@ import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModal
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { pushNotification } from '@/stores/useNotificationsStore'
 import { useBindingStatus, describeConflict, shortAddr } from '@/hooks/useBindingStatus'
 import { useRouter } from 'next/navigation'
 import MaintenanceOverlay from '@/components/MaintenanceOverlay'
@@ -88,6 +90,32 @@ export default function Home() {
   const [showVerification, setShowVerification] = useState(false)
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Bottom scroll cue for the card's internal scroll region: the transaction breakdown
+  // (and expanded accordions) can sit below the fold with no signal it's there. `canScrollDown`
+  // lights a faint bottom fade + chevron while there's content past the fold and clears once
+  // the region is scrolled to its end. Content-height driven (accordions animate open), so a
+  // ResizeObserver re-measures rather than a one-shot read that would miss the animation.
+  const scrollRegionRef = useRef<HTMLDivElement>(null)
+  const scrollContentRef = useRef<HTMLDivElement>(null)
+  const [canScrollDown, setCanScrollDown] = useState(false)
+  const updateScrollAffordance = useCallback(() => {
+    const el = scrollRegionRef.current
+    if (!el) return
+    // A few px of slack so sub-pixel rounding at the true bottom doesn't keep the cue lit.
+    setCanScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > 6)
+  }, [])
+  useEffect(() => {
+    const region = scrollRegionRef.current
+    if (!region || typeof ResizeObserver === 'undefined') {
+      updateScrollAffordance()
+      return
+    }
+    const ro = new ResizeObserver(() => updateScrollAffordance())
+    ro.observe(region)
+    if (scrollContentRef.current) ro.observe(scrollContentRef.current)
+    updateScrollAffordance()
+    return () => ro.disconnect()
+  }, [updateScrollAffordance])
   const [inputAmount, setInputAmount] = useState('')
   const [usdValue, setUsdValue] = useState('')
 
@@ -336,19 +364,17 @@ export default function Home() {
   // Bridge success callback (runs after L1→L2 bridge or L2→L1 withdrawal)
   const handleBridgeSuccess = useCallback(
     (_data: any) => {
-      notify.promise(
-        Promise.all([
-          refetchL1Balance(),
-          refetchL2Balance(),
-          refetchFeeJuiceBalance(),
-          refetchPrivateFeeJuiceBalance(),
-        ]),
-        {
-          pending: 'Refreshing balances...',
-          success: 'Balances updated',
-          error: 'Failed to refresh balances',
-        },
-      )
+      // BridgeHeader now carries the live "Refreshing balances" status (it reads
+      // the same balance-query fetching flags), so the pending/success corner
+      // toast is gone. Only a genuine refresh failure is surfaced, via the feed.
+      Promise.all([
+        refetchL1Balance(),
+        refetchL2Balance(),
+        refetchFeeJuiceBalance(),
+        refetchPrivateFeeJuiceBalance(),
+      ]).catch(() => {
+        pushNotification({ type: 'error', title: 'Failed to refresh balances' })
+      })
       setBridgeConfig({
         ...bridgeConfig,
         amount: '',
@@ -366,7 +392,6 @@ export default function Home() {
       refetchPrivateFeeJuiceBalance,
       setBridgeConfig,
       bridgeConfig,
-      notify,
     ],
   )
 
@@ -611,8 +636,16 @@ export default function Home() {
             />
           </div>
 
-          {/* Scrolls internally (never the page) if an expanded accordion can't fit. */}
-          <div className="flex-1 min-h-0 overflow-y-auto px-5">
+          {/* Scrolls internally (never the page) if an expanded accordion can't fit.
+              A faint bottom fade + chevron signals there's more below the fold (e.g. the
+              transaction breakdown) and clears once scrolled to the end. */}
+          <div className="relative flex-1 min-h-0 flex flex-col">
+            <div
+              ref={scrollRegionRef}
+              onScroll={updateScrollAffordance}
+              className="min-h-0 flex-1 overflow-y-auto px-5 pb-5"
+            >
+            <div ref={scrollContentRef}>
             <BridgeSection
               bridgeConfig={bridgeConfig}
               setIsFromSection={setIsFromSection}
@@ -700,6 +733,20 @@ export default function Home() {
               fuelReserveToken={fuelReserveToken}
               fuelReserveFj={fuelReserveFj}
             />
+            </div>
+            </div>
+            {/* Scroll cue: fades to the card's white base and holds a subtle chevron while
+                there's content below the fold. pointer-events-none so it never blocks taps;
+                fades out at the end of the scroll. White base reads in both light and Privacy
+                Mode since the card itself stays white in both. */}
+            <div
+              aria-hidden="true"
+              className={`pointer-events-none absolute inset-x-0 bottom-0 flex h-11 items-end justify-center pb-1.5 bg-gradient-to-t from-[#ffffff] via-[rgba(255,255,255,0.82)] to-[rgba(255,255,255,0)] transition-opacity duration-200 ${
+                canScrollDown ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
+              <Icon icon="ph:caret-down-bold" width={16} height={16} className="text-latest-grey-400" />
+            </div>
           </div>
 
           <div className="shrink-0">

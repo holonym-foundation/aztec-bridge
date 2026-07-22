@@ -74,7 +74,10 @@ function DirectionLogos({ direction }: { direction: BridgeOperation['direction']
 // on the card's right edge. Reuses useBridgeOperations for data and duplicates
 // only the resume/decrypt flow from /activity — everything else (share fuel
 // claim links, full history) stays on the full Activity page we link out to.
-const ActivityDrawer: React.FC = () => {
+type ActivityDrawerProps = { variant?: 'rail' | 'dock' }
+
+const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => {
+  const isDock = variant === 'dock'
   const router = useRouter()
   const notify = useToast()
   const panelId = useId()
@@ -425,6 +428,66 @@ const ActivityDrawer: React.FC = () => {
   // it never adds page scroll and persists across every app screen.
   return (
     <>
+    {isDock ? (
+      // Narrow-viewport dock (#243): a compact round icon button in the
+      // bottom-left mobile dock. Keeps the clock-counter-clockwise identity + the
+      // "transfers to finish" count badge and opens the same activity panel as a
+      // bottom-anchored sheet that stays on-screen on phones.
+      <div
+        ref={drawerRef}
+        className="pointer-events-auto relative"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key="panel"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+              className="fixed bottom-[76px] left-4 z-40 w-[300px] max-w-[calc(100vw-2rem)]"
+            >
+              <div
+                id={panelId}
+                className="flex max-h-[70dvh] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
+              >
+                {panelBody(closeDesktop)}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          ref={handleRef}
+          type="button"
+          aria-expanded={open}
+          aria-label={
+            resumableCount > 0
+              ? `Bridge activity, ${resumableCount} ${resumableCount === 1 ? 'transfer' : 'transfers'} to finish`
+              : 'Bridge activity'
+          }
+          aria-controls={panelId}
+          onClick={() => setPinned((p) => !p)}
+          className={`relative flex h-11 w-11 items-center justify-center rounded-full border bg-white shadow-[0px_6px_16px_0px_rgba(0,0,0,0.12)] transition-colors ${
+            open ? 'border-[#17235E]/40' : 'border-[#D4D4D4]'
+          }`}
+        >
+          <Icon icon="ph:clock-counter-clockwise" width={18} height={18} className="text-[#737373]" aria-hidden="true" />
+          {resumableCount > 0 ? (
+            <span
+              aria-hidden="true"
+              className="absolute -right-1 -top-1 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#81133B] px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white"
+            >
+              {resumableCount > 9 ? '9+' : resumableCount}
+            </span>
+          ) : (
+            <span aria-hidden="true" className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#17235E] ring-2 ring-white" />
+          )}
+        </button>
+      </div>
+    ) : (
     <div
       ref={drawerRef}
       className="pointer-events-auto relative flex items-center justify-end"
@@ -490,6 +553,7 @@ const ActivityDrawer: React.FC = () => {
         </span>
       </button>
     </div>
+    )}
 
     {/* Recover-from-local-backup overlay (#195): opens OVER the current view
         instead of navigating to a full page. */}

@@ -17,13 +17,12 @@ import {
 import { useL1TokenBalances, useL1BridgeToL2 } from '@/hooks/useL1Operations'
 import { BridgeDirection } from '@/types/bridge'
 import { L1_TOKEN_METADATA, L2_TOKEN_METADATA } from '@/config'
-import { useToast } from '@/hooks/useToast'
+import { pushNotification } from '@/stores/useNotificationsStore'
 import { useTokenPrices } from '@/utils/coinGeckoPrice'
 import { getTokenPriceUsd } from '@/utils/fuelPricing'
 
 export default function ProgressPage() {
   const router = useRouter()
-  const notify = useToast()
   const operationStarted = useRef(false)
 
   const {
@@ -66,15 +65,18 @@ export default function ProgressPage() {
   const { refetch: refetchFeeJuiceBalance } = useL2FeeJuiceBalance()
   const { refetch: refetchPrivateFeeJuiceBalance } = useL2PrivateFeeJuiceBalance()
   const handleBridgeSuccess = useCallback(() => {
-    notify.promise(
-      Promise.all([refetchL1Balance(), refetchL2Balance(), refetchFeeJuiceBalance(), refetchPrivateFeeJuiceBalance()]),
-      {
-        pending: 'Refreshing balances...',
-        success: 'Balances updated',
-        error: 'Failed to refresh balances',
-      },
-    )
-  }, [notify, refetchL1Balance, refetchL2Balance, refetchFeeJuiceBalance, refetchPrivateFeeJuiceBalance])
+    // BridgeHeader now shows the live "Refreshing balances" status off the shared
+    // balance-query fetching flags, so there is no pending/success corner toast.
+    // Only a genuine refresh failure is surfaced, via the feed.
+    Promise.all([
+      refetchL1Balance(),
+      refetchL2Balance(),
+      refetchFeeJuiceBalance(),
+      refetchPrivateFeeJuiceBalance(),
+    ]).catch(() => {
+      pushNotification({ type: 'error', title: 'Failed to refresh balances' })
+    })
+  }, [refetchL1Balance, refetchL2Balance, refetchFeeJuiceBalance, refetchPrivateFeeJuiceBalance])
 
   // Fresh bridge operations only — resume lives at /progress/resume
   const {

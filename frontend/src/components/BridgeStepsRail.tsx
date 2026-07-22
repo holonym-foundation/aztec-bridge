@@ -32,7 +32,10 @@ const ACTION_SECONDARY =
 
 type StepStatus = 'done' | 'active' | 'upcoming'
 
-const BridgeStepsRail: React.FC = () => {
+type BridgeStepsRailProps = { variant?: 'rail' | 'dock' }
+
+const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) => {
+  const isDock = variant === 'dock'
   const { isWaapConnected, isAztecConnected, connectWaapWallet, connectAztecWallet } = useWalletStore()
   const attestation = useAttestationCheck()
   const { openModal } = useExplainerStore()
@@ -321,6 +324,61 @@ const BridgeStepsRail: React.FC = () => {
       </div>
     </>
   )
+
+  // Narrow-viewport dock (#243): a compact round icon button that lives in the
+  // bottom-left mobile dock. It keeps the graduation-cap identity + the status
+  // dot and opens the same steps panel as a bottom-anchored sheet that stays
+  // on-screen on phones. The desktop right-edge rail below is unchanged.
+  if (isDock) {
+    return (
+      <div
+        ref={drawerRef}
+        className="pointer-events-auto relative"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key="panel"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+              className="fixed bottom-[76px] left-4 z-40 w-[300px] max-w-[calc(100vw-2rem)]"
+            >
+              <div
+                id={panelId}
+                className="flex max-h-[70dvh] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
+              >
+                {panelBody(closeDesktop)}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          ref={handleRef}
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          aria-label="Bridge in 4 steps"
+          onClick={() => setPinned((p) => !p)}
+          className={`relative flex h-11 w-11 items-center justify-center rounded-full border bg-white shadow-[0px_6px_16px_0px_rgba(0,0,0,0.12)] transition-colors ${
+            open ? 'border-[#81133B]/40' : 'border-[#D4D4D4]'
+          }`}
+        >
+          <Icon icon="ph:graduation-cap" width={18} height={18} className="text-[#737373]" aria-hidden="true" />
+          <span
+            aria-hidden="true"
+            className={`absolute right-1 top-1 h-2 w-2 rounded-full ring-2 ring-white ${
+              eligible && bothConnected ? 'bg-[#17235E]' : 'bg-[#81133B]'
+            }`}
+          />
+        </button>
+      </div>
+    )
+  }
 
   // A slim binder tab pinned to the viewport's right edge (stacked with the
   // Activity + Messages tabs by the dock in ClientLayout). Hover or click peeks

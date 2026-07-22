@@ -114,11 +114,23 @@ export default function ClientLayout({
           would sit over the card edge — on mobile the same Tutorial/Activity live
           in the Header nav. */}
       {showDrawers && (
-        <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
-          <BridgeStepsRail />
-          <ActivityDrawer />
-          <NotificationsDrawer />
-        </div>
+        <>
+          <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
+            <BridgeStepsRail />
+            <ActivityDrawer />
+            <NotificationsDrawer />
+          </div>
+          {/* Below md the centered card leaves no right gutter, so the right-edge
+              binder tabs would sit off-screen (#243). Relocate them to a compact,
+              tappable dock in the bottom-LEFT corner, clear of the bottom-right
+              support chat bubble. Each tab keeps its icon + badge and opens its
+              panel as a bottom-anchored sheet. */}
+          <div className="pointer-events-none fixed bottom-4 left-4 z-40 flex items-end gap-2 md:hidden">
+            <BridgeStepsRail variant="dock" />
+            <ActivityDrawer variant="dock" />
+            <NotificationsDrawer variant="dock" />
+          </div>
+        </>
       )}
       <HowItWorksModal />
     </div>

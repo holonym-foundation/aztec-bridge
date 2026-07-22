@@ -320,6 +320,9 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
     if (!aztecAddress) throw new Error('Aztec wallet not connected')
     if (!walletAdapter) throw new Error('Aztec wallet adapter not ready')
 
+    const notifyAmount = `${amountDisplayL2} ${selectedToken?.symbol ?? 'cUSDC'}`
+    const notifyMode: 'public' | 'private' = isPrivacyModeEnabled ? 'private' : 'public'
+
     logInfo('Withdrawal from L2 to L1 initiated', {
       direction: 'L2_TO_L1',
       fromNetwork: 'Aztec',
@@ -400,6 +403,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               type: 'withdrawal',
               title: 'Withdrawal in progress',
               message: 'Keep this page open while it completes.',
+              amount: notifyAmount,
+              mode: notifyMode,
             })
             break
           case BridgeEventType.BURN_CONFIRMED:
@@ -421,6 +426,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               type: 'withdrawal',
               title: 'Withdrawal confirmed',
               message: 'Finalizing on Ethereum. Export a recovery backup to stay safe.',
+              amount: notifyAmount,
+              mode: notifyMode,
               action: {
                 label: 'Export recovery backup',
                 onClick: () => {
@@ -503,6 +510,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               type: 'withdrawal',
               title: 'Withdrawal complete',
               message: 'Tokens withdrawn to Ethereum.',
+              amount: notifyAmount,
+              mode: notifyMode,
             })
             break
           }
@@ -599,6 +608,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                 message: isBlockNotProvenHint
                   ? 'The network needs more time. Try again later.'
                   : 'Your funds are safe on L2. Resume from Activity.',
+                amount: notifyAmount,
+                mode: notifyMode,
               })
               break
             }
@@ -613,12 +624,16 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                 type: 'error',
                 title: 'Contract artifact not found',
                 message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
+                amount: notifyAmount,
+                mode: notifyMode,
               })
             } else {
               pushNotification({
                 type: 'error',
                 title: 'Withdrawal failed',
                 message: 'No funds moved. You can retry.',
+                amount: notifyAmount,
+                mode: notifyMode,
               })
             }
             break

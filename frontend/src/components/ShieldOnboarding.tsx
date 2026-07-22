@@ -557,6 +557,25 @@ export default function ShieldOnboarding() {
   const [leaving, setLeaving] = useState(false)
 
   useEffect(() => {
+    // "Back to main screen" from the progress/activity flow appends ?app=1 so a
+    // returning user lands on the bridge shell directly instead of the splash gate,
+    // even when that navigation re-mounts this component (a fresh page load). The
+    // marker is honored once and immediately stripped from the URL, so a later reload
+    // of the bare route still shows the splash for onboarded users — the Shield brand
+    // click (issue #103) stays the only other way back to it.
+    let returnToApp = false
+    try {
+      const params = new URLSearchParams(window.location.search)
+      returnToApp = params.get('app') === '1'
+      if (returnToApp) {
+        params.delete('app')
+        const qs = params.toString()
+        window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash)
+      }
+    } catch {
+      returnToApp = false
+    }
+
     // First visit runs the full flow (once). Every subsequent page load — including a
     // refresh by a connected user — lands on the branded splash; the user explicitly
     // re-enters the bridge from there. Decided once on mount so a wallet reconnecting
@@ -567,7 +586,7 @@ export default function ShieldOnboarding() {
     } catch {
       onboarded = false
     }
-    setMode(onboarded ? 'splash' : 'flow')
+    setMode(returnToApp ? 'hidden' : onboarded ? 'splash' : 'flow')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

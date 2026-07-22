@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { useCountdown } from 'usehooks-ts'
 import LoadingStepsBars from '@/components/LoadingStepsBars'
 import StyledImage from '@/components/StyledImage'
@@ -178,6 +179,9 @@ export default function ProgressCard({
   const [resuming, setResuming] = useState(false)
 
   const isAllComplete = steps.every((step) => step.status === 'completed')
+  // The pending/working state — neither finished nor failed. Drives the redesigned layout
+  // (ticker + top From/To panel + in-clock countdown) while success/failure keep their own.
+  const isInProgress = !isAllComplete && !hasError
 
   // The L2 claim ("Claiming tokens on Aztec Network") is the step that spends bridged
   // Fee Juice — the one that stalls when gas runs short. Detect it by label so both the
@@ -448,14 +452,95 @@ export default function ProgressCard({
       </div>
     ) : null
 
+  const recoveryWarning = 'Please don’t reload or close this page, or it may be difficult to recover your funds.'
+
   return (
     <div>
-      {/* Warning banner — only when in progress */}
-      {!isAllComplete && !hasError && (
-        <div className="bg-light-yellow border border-dark-yellow/20 rounded-md mt-2 px-3 py-2">
-          <p className="text-xs text-dark-yellow font-medium text-center">
-            Please don't reload or close this page, or it may be difficult to recover your funds.
-          </p>
+      {/* Inline keyframes for the ticker scroll and the in-clock countdown pulse. Kept in this
+          file (no shared CSS edit) and fully disabled under prefers-reduced-motion. */}
+      <style>{`
+        .pc-marquee-track { display: flex; width: max-content; animation: pc-marquee-scroll 20s linear infinite; }
+        .pc-marquee-track:hover { animation-play-state: paused; }
+        .pc-marquee-item { white-space: nowrap; }
+        @keyframes pc-marquee-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .pc-timer { animation: pc-timer-pulse 2.4s ease-in-out infinite; }
+        @keyframes pc-timer-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) {
+          .pc-marquee-track { animation: none; transform: none; width: 100%; }
+          .pc-marquee-item { white-space: normal; text-align: center; }
+          .pc-marquee-dup { display: none; }
+          .pc-timer { animation: none; opacity: 1; }
+        }
+      `}</style>
+
+      {/* Warning ticker — single amber line that scrolls right-to-left. The message is duplicated
+          so the -50% loop is seamless; under reduced motion it collapses to a static wrapped line. */}
+      {isInProgress && (
+        <div className="bg-light-yellow border border-dark-yellow/20 rounded-md mt-2 overflow-hidden">
+          <div className="pc-marquee-track">
+            <span className="pc-marquee-item px-4 py-2 text-xs text-dark-yellow font-medium">{recoveryWarning}</span>
+            <span className="pc-marquee-item pc-marquee-dup px-4 py-2 text-xs text-dark-yellow font-medium" aria-hidden="true">
+              {recoveryWarning}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* From/To panel promoted to the top of the in-progress layout, absorbing the two controls:
+          recovery-backup export (top-left) and the PUBLIC/PRIVATE mode pill (top-right), size-matched. */}
+      {isInProgress && (
+        <div className="bg-[#F5F5F5] rounded-md mt-3 p-4">
+          <div className="flex items-center justify-between">
+            {direction && hasBackup ? (
+              <button
+                onClick={handleExportBackup}
+                data-tooltip-id="progress-recovery-tip"
+                data-tooltip-content="Export a recovery backup. Save this so you can recover your funds if the page closes."
+                aria-label="Export a recovery backup"
+                className="relative flex h-7 w-7 items-center justify-center rounded-full bg-[#047857]/[0.10] text-[#047857] transition-colors hover:bg-[#047857]/[0.18] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]/40"
+              >
+                <Icon icon="ph:key" width={15} height={15} />
+                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#047857]" />
+              </button>
+            ) : (
+              <span className="h-7 w-7" aria-hidden="true" />
+            )}
+            {modeKnown && (
+              <div
+                className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[10px] font-semibold uppercase tracking-wide ${
+                  isPrivate ? 'bg-[#FDE7F3] text-[#81133B]' : 'bg-[#EEF1FB] text-[#17235E]'
+                }`}
+                title={isPrivate ? 'This transfer runs in Private mode' : 'This transfer runs in Public mode'}
+              >
+                <Icon icon={isPrivate ? 'ph:shield-check-fill' : 'ph:eye-bold'} width={12} height={12} />
+                {isPrivate ? 'Private' : 'Public'}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-between mt-3">
+            <div>
+              <p className="text-14 font-semibold text-latest-grey-100">From</p>
+              <div className="flex gap-2 mt-2">
+                <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-6 w-6" />
+                <p className="text-16 font-medium text-latest-black-100 w-[106px]">{fromNetwork}</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-14 font-semibold text-latest-grey-100">To</p>
+              <div className="flex gap-2 mt-2">
+                <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-6 w-6" />
+                <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
+              </div>
+            </div>
+          </div>
+          <hr className="text-latest-grey-300 my-3" />
+          <p className="text-32 text-black font-medium text-center">{amountDisplay}</p>
+          {fuelBreakdown && (
+            <p className="text-center text-[11px] leading-tight font-medium text-latest-grey-500 mt-0.5">
+              {fuelBreakdown.bridgeAmount} to bridge + {fuelBreakdown.fuelAmount}
+            </p>
+          )}
+          <ReactTooltip id="progress-recovery-tip" place="top" className="z-[100]" style={{ fontSize: '11px', maxWidth: '220px' }} />
         </div>
       )}
 
@@ -464,21 +549,21 @@ export default function ProgressCard({
         {/* Encrypted-backup export — a small icon affordance in the top-right rather than a
             full-width button. Recovery-critical, so it stays in the transaction frame, but
             it must not dominate the layout. The green dot marks it as an available action. */}
-        {direction && hasBackup && !isAllComplete && (
+        {direction && hasBackup && hasError && (
           <button
             onClick={handleExportBackup}
             title="Export an encrypted local backup. Your data is already backed up. This saves a copy for manual recovery."
             aria-label="Export an encrypted local backup"
             className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-[#047857]/[0.10] text-[#047857] transition-colors hover:bg-[#047857]/[0.18]"
           >
-            <Icon icon="ph:download-simple-bold" width={16} height={16} />
+            <Icon icon="ph:key" width={16} height={16} />
             <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#047857]" />
           </button>
         )}
         {/* PUBLIC/PRIVATE badge — pinned top-left, mirroring the export button top-right. Derived
             from the operation's own mode, so a resumed public claim always reads PUBLIC even when
             Privacy Mode is toggled on. Icon-led, so it costs no vertical space in the flow. */}
-        {modeKnown && (
+        {modeKnown && !isInProgress && (
           <div
             className={`absolute left-3 top-3 inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[10px] font-semibold uppercase tracking-wide ${
               isPrivate ? 'bg-[#FDE7F3] text-[#81133B]' : 'bg-[#EEF1FB] text-[#17235E]'
@@ -489,7 +574,7 @@ export default function ProgressCard({
             {isPrivate ? 'Private' : 'Public'}
           </div>
         )}
-        <div className="flex items-center justify-center">
+        <div className="flex flex-col items-center justify-center">
           {isAlreadyCompleted ? (
             <Icon icon="ph:check-circle-fill" width={48} height={48} className="text-[#047857]" />
           ) : hasError ? (
@@ -508,6 +593,13 @@ export default function ProgressCard({
               alt=""
               className={isAllComplete ? 'h-12 w-12' : 'h-[56px] w-[56px]'}
             />
+          )}
+          {/* Estimated remaining time surfaced under the clock glyph (replaces the old separate
+              row). Slow opacity pulse ties it to the ticking countdown; static under reduced motion. */}
+          {isInProgress && (
+            <span className="pc-timer mt-1.5 text-14 font-semibold tabular-nums text-latest-black-100">
+              ~{formattedCountdown}
+            </span>
           )}
         </div>
 
@@ -544,19 +636,19 @@ export default function ProgressCard({
           <LoadingStepsBars steps={steps} currentStep={progressStep - 1} />
         </div>
 
-        {!hasError && (
+        {/* In progress, the estimated time now lives under the clock glyph above, so this
+            summary block is reserved for the completed state (final estimate + total taken). */}
+        {isAllComplete && (
           <>
-            <hr className={`text-latest-grey-300 ${isAllComplete ? 'my-2' : 'my-3'}`} />
+            <hr className="text-latest-grey-300 my-2" />
             <div className="flex justify-between mt-[2px]">
               <p className="text-14 font-medium text-latest-grey-100">Estimated time </p>
-              <p className="font-semibold text-14">~{isAllComplete ? initialEstimateFormatted : formattedCountdown}</p>
+              <p className="font-semibold text-14">~{initialEstimateFormatted}</p>
             </div>
-            {isAllComplete && (
-              <div className="flex justify-between mt-[2px]">
-                <p className="text-14 font-medium text-latest-grey-100">Total time taken </p>
-                <p className="font-semibold text-14">{formattedTimeTaken}</p>
-              </div>
-            )}
+            <div className="flex justify-between mt-[2px]">
+              <p className="text-14 font-medium text-latest-grey-100">Total time taken </p>
+              <p className="font-semibold text-14">{formattedTimeTaken}</p>
+            </div>
           </>
         )}
 
@@ -594,26 +686,26 @@ export default function ProgressCard({
           <span className="text-latest-grey-300">·</span>
           <span className="text-16 font-semibold text-latest-black-100">{amountDisplay}</span>
         </div>
-      ) : (
-        <div className={`bg-[#F5F5F5] rounded-md ${isAllComplete ? 'mt-2 px-4 py-3' : 'mt-3 p-4'}`}>
+      ) : isAllComplete ? (
+        <div className="bg-[#F5F5F5] rounded-md mt-2 px-4 py-3">
           <div className="flex justify-between">
             <div>
               <p className="text-14 font-semibold text-latest-grey-100">From</p>
-              <div className={`flex gap-2 ${isAllComplete ? 'mt-1.5' : 'mt-2'}`}>
+              <div className="flex gap-2 mt-1.5">
                 <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-6 w-6" />
                 <p className="text-16 font-medium text-latest-black-100 w-[106px]">{fromNetwork}</p>
               </div>
             </div>
             <div>
               <p className="text-14 font-semibold text-latest-grey-100">To</p>
-              <div className={`flex gap-2 ${isAllComplete ? 'mt-1.5' : 'mt-2'}`}>
+              <div className="flex gap-2 mt-1.5">
                 <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-6 w-6" />
                 <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
               </div>
             </div>
           </div>
-          <hr className={`text-latest-grey-300 ${isAllComplete ? 'my-2' : 'my-3'}`} />
-          <p className={`${isAllComplete ? 'text-26' : 'text-32'} text-black font-medium text-center`}>{amountDisplay}</p>
+          <hr className="text-latest-grey-300 my-2" />
+          <p className="text-26 text-black font-medium text-center">{amountDisplay}</p>
           {fuelBreakdown && (
             <p className="text-center text-[11px] leading-tight font-medium text-latest-grey-500 mt-0.5">
               {/* bridgeAmount/fuelAmount strings already include their own
@@ -623,7 +715,7 @@ export default function ProgressCard({
             </p>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* Already-completed recovery — the deposit's L1→L2 message was already consumed, so a
           Resume would just re-fail. Lead the user to Activity / their L2 balance instead, with a
@@ -638,7 +730,7 @@ export default function ProgressCard({
               View in Activity
             </button>
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/?app=1')}
               title="Back to main screen"
               aria-label="Back to main screen"
               className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"
@@ -666,7 +758,7 @@ export default function ProgressCard({
               {fuelErrorDetected ? 'Top up Fee Juice' : resuming ? 'Resuming…' : resumeLabel}
             </button>
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/?app=1')}
               title="Back to main screen"
               aria-label="Back to main screen"
               className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"
@@ -715,7 +807,7 @@ export default function ProgressCard({
           state carries its own back button, so it's excluded here. */}
       {showBackButton && !isAlreadyCompleted && !(hasError && direction) && (
         <div className="flex flex-row items-center justify-center mt-2 mb-4">
-          <TextButton className="" onClick={() => router.push('/')}>
+          <TextButton className="" onClick={() => router.push('/?app=1')}>
             Back to Main Screen
           </TextButton>
         </div>

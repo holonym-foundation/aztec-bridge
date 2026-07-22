@@ -30,6 +30,10 @@ function LoadingContent({ label }: { label: string }) {
 
 interface BridgeActionButtonProps {
   isDisabled?: boolean
+  // Specific reason the button is disabled by an EXTERNAL gate (fuel sufficiency / recipient /
+  // amount / auth), so we never show a silent greyed button — the reason renders under it.
+  // The internal disable cases already surface themselves in the button label.
+  disabledReason?: string
 
   // Binding guard: the connected (L1, L2) pair is a CONFLICT (the EVM wallet is
   // bound to a different Aztec account, or vice-versa). Bridging would deposit
@@ -111,6 +115,7 @@ interface BridgeActionButtonProps {
 
 function BridgeActionButton({
   isDisabled = false,
+  disabledReason,
   bindingBlocked = false,
   bindingBlockedLabel,
   isWaapConnected,
@@ -480,6 +485,12 @@ function BridgeActionButton({
     return getOperationLabel(direction)
   }
 
+  // Graceful states: when the button is disabled by an external gate whose reason isn't already
+  // carried in the label (fuel / recipient / amount / auth), surface it right under the button
+  // instead of leaving a silent greyed control. Suppressed while loading or on completion.
+  const showDisabledReason =
+    !!disabledReason && (isDisabled || isButtonDisabled) && !showLoadingSpinner && !bridgeCompleted
+
   return (
     <>
       <div className="w-full">
@@ -495,6 +506,9 @@ function BridgeActionButton({
             getButtonLabel()
           )}
         </TextButton>
+        {showDisabledReason && (
+          <p className="mt-1 text-center text-[11px] leading-[15px] font-medium text-[#B54708]">{disabledReason}</p>
+        )}
       </div>
 
       <CongestionWarningModal

@@ -13,7 +13,7 @@ import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeO
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
 import { useToast } from '@/hooks/useToast'
-import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
+import { isResumable, hasPossibleLockedFunds, isLikelyCompleted } from '@/utils/resumability'
 import { BridgeDirection } from '@/types/bridge'
 import { BRIDGED_FPC_ADDRESS } from '@/config'
 import type { BridgeOperation, RecoveryClaimData } from '@human.tech/clean.sdk'
@@ -49,6 +49,14 @@ function FeeJuicePageInner() {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
     )
   }, [operations])
+
+  // A recovery whose L1→L2 message was already consumed (deposit likely completed). It is NOT
+  // resumable (isResumable/hasPossibleLockedFunds both exclude it), so it never appears above —
+  // we surface it as "check your L2 balance" instead of a top-up-then-resume flow.
+  const depositLikelyCompleted = useMemo<boolean>(() => {
+    if (!fromResume || !operations || resumableClaim) return false
+    return operations.some((op) => op.direction === 'L1_TO_L2' && isLikelyCompleted(op))
+  }, [fromResume, operations, resumableClaim])
 
   // Mirrors ProgressCard.handleResume (L1→L2 branch): decrypt to prove wallet
   // ownership, stash recovery data, then hand off to /progress/resume.
@@ -123,6 +131,9 @@ function FeeJuicePageInner() {
   // Show both balances whenever private fuel exists on this deployment, so the
   // one-line summary always reflects the full picture regardless of the active mode.
   const showPrivate = !!BRIDGED_FPC_ADDRESS
+  // The active side of the balance line is highlighted (bold + brand color); the inactive side
+  // is dimmed. This is the mode indication — mirrors FeeJuiceTopUp's fuelType resolution.
+  const privateActive = isPrivacyModeEnabled && showPrivate
 
   return (
     <RootStyle className="min-h-0 max-h-[calc(90vh-2rem)] overflow-hidden">
@@ -148,17 +159,29 @@ function FeeJuicePageInner() {
           </div>
           <ReactTooltip id="fj-purpose" place="bottom" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
 
-          {/* Current Fee Juice balances — one compact, consistently-sized line. */}
+          {/* Current Fee Juice balances — one compact line; the active mode's side is highlighted
+              (bold + brand color) and the inactive side is dimmed. */}
           <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-md bg-[#F5F5F5] px-3 py-2 text-12">
             <span className="font-medium text-latest-grey-700">Fee Juice</span>
             {fjLoading ? (
               <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
             ) : (
               <>
-                <span className="font-semibold text-latest-black-100">{feeJuiceBalance ?? '--'}</span>
-                <span className="flex items-center gap-0.5 text-latest-grey-500">
+                <span className={privateActive ? 'font-medium text-latest-grey-500' : 'font-bold text-[#17235E]'}>
+                  {feeJuiceBalance ?? '--'}
+                </span>
+                <span
+                  className={`flex items-center gap-0.5 ${
+                    privateActive ? 'text-latest-grey-500' : 'font-semibold text-[#17235E]'
+                  }`}
+                >
                   public
-                  <Icon icon="ph:globe-hemisphere-west-fill" width={11} height={11} className="text-[#17235E]" />
+                  <Icon
+                    icon="ph:globe-hemisphere-west-fill"
+                    width={11}
+                    height={11}
+                    style={{ color: privateActive ? '#747474' : '#17235E' }}
+                  />
                 </span>
               </>
             )}
@@ -168,11 +191,22 @@ function FeeJuicePageInner() {
                 {privateFjLoading ? (
                   <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
                 ) : (
-                  <span className="font-semibold text-latest-black-100">{privateFeeJuiceBalance ?? '--'}</span>
+                  <span className={privateActive ? 'font-bold text-[#81133B]' : 'font-medium text-latest-grey-500'}>
+                    {privateFeeJuiceBalance ?? '--'}
+                  </span>
                 )}
-                <span className="flex items-center gap-0.5 text-latest-grey-500">
+                <span
+                  className={`flex items-center gap-0.5 ${
+                    privateActive ? 'font-semibold text-[#81133B]' : 'text-latest-grey-500'
+                  }`}
+                >
                   private
-                  <Icon icon="ph:lock-key-fill" width={11} height={11} className="text-[#81133B]" />
+                  <Icon
+                    icon="ph:lock-key-fill"
+                    width={11}
+                    height={11}
+                    style={{ color: privateActive ? '#81133B' : '#747474' }}
+                  />
                 </span>
               </>
             )}
@@ -187,14 +221,16 @@ function FeeJuicePageInner() {
               feeJuiceBalance={feeJuiceBalance}
               privateFeeJuiceBalance={privateFeeJuiceBalance}
               landingClaimShort={fromResume}
+              depositLikelyCompleted={depositLikelyCompleted}
               onLandingCoveredChange={setLandingCovered}
               onSuccess={() => setToppedUp(true)}
             />
           </div>
 
           {/* Prominent "Resume claim" once the claim is fundable — either after a successful
-              top-up, or immediately when the existing balance already covers it (public mode). */}
-          {fromResume && (toppedUp || landingCovered) && (
+              top-up, or immediately when the existing balance already covers it (public mode).
+              Never offered when the deposit likely already completed (resume would only re-fail). */}
+          {fromResume && !depositLikelyCompleted && (toppedUp || landingCovered) && (
             <button
               onClick={handleResume}
               disabled={resuming}

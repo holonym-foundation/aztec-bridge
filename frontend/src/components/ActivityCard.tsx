@@ -6,7 +6,7 @@ import { Tooltip as ReactTooltip } from 'react-tooltip'
 import type { BridgeOperation } from '@human.tech/clean.sdk'
 import { formatUnits } from 'viem'
 import { L1_TOKEN_METADATA } from '@/config'
-import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
+import { isResumable, hasPossibleLockedFunds, isLikelyCompleted } from '@/utils/resumability'
 import { copyToClipboard } from '@/utils'
 import { useToast } from '@/hooks/useToast'
 
@@ -29,6 +29,23 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${style.className}`}>
       {style.label}
+    </span>
+  )
+}
+
+// Whether the bridge ran privately. Globe/navy = public, lock/maroon = private —
+// the same icon + colour language used for fuel privacy elsewhere (FuelToggle,
+// Messages tints), so the mode reads consistently across the app (#230a).
+function PrivacyBadge({ isPrivate }: { isPrivate: boolean }) {
+  return isPrivate ? (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#FDE7F3] text-[#81133B] whitespace-nowrap">
+      <Icon icon="ph:lock-key-fill" width={11} height={11} />
+      Private
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#E5EFFF] text-[#17235E] whitespace-nowrap">
+      <Icon icon="ph:globe-hemisphere-west-fill" width={11} height={11} />
+      Public
     </span>
   )
 }
@@ -130,6 +147,10 @@ export default function ActivityCard({
   // but before the status-update PATCH landed — funds may be locked on-chain).
   // Both branches use the same decrypt + resume pipeline; the badge below
   // tells the user which case they're in.
+  // A consumed / "no non-nullified" message means the deposit's L1→L2 message was already
+  // claimed on a prior attempt — resuming just re-fails. Surface it as a calm "likely completed"
+  // state and never offer Resume for it (isResumable already excludes it).
+  const likelyCompleted = isLikelyCompleted(operation)
   const resumable = isResumable(operation)
   const lockedFunds = hasPossibleLockedFunds(operation)
   const showResume = resumable || lockedFunds
@@ -149,6 +170,12 @@ export default function ActivityCard({
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{directionLabel}</span>
           <StatusBadge status={operation.status} />
+          <PrivacyBadge isPrivate={!!operation.isPrivacyModeEnabled} />
+          {likelyCompleted && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 whitespace-nowrap">
+              Likely completed
+            </span>
+          )}
           {lockedFunds && (
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-800 whitespace-nowrap">
               Funds may be locked
@@ -162,7 +189,14 @@ export default function ActivityCard({
         {amount} {tokenSymbol}
       </p>
 
-      {operation.lastErrorMessage && <OperationError message={operation.lastErrorMessage} />}
+      {likelyCompleted ? (
+        <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+          <Icon icon="ph:check-circle-fill" width={14} height={14} className="flex-shrink-0" />
+          This deposit likely already completed. Check your L2 balance.
+        </p>
+      ) : (
+        operation.lastErrorMessage && <OperationError message={operation.lastErrorMessage} />
+      )}
 
       {hasActionRow && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2">

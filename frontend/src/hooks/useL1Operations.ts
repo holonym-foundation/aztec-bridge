@@ -23,6 +23,7 @@ import { requestWaapWallet, useWalletStore, WAAP_METHOD } from '@/stores/walletS
 import { I_UserTokenBalance, T_AlchemyTokenBalanceResponse, T_UserTokenType } from '@/types/token.balances.types'
 import { axiosErrorMessage } from './helper'
 import { networkConfig } from '@/config/l1.config'
+import { isConsumedMessageError } from '@/utils/resumability'
 import { useBridge } from '@/hooks/useBridge'
 import type { BridgeEvent, StepStatus } from '@human.tech/clean.sdk'
 import { STORAGE_KEYS, BridgeEventType } from '@human.tech/clean.sdk'
@@ -151,8 +152,15 @@ export function useL1TokenBalances() {
 
       return tokenBalnces
     } catch (error) {
-      const errMsg = axiosErrorMessage(error)
-      notify('error', errMsg)
+      // Balance refresh is a non-critical, auto-retrying display enhancement. Never surface the
+      // raw "Bridge API POST /api/alchemy/tokens-balances failed (0)" to users — keep the technical
+      // detail in the console and show a friendly, deduped, feed-suppressed note instead so a
+      // transient Alchemy hiccup doesn't read as a scary failure in the Messages feed.
+      console.error('[l1TokenBalances] Failed to refresh balances:', axiosErrorMessage(error), error)
+      notify('info', "Couldn't refresh balances, retrying", {
+        toastId: 'l1-balances-refresh-failed',
+        feed: false,
+      })
 
       throw error
     }
@@ -519,9 +527,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             notify(
               'warn',
               {
-                heading: 'Do Not Reload',
-                message:
-                  'Your deposit transaction is being prepared. Closing or reloading this page now may make recovery harder.',
+                heading: 'Do not reload',
+                message: 'Keep this page open so your funds stay recoverable.',
               },
               { autoClose: false, toastId: TOAST_ID_L1L2_DO_NOT_RELOAD },
             )
@@ -564,16 +571,14 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             notify(
               'warn',
               {
-                heading: 'Deposit In Progress',
-                message:
-                  'Please keep this page open while your deposit completes. Your data is encrypted and backed up — only you can access it.',
+                heading: 'Deposit in progress',
+                message: 'Keep this page open while your deposit completes.',
               },
               { autoClose: false, toastId: TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS, feed: false },
             )
             pushNotification({
               type: 'deposit',
               title: 'Deposit in progress',
-              message: `Your deposit of ${amountDisplayL1} is on Ethereum and bridging to Aztec.`,
             })
             break
           case BridgeEventType.DEPOSIT_CONFIRMED:
@@ -595,15 +600,14 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             pushNotification({
               type: 'deposit',
               title: 'Deposit confirmed',
-              message: 'Your deposit is confirmed on Ethereum. Claiming your tokens on Aztec…',
+              message: 'Claiming on Aztec.',
             })
             // Prompt user to backup their claim secret (matches old flow)
             notify(
               'warn',
               {
-                heading: 'Deposit Confirmed',
-                message:
-                  'Your deposit is confirmed on L1. Click here to export a full backup — this includes all the data needed to resume if anything interrupts the process.',
+                heading: 'Deposit confirmed',
+                message: 'Click to export a recovery backup.',
               },
               {
                 autoClose: false,
@@ -662,8 +666,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             notify(
               'info',
               {
-                heading: 'Waiting for L1→L2 sync',
-                message: `Aztec is syncing your deposit message from L1. Total wait is usually ~5–15 minutes — keep this tab open. (${event.elapsedMinutes.toFixed(0)} min elapsed)`,
+                heading: 'Syncing to Aztec',
+                message: `Usually 5 to 15 min. (${event.elapsedMinutes.toFixed(0)} min elapsed)`,
               },
               {
                 toastId: 'l1-to-l2-progress',
@@ -697,7 +701,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             })
             notify(
               'info',
-              `L2 node hasn't synced this message yet. Retrying in ${Math.round(event.delayMs / 60_000)} min (${event.attempt}/${event.maxAttempts})...`,
+              `Not synced yet. Retrying in ${Math.round(event.delayMs / 60_000)} min (${event.attempt}/${event.maxAttempts}).`,
               { toastId: 'l1-to-l2-progress', autoClose: 15000 },
             )
             break
@@ -713,8 +717,23 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             pushNotification({
               type: 'claim',
               title: 'Bridge complete',
-              message: 'Your tokens have been claimed on Aztec.',
+              message: 'Tokens claimed on Aztec.',
             })
+            // The claim just landed on L2 — refresh the cUSDC / Clean USDC balance
+            // so the user sees the credited funds without a manual reload (#230b).
+            // Retry a couple of times because the PXE can lag a few seconds behind
+            // the claim before the new note is simulateable; a single immediate
+            // refetch would read the pre-deposit balance.
+            {
+              const refreshL2Balances = () => {
+                queryClient.invalidateQueries({ queryKey: ['l2TokenBalance', aztecAddress] })
+                queryClient.invalidateQueries({ queryKey: ['l2FeeJuiceBalance', aztecAddress] })
+                queryClient.invalidateQueries({ queryKey: ['l2PrivateFeeJuiceBalance', aztecAddress] })
+              }
+              refreshL2Balances()
+              setTimeout(refreshL2Balances, 6000)
+              setTimeout(refreshL2Balances, 15000)
+            }
             break
           }
           case BridgeEventType.ATTESTATION_FETCH:
@@ -752,9 +771,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             notify(
               'warn',
               {
-                heading: 'Backup Warning',
-                message:
-                  'Could not save recovery data to server. Please do not close this page until the bridge completes.',
+                heading: 'Backup warning',
+                message: 'Could not save recovery data. Keep this page open.',
               },
               { autoClose: false },
             )
@@ -820,17 +838,30 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             // mid-flow status banners.
             for (const id of L1L2_TRANSIENT_TOAST_IDS) notify.dismiss(id)
 
+            // "No non-nullified message" and friends mean the deposit's L1→L2 message was already
+            // consumed by a prior successful claim — this is completion, not a loss. Keep the feed
+            // in step with ProgressCard's "likely completed" state: a calm, non-alarming record that
+            // points at the L2 balance, and NO funds-at-risk / resume messaging (resuming re-fails).
+            if (isConsumedMessageError(event.error?.message)) {
+              pushNotification({
+                type: 'success',
+                title: 'Deposit likely already completed',
+                message: 'Check your L2 balance in Activity.',
+              })
+              break
+            }
+
             pushNotification(
               event.fundsAtRisk
                 ? {
                     type: 'error',
-                    title: 'L2 claim failed — funds are safe',
-                    message: 'Your deposit confirmed on L1 but the L2 claim did not complete. Go to Activity to resume.',
+                    title: "L2 claim didn't finish",
+                    message: 'Your funds are safe. Resume from Activity.',
                   }
                 : {
                     type: 'error',
                     title: 'Deposit failed',
-                    message: event.error?.message?.slice(0, 160) ?? 'The transaction was not sent. You can safely retry.',
+                    message: 'No funds moved. You can retry.',
                   },
             )
 
@@ -841,8 +872,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               notify(
                 'warn',
                 {
-                  heading: 'L2 Claim Failed — Funds Are Safe',
-                  message: 'Your deposit confirmed on L1 but the L2 claim did not complete. Go to Activity to resume.',
+                  heading: "L2 claim didn't finish",
+                  message: 'Your funds are safe. Resume from Activity.',
                 },
                 { autoClose: false, feed: false },
               )
@@ -863,22 +894,20 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 (errorMsg.includes('artifact') && errorMsg.includes('not found'))
 
               if (isCongestion) {
-                notify(
-                  'error',
-                  'The Aztec Testnet is congested right now. Unfortunately your transaction was dropped.',
-                  { autoClose: false, feed: false },
-                )
+                notify('error', 'Aztec testnet is congested. Your transaction was dropped.', {
+                  autoClose: false,
+                  feed: false,
+                })
               } else if (isReloadable) {
-                notify('error', 'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page.', {
+                notify('error', 'Bridge failed (0xfb8f41b2). Please reload the page.', {
                   feed: false,
                 })
               } else if (isArtifact) {
                 notify(
                   'error',
                   {
-                    heading: 'Contract Artifact Not Found',
-                    message:
-                      'The contract artifact is not available in the public registry. Please upload it to https://testnet.aztec-registry.xyz/ to make it available for the wallet.',
+                    heading: 'Contract artifact not found',
+                    message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
                   },
                   { feed: false },
                 )
@@ -886,9 +915,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 notify(
                   'error',
                   {
-                    heading: 'Deposit Failed — No Funds Moved',
-                    message:
-                      'The transaction was not sent. Your balance is unchanged and no recovery is needed. You can safely retry.',
+                    heading: 'Deposit failed',
+                    message: 'No funds moved. You can retry.',
                   },
                   { feed: false },
                 )
@@ -956,8 +984,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         notify(
           'error',
           {
-            heading: 'Backup Failed — Bridge Aborted',
-            message: errorMessage.length > 200 ? errorMessage.slice(0, 200) + '...' : errorMessage,
+            heading: 'Backup failed, bridge stopped',
+            message: 'Could not save your backup. Please try again.',
           },
           { autoClose: false },
         )
@@ -1071,7 +1099,7 @@ export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void)
               'warn',
               {
                 heading: 'Buying Fee Juice',
-                message: 'Your Fee Juice top-up is on L1. Keep this page open while it bridges to Aztec.',
+                message: 'On L1 now. Keep this page open while it bridges.',
               },
               { autoClose: false, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
             )
@@ -1079,14 +1107,14 @@ export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void)
           case BridgeEventType.DEPOSIT_CONFIRMED:
             notify(
               'info',
-              'Top-up confirmed on L1 — claiming Fee Juice on Aztec…',
+              'Top-up confirmed. Claiming Fee Juice on Aztec.',
               { autoClose: 15000, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
             )
             break
           case BridgeEventType.SYNC_POLL:
             notify(
               'info',
-              `Aztec is syncing your Fee Juice from L1 (~5–15 min). ${event.elapsedMinutes.toFixed(0)} min elapsed.`,
+              `Syncing your Fee Juice to Aztec. ${event.elapsedMinutes.toFixed(0)} min elapsed.`,
               { autoClose: 15000, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
             )
             break
@@ -1140,11 +1168,11 @@ export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void)
       queryClient.invalidateQueries({ queryKey: ['l2TokenBalance', aztecAddress] })
       queryClient.invalidateQueries({ queryKey: ['l1TokenBalances', l1Address] })
       queryClient.invalidateQueries({ queryKey: ['l1TokenBalance', l1Address] })
-      notify('success', 'Fee Juice added — you can complete your withdrawal now.', { feed: false })
+      notify('success', 'Fee Juice added. Finish your withdrawal now.', { feed: false })
       pushNotification({
         type: 'deposit',
         title: 'Fee Juice added',
-        message: 'Your Fee Juice top-up is complete — you can finish your withdrawal now.',
+        message: 'Finish your withdrawal now.',
       })
       onTopUpSuccess?.(txHash)
     },

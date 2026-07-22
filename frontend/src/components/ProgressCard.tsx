@@ -506,13 +506,13 @@ export default function ProgressCard({
             <StyledImage
               src={isAllComplete ? '/assets/svg/transactionComplete.svg' : '/assets/svg/progress.svg'}
               alt=""
-              className="h-[56px] w-[56px]"
+              className={isAllComplete ? 'h-12 w-12' : 'h-[56px] w-[56px]'}
             />
           )}
         </div>
 
         <p
-          className={`text-center font-semibold text-md ${hasError ? 'mt-3' : 'mt-4'} ${
+          className={`text-center font-semibold text-md ${hasError ? 'mt-3' : isAllComplete ? 'mt-2' : 'mt-4'} ${
             isAlreadyCompleted ? 'text-[#047857]' : hasError ? 'text-[#B91C1C]' : isAllComplete ? 'text-green-600' : ''
           }`}
         >
@@ -540,13 +540,13 @@ export default function ProgressCard({
             deposit tx is the reassuring "your funds are here" anchor, so keep it close to the top. */}
         {explorerLinks}
 
-        <div className={hasError ? 'mt-3' : 'mt-4'}>
+        <div className={isAllComplete ? 'mt-2' : hasError ? 'mt-3' : 'mt-4'}>
           <LoadingStepsBars steps={steps} currentStep={progressStep - 1} />
         </div>
 
         {!hasError && (
           <>
-            <hr className="text-latest-grey-300 my-3" />
+            <hr className={`text-latest-grey-300 ${isAllComplete ? 'my-2' : 'my-3'}`} />
             <div className="flex justify-between mt-[2px]">
               <p className="text-14 font-medium text-latest-grey-100">Estimated time </p>
               <p className="font-semibold text-14">~{isAllComplete ? initialEstimateFormatted : formattedCountdown}</p>
@@ -595,27 +595,27 @@ export default function ProgressCard({
           <span className="text-16 font-semibold text-latest-black-100">{amountDisplay}</span>
         </div>
       ) : (
-        <div className="bg-[#F5F5F5] rounded-md mt-3 p-4">
+        <div className={`bg-[#F5F5F5] rounded-md ${isAllComplete ? 'mt-2 px-4 py-3' : 'mt-3 p-4'}`}>
           <div className="flex justify-between">
             <div>
               <p className="text-14 font-semibold text-latest-grey-100">From</p>
-              <div className="flex gap-2 mt-2">
+              <div className={`flex gap-2 ${isAllComplete ? 'mt-1.5' : 'mt-2'}`}>
                 <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-6 w-6" />
                 <p className="text-16 font-medium text-latest-black-100 w-[106px]">{fromNetwork}</p>
               </div>
             </div>
             <div>
               <p className="text-14 font-semibold text-latest-grey-100">To</p>
-              <div className="flex gap-2 mt-2">
+              <div className={`flex gap-2 ${isAllComplete ? 'mt-1.5' : 'mt-2'}`}>
                 <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-6 w-6" />
                 <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
               </div>
             </div>
           </div>
-          <hr className="text-latest-grey-300 my-3" />
-          <p className="text-32 text-black font-medium text-center">{amountDisplay}</p>
+          <hr className={`text-latest-grey-300 ${isAllComplete ? 'my-2' : 'my-3'}`} />
+          <p className={`${isAllComplete ? 'text-26' : 'text-32'} text-black font-medium text-center`}>{amountDisplay}</p>
           {fuelBreakdown && (
-            <p className="text-center text-12 font-medium text-latest-grey-500 mt-1">
+            <p className="text-center text-[11px] leading-tight font-medium text-latest-grey-500 mt-0.5">
               {/* bridgeAmount/fuelAmount strings already include their own
                   token symbol and "to top up …" suffix from the producer at
                   app/progress/page.tsx — do NOT double-suffix here. */}
@@ -714,7 +714,7 @@ export default function ProgressCard({
           direction is available to build the resume action above. The already-completed
           state carries its own back button, so it's excluded here. */}
       {showBackButton && !isAlreadyCompleted && !(hasError && direction) && (
-        <div className="flex flex-row items-center justify-center mt-4 mb-6">
+        <div className="flex flex-row items-center justify-center mt-2 mb-4">
           <TextButton className="" onClick={() => router.push('/')}>
             Back to Main Screen
           </TextButton>

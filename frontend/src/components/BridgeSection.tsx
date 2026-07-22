@@ -28,12 +28,25 @@ interface BridgeSectionProps {
   feeJuiceLoading?: boolean
   attestationMethod?: 'poch' | 'passport' | null
   passportMaxAmount?: bigint
+  // Clean-Hands (PoCH) daily deposit limit in USD, for the verified-tier pill. Undefined when
+  // the value is not surfaced to the client — the pill then shows the verified state with no
+  // fabricated figure. Never hardcode it here; thread the real config/backend value in.
+  pochDailyLimitUsd?: number
   // Post-fee amount the user receives on the destination (net of the portal fee)
   youWillReceive?: string
   // Space-yielding: when a detail accordion below (Transaction breakdown / fuel detail)
   // expands, the From/To sections collapse to one-line summary rows so the expanded detail
   // fits inside the card's no-scroll budget instead of scrolling. Restores on collapse.
   compact?: boolean
+}
+
+// Compact USD for limit pills: 25000 → "$25k", 1500 → "$1.5k", 900 → "$900".
+function formatCompactUsd(usd: number): string {
+  if (usd >= 1000) {
+    const k = usd / 1000
+    return `$${Number.isInteger(k) ? k : Number(k.toFixed(1))}k`
+  }
+  return `$${usd.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 }
 
 const BridgeSection: React.FC<BridgeSectionProps> = ({
@@ -54,6 +67,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   feeJuiceLoading = false,
   attestationMethod,
   passportMaxAmount,
+  pochDailyLimitUsd,
   youWillReceive,
   compact = false,
 }) => {
@@ -80,6 +94,10 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   const passportCapUsd = passportMaxAmount != null ? Number(passportMaxAmount) / 1e6 : undefined
   const capLabel =
     passportCapUsd != null ? `$${passportCapUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : ''
+  // Clean-Hands tier shows its DAILY limit when a real value is threaded in (e.g. "$25k/day").
+  // Empty when the limit is not exposed to the client — the pill stays honest with no number.
+  const dailyLimitLabel =
+    pochDailyLimitUsd != null && pochDailyLimitUsd > 0 ? `${formatCompactUsd(pochDailyLimitUsd)}/day` : ''
   const amountNum = Number(inputAmount)
   // Nudge only on the Passport path, only as the amount nears or crosses the cap.
   // PoCH-verified users already have the higher limit, so they are never nagged.
@@ -220,11 +238,15 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             {attestationMethod === 'poch' ? (
               <span
                 data-tooltip-id="attestation-info"
-                data-tooltip-content="Verified with Proof of Clean Hands. Higher per-transaction limit than the Passport tier."
+                data-tooltip-content={
+                  dailyLimitLabel
+                    ? `Verified with Proof of Clean Hands. Higher daily limit (${dailyLimitLabel}) than the Passport tier.`
+                    : 'Verified with Proof of Clean Hands. Higher daily limit than the Passport tier.'
+                }
                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-12 font-medium cursor-default bg-[rgba(15,123,79,0.10)] text-[#0F7B4F]"
               >
                 <Icon icon="ph:seal-check-fill" width={13} height={13} className="shrink-0" />
-                Clean Hands
+                Clean Hands{dailyLimitLabel ? ` · ${dailyLimitLabel}` : ''}
               </span>
             ) : (
               passportMaxAmount != null && (

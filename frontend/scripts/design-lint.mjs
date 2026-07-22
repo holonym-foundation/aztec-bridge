@@ -3,11 +3,15 @@
  * design-lint.mjs — Shield pre-deploy design lint (first pass, advisory).
  *
  * Enforces the mechanical subset of the Shield Design & Brand SOP:
- *   holonym-foundation/internal-docs → products/aztec-bridge/design-sop.md
+ *   holonym-foundation/internal-docs → products/shield/design-sop.md
  *
  * This is a lightweight static (regex) pass — NO heavy deps, no AST/browser.
  * It reliably catches only the mechanical rules. Contrast-in-context,
  * no-contradictions, and state-completeness still need human review (SOP §11).
+ *
+ * Rendered-geometry rules that CAN'T be statically checked are printed as a
+ * manual reviewer-checklist reminder (not a pass): the back-action ~80/20
+ * layout (#194) and minimum edge/neighbor spacing (#211/#208).
  *
  * Run:   cd frontend && pnpm design-lint
  *
@@ -136,12 +140,21 @@ for (const file of files) {
     // (e.g. `bg-black text-white` : `bg-white text-neutral-900`) aren't
     // falsely paired. `(?!/)` skips opacity-modified tokens (bg-white/[0.12]).
     const solidWhiteText = /\btext-white\b(?!\/)/
+    // Harsh pure-black text on white (SOP §2 / #189). On white/neutral-100 this
+    // clears WCAG but reads harsh against Shield's warmer neutrals — flag for
+    // review; prefer text-neutral-900 (#171717). Scoped to the same ternary
+    // segment as a white bg so mutually-exclusive branches aren't paired.
+    const harshBlackText = /\btext-black\b|\btext-\[#(?:000|000000|111|111111)\]/i
     for (const seg of cls.split(/[?:]|\$\{|\}|['"`]/)) {
-      if (!solidWhiteText.test(seg)) continue
-      const lightBg = LIGHT_BG.find((b) => new RegExp(`\\b${b}\\b(?!\\/)`).test(seg))
-      const translucent = seg.match(/\bbg-[^\s/]*\/(?:\[0?\.0[0-9]\]|5|10|20)\b/)
-      if (lightBg || translucent) {
-        add('contrast', rel, lineOf(noComments, cm.index), `white text on a light/translucent fill (${lightBg || translucent[0]}) — unreadable`, seg.trim())
+      if (solidWhiteText.test(seg)) {
+        const lightBg = LIGHT_BG.find((b) => new RegExp(`\\b${b}\\b(?!\\/)`).test(seg))
+        const translucent = seg.match(/\bbg-[^\s/]*\/(?:\[0?\.0[0-9]\]|5|10|20)\b/)
+        if (lightBg || translucent) {
+          add('contrast', rel, lineOf(noComments, cm.index), `white text on a light/translucent fill (${lightBg || translucent[0]}) — unreadable`, seg.trim())
+        }
+      }
+      if (harshBlackText.test(seg) && /\b(?:bg-white|bg-neutral-100)\b(?!\/)/.test(seg)) {
+        add('contrast', rel, lineOf(noComments, cm.index), 'harsh pure-black text on white (#189) — prefer text-neutral-900 (#171717)', seg.trim())
       }
     }
   }
@@ -215,7 +228,7 @@ const RULE_TITLES = {
   states: 'Graceful states — disabled buttons (SOP §6)',
 }
 
-console.log('Shield design-lint — SOP: internal-docs products/aztec-bridge/design-sop.md')
+console.log('Shield design-lint — SOP: internal-docs products/shield/design-sop.md')
 console.log(`Scanned ${files.length} .tsx files under src/`)
 console.log('')
 
@@ -237,6 +250,18 @@ if (findings.length === 0) {
 }
 
 reportNoScrollStub()
+
+// ── manual reviewer checklist (SOP §11) — rules that need rendered geometry ──
+function reportManualChecklist() {
+  console.log('── manual reviewer checklist (SOP §11) — not statically checkable ──')
+  console.log('These depend on rendered layout, so confirm by eye (the lint can NOT):')
+  console.log('  [ ] Back-action (#194): where a screen has a primary CTA + back, back is a')
+  console.log('      small in-row button (~80/20), never a stacked full-width button (SOP §4)')
+  console.log('  [ ] Edge/neighbor spacing (#211/#208): no nav segment, card, or message row')
+  console.log('      crowds a border/neighbor; pinned-edge segments get extra inset (SOP §3)')
+  console.log('')
+}
+reportManualChecklist()
 
 if (!ADVISORY && findings.length > 0) {
   console.log(`design-lint: BLOCKING mode — failing on ${findings.length} finding(s).`)

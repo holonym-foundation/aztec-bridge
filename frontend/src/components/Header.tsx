@@ -595,9 +595,13 @@ interface HumanityPointsChipProps {
 }
 
 /**
- * Collapsible Humanity Score + Points indicator. Collapsed = compact chip
- * (score · points); click/tap expands a small panel with the score bar and
- * points detail. Closes on click-outside or Escape.
+ * Compact Humanity Score + Points indicator (#227). The chip itself shows the
+ * live values (score stacked above points), right-justified so they sit flush
+ * against the wallet-cluster divider. The breakdown (score bar, "what is this?"
+ * explanation, Proof of Clean Hands detail, and the HUMN Points readout) is an
+ * info readout, so it lives in a HOVER tooltip (react-tooltip, same pattern as
+ * the network + humanity-info tooltips) rather than a click-to-open panel. No
+ * caret. The tooltip is `clickable`, so tap-to-open also works on touch.
  *
  * Humanity side reflects the L1-only proof-of-personhood result from
  * useL1Humanity (see Header below) — it is independent of the L1↔L2 binding and
@@ -618,24 +622,6 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
   isDark = false,
   unverifiedHint = 'Connect your Ethereum wallet to verify personhood.',
 }) => {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [])
-
   const isPassport = method === 'passport' && typeof passportScore === 'number'
   const isPoch = method === 'poch'
   const isVerified = isPassport || isPoch
@@ -646,21 +632,29 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
       ? 100
       : 0
 
+  const scoreDetail = isPassport
+    ? String(passportScore)
+    : isPoch
+      ? 'Verified'
+      : isFetching
+        ? 'Checking…'
+        : 'Not verified'
+
   return (
-    <div className="relative" ref={ref}>
-      {/* Vertical chip (#111): humanity score stacked ABOVE points, so the chip
-          reads as a compact two-line stat pill sitting flush beside the wallet/
-          account stack (its ~two-row height pairs with the stacked wallet
-          cluster) instead of a wide horizontal strip. Click still opens the same
-          expandable panel below. */}
+    <div className="relative">
+      {/* Vertical chip (#111/#227): humanity score stacked ABOVE points. The
+          content is right-justified (items-end + a trimmed right inset) so the
+          values sit flush against the wallet-cluster divider to its right,
+          instead of floating with a gap. No caret — this is an info readout, so
+          the breakdown moved into the hover tooltip below (anchored via
+          data-tooltip-id). */}
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="true"
-        aria-expanded={open}
-        className={`flex items-center gap-1.5 sm:gap-2 h-14 sm:h-16 px-2.5 sm:px-3 rounded-[18px] transition-colors duration-200 ${open ? activeTint(isDark) : hoverTint(isDark)} cursor-pointer`}
+        data-tooltip-id="humanity-points-tooltip"
+        aria-label="Humanity score and HUMN Points. Hover for details"
+        className={`flex items-center justify-end h-14 sm:h-16 pl-2.5 sm:pl-3 pr-1 rounded-[18px] transition-colors duration-200 ${hoverTint(isDark)} cursor-pointer`}
       >
-        <div className="flex flex-col justify-center gap-1.5">
+        <div className="flex flex-col items-end justify-center gap-1.5">
           {/* Humanity row. The green pulsing glow (ported DS chip--glow) is a
               halo around this badge — applied ONLY in the verified/green state,
               mirroring the DS which only glows the green verified chip. The
@@ -673,144 +667,104 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
             <span className={`text-xs font-semibold leading-none ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
           </span>
           {/* Points row — HUMN Points glyph with slow continuous rotation (ported DS chip--spin-icon). */}
-          <span
-            className="flex items-center gap-1.5"
-            title="HUMN Points — rewards for verified humans, not bots, across human.tech. Open for details."
-          >
+          <span className="flex items-center gap-1.5">
             <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
             <span className={`text-xs font-semibold leading-none ${navText(isDark)}`}>{points.toLocaleString()}</span>
           </span>
         </div>
-        <Icon
-          icon="ph:caret-down"
-          width={11}
-          height={11}
-          className={`${mutedIconText(isDark)} transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
-        />
       </button>
 
-      {open && (
-        <div className={`absolute right-0 mt-2 z-50 w-[248px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-4 flex flex-col gap-3`}>
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className={`flex items-center gap-1 text-xs font-medium ${subtleText(isDark)}`}>
-                Humanity
-                <span
-                  className="inline-flex cursor-help"
-                  data-tooltip-id="humanity-info-tooltip"
-                  aria-label="What is the humanity score?"
-                >
-                  <Icon icon="ph:info" width={13} height={13} className={mutedIconText(isDark)} />
+      {/* Hover tooltip carrying the full breakdown (#227). Same react-tooltip
+          used for the network + humanity-info tooltips. `clickable` keeps the
+          links reachable and doubles as tap-to-open on touch. The interior is a
+          dark bubble (react-tooltip's default surface), so its text is styled
+          light in both themes rather than via the page's theme helpers. */}
+      <ReactTooltip
+        id="humanity-points-tooltip"
+        place="bottom"
+        clickable
+        className="z-[100] max-w-[248px]"
+        style={{ padding: '12px', borderRadius: '16px' }}
+        render={() => (
+          <div className="flex flex-col gap-3 text-left">
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-1.5">
+                <span className="text-xs font-medium text-white/[0.70]">Humanity</span>
+                {/* Cumulative score, NOT a fraction, so no "/threshold" denominator (#112/#113). */}
+                <span className={`text-sm font-semibold ${isVerified ? 'text-[#FA8FC4]' : 'text-white/[0.60]'}`}>
+                  {scoreDetail}
                 </span>
-              </span>
-              {/* Cumulative score — NOT a fraction, so no "/threshold" denominator (#112/#113). */}
-              <span className={`text-sm font-semibold ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>
-                {isPassport
-                  ? String(passportScore)
-                  : isPoch
-                    ? 'Verified'
-                    : isFetching
-                      ? 'Checking…'
-                      : 'Not verified'}
-              </span>
-            </div>
-            <ReactTooltip
-              id="humanity-info-tooltip"
-              place="top"
-              clickable
-              className="z-[100] max-w-[220px]"
-              style={{ fontSize: '11px', padding: '6px 8px' }}
-              render={() => (
-                <span>
-                  A cumulative proof-of-personhood score — higher means stronger proof you&apos;re a real, unique human. From Proof of Clean Hands and{' '}
-                  <a
-                    href="https://app.passport.xyz"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline font-medium"
-                  >
-                    Human Passport
-                  </a>
-                  .
-                </span>
-              )}
-            />
-            <div className={`w-full h-1.5 rounded-full ${isDark ? 'bg-white/[0.10]' : 'bg-[#F5E1EA]'} overflow-hidden`}>
-              <div
-                className={`h-full rounded-full transition-[width] duration-300 ${
-                  isVerified ? (isDark ? 'bg-[#FA8FC4]' : 'bg-[#81133B]') : isDark ? 'bg-white/[0.25]' : 'bg-gray-300'
-                }`}
-                style={{ width: `${scorePct}%` }}
-              />
-            </div>
-            {isPoch && (
-              <div className="mt-2 flex items-center gap-1.5">
-                <span
-                  className="inline-flex items-center gap-1.5 cursor-help"
-                  data-tooltip-id="poch-info-tooltip"
-                  aria-label="About Proof of Clean Hands"
-                >
-                  {/* Proof of Clean Hands badge (#127/#128). The L1 humanity
-                      result only tells us POCH is satisfied (method === 'poch');
-                      it carries NO mint date or expiry — checkCleanHands (the
-                      /attestation/sbts/clean-hands endpoint) returns only
-                      { isUnique, signature?, circuitId? } and L1EligibilityResult
-                      has no temporal fields. So this shows the PoCH mark + an
-                      explanatory tooltip, not fabricated dates.
-                      TODO(poch-meta): surface actual mint/expiry by fetching the
-                      Clean-Hands SBT / attestation metadata (a new data path —
-                      not exposed by the current eligibility route). */}
-                  <Icon icon="ph:hand-soap" width={15} height={15} className={accentPink(isDark)} />
-                  <span className={`text-[11px] font-medium ${accentPink(isDark)}`}>Proof of Clean Hands</span>
-                  <Icon icon="ph:info" width={12} height={12} className={mutedIconText(isDark)} />
-                </span>
-                <ReactTooltip
-                  id="poch-info-tooltip"
-                  place="top"
-                  clickable
-                  className="z-[100] max-w-[240px]"
-                  style={{ fontSize: '11px', padding: '6px 8px' }}
-                  render={() => (
-                    <span>
-                      <strong>Proof of Clean Hands</strong> — a privacy-preserving proof you&apos;re a real, sanctions-screened human. No numeric score needed. Mint date and expiry aren&apos;t available in this view yet.{' '}
-                      <a
-                        href={POCH_MINT_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline font-medium"
-                      >
-                        Manage
-                      </a>
-                    </span>
-                  )}
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-white/[0.15] overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-300 ${isVerified ? 'bg-[#FA8FC4]' : 'bg-white/[0.30]'}`}
+                  style={{ width: `${scorePct}%` }}
                 />
               </div>
-            )}
-            {!isVerified && (
-              <p className={`text-[11px] ${subtleText(isDark)} mt-1.5`}>
-                {isFetching ? 'Checking eligibility…' : unverifiedHint}
+              <p className="text-[11px] leading-snug text-white/[0.75] mt-2">
+                A cumulative proof-of-personhood score. Higher means stronger proof you&apos;re a real, unique human. From Proof of Clean Hands and{' '}
+                <a
+                  href="https://app.passport.xyz"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline font-medium"
+                >
+                  Human Passport
+                </a>
+                .
               </p>
-            )}
-          </div>
-          <div className={`flex flex-col gap-2 pt-2 border-t ${panelDivider(isDark)}`}>
-            <div className="flex items-center justify-between">
-              <span className={`flex items-center gap-1.5 text-xs font-medium ${subtleText(isDark)}`}>
-                <HumanPointsIcon className="w-3.5 h-3.5" />
-                HUMN Points
-              </span>
-              <span className={`text-sm font-semibold ${navText(isDark)}`}>{points.toLocaleString()}</span>
+              {isPoch && (
+                <div className="mt-2">
+                  {/* Proof of Clean Hands badge (#127/#128). The L1 humanity
+                      result only tells us POCH is satisfied (method === 'poch');
+                      it carries NO mint date or expiry, so this shows the PoCH
+                      mark + an explanation, never fabricated dates.
+                      TODO(poch-meta): surface actual mint/expiry by fetching the
+                      Clean-Hands SBT / attestation metadata (a new data path,
+                      not exposed by the current eligibility route). */}
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icon icon="ph:hand-soap" width={15} height={15} className="text-[#FA8FC4]" />
+                    <span className="text-[11px] font-medium text-[#FA8FC4]">Proof of Clean Hands</span>
+                  </span>
+                  <p className="text-[11px] leading-snug text-white/[0.75] mt-1">
+                    A privacy-preserving proof you&apos;re a real, sanctions-screened human. No numeric score needed. Mint date and expiry aren&apos;t available in this view yet.{' '}
+                    <a
+                      href={POCH_MINT_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline font-medium"
+                    >
+                      Manage
+                    </a>
+                  </p>
+                </div>
+              )}
+              {!isVerified && (
+                <p className="text-[11px] leading-snug text-white/[0.70] mt-1.5">
+                  {isFetching ? 'Checking eligibility…' : unverifiedHint}
+                </p>
+              )}
             </div>
-            {/* TODO: `points` is still the PLACEHOLDER_POINTS stub — Shield has no
-                per-user points source yet. The real value must be fetched from the
-                points backend (the passport/Covenant HUMN Points service) and
-                threaded through the `points` prop. Do NOT fabricate a per-action
-                breakdown here — show only the real single balance once it's wired. */}
-            <p className={`text-[11px] leading-snug ${subtleText(isDark)}`}>
-              HUMN Points reward real, verified humans — not bots — across human.tech.
-            </p>
+            <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.15]">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-white/[0.70]">
+                  <HumanPointsIcon className="w-3.5 h-3.5" />
+                  HUMN Points
+                </span>
+                <span className="text-sm font-semibold text-white/[0.90]">{points.toLocaleString()}</span>
+              </div>
+              {/* TODO: `points` is still the PLACEHOLDER_POINTS stub. Shield has no
+                  per-user points source yet. The real value must be fetched from the
+                  points backend (the passport/Covenant HUMN Points service) and
+                  threaded through the `points` prop. Do NOT fabricate a per-action
+                  breakdown here, show only the real single balance once it's wired. */}
+              <p className="text-[11px] leading-snug text-white/[0.75]">
+                HUMN Points reward real, verified humans, not bots, across human.tech.
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      />
     </div>
   )
 }
@@ -1252,7 +1206,12 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           overflowing it — a fixed height here was clipping/spilling the
           2-pill stack outside the rounded pill shape. */}
       <div
-        className={`flex-1 min-w-0 flex items-center justify-between gap-2 min-h-11 sm:min-h-12 py-1 sm:py-1.5 px-2 sm:px-3 rounded-full ${glassPill(isDark)}`}
+        // Asymmetric horizontal inset (#211): Privacy Mode is pinned to the far
+        // left of this pill, and a symmetric px-2/px-3 left it crowding the pill's
+        // left border. The left inset is widened (pl-4 sm:pl-5) so the label sits
+        // clear of the edge; the right inset (pr-2 sm:pr-3) is unchanged so the
+        // wallet cluster's spacing and the no-scroll budget stay as they were.
+        className={`flex-1 min-w-0 flex items-center justify-between gap-2 min-h-11 sm:min-h-12 py-1 sm:py-1.5 pl-4 pr-2 sm:pl-5 sm:pr-3 rounded-full ${glassPill(isDark)}`}
       >
         {/* Left: Privacy Mode pinned to the far left of the middle section (#159).
             Flat segment now (#185). A flush hairline on its right edge divides it

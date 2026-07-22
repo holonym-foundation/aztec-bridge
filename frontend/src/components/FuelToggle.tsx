@@ -476,9 +476,14 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
     }
   }, [fuelEnabled, isValid, alreadyCovered, effectiveSufficient, sufficiencyLoading, onSufficiencyChange])
 
+  // Fuel is carved OUT of the bridge, so a POSITIVE top-up must be strictly less than the bridge.
+  // An empty/zero amount is valid — it just means "no carve" (e.g. top-up is optional because the
+  // user is already covered), and must never block the bridge button. Only a positive amount that
+  // meets-or-exceeds the bridge is an invalid pair.
+  const fuelAmountValid = !fuelEnabled || fuelNum <= 0 || fuelNum < bridgeNum
   useEffect(() => {
-    onFuelAmountValidChange?.(!fuelEnabled || isValid)
-  }, [fuelEnabled, isValid, onFuelAmountValidChange])
+    onFuelAmountValidChange?.(fuelAmountValid)
+  }, [fuelAmountValid, onFuelAmountValidChange])
 
   // Surface the live FJ quote up to the parent so the Transaction breakdown can show the
   // fee-juice destination. Null whenever fuel is off or the amount is invalid.
@@ -607,13 +612,23 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
       <ReactTooltip id="fj-warning" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
 
       {/* Already covered: the user's existing FJ meets the claim requirement, so no top-up is
-          needed. Show a calm, non-alarming note (never the red bad-rate warning). */}
+          needed. Collapsed to a single row — the calm "enough" note and the Set/Edit link share
+          one line (link right-aligned) instead of stacking, reclaiming a row in the card. */}
       {fuelEnabled && alreadyCovered && (
-        <div className="mt-2 flex items-start gap-1.5 rounded-[8px] bg-[#17235E]/[0.08] px-2.5 py-1.5">
-          <Icon icon="ph:check-circle-fill" width={13} height={13} className="mt-0.5 flex-shrink-0 text-[#17235E]" />
-          <p className="text-[11px] leading-[15px] text-[#737373]">
-            <span className="font-semibold text-[#17235E]">You have enough Fee Juice.</span> Top-up is optional.
-          </p>
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-[8px] bg-[#17235E]/[0.08] px-2.5 py-1.5">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <Icon icon="ph:check-circle-fill" width={13} height={13} className="flex-shrink-0 text-[#17235E]" />
+            <span className="truncate text-[11px] font-semibold leading-[15px] text-[#17235E]">Enough Fee Juice</span>
+          </span>
+          {!detailOpen && (
+            <button
+              type="button"
+              onClick={() => setDetailOpen(true)}
+              className="shrink-0 text-[11px] font-medium text-[#17235E] hover:underline"
+            >
+              {fuelNum > 0 ? 'Edit amount' : 'Set an amount'}
+            </button>
+          )}
         </div>
       )}
 
@@ -643,7 +658,9 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
         </div>
       )}
 
-      {fuelEnabled && !detailOpen && (
+      {/* Standalone Set/Edit link — only when NOT already covered (the covered row above carries
+          its own inline link). Keeps the collapsed panel to a single actionable row. */}
+      {fuelEnabled && !alreadyCovered && !detailOpen && (
         <button
           type="button"
           onClick={() => setDetailOpen(true)}

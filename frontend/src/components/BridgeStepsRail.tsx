@@ -44,6 +44,10 @@ const BridgeStepsRail: React.FC = () => {
   // toggles `pinned`, so the same handle works on every size.
   const [hovered, setHovered] = useState(false)
   const [pinned, setPinned] = useState(false)
+  // The panel is anchored to the tab's bottom and grows UPWARD (#229), so it
+  // never spills below the tab into the floating chat widget. Cap its height to
+  // the room above the tab's bottom edge so the header and footer stay on-screen.
+  const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined)
   const open = hovered || pinned
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
@@ -177,6 +181,21 @@ const BridgeStepsRail: React.FC = () => {
     }
   }, [pinned])
 
+  // Measure the space above the tab's bottom edge and cap the panel to it, so the
+  // upward-growing panel is never clipped by the viewport top (or, on short
+  // screens, forced to overlap the chat widget below). Re-measures on resize.
+  useEffect(() => {
+    if (!open) return
+    const measure = () => {
+      const rect = handleRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - 12)))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [open])
+
   const stepsList = (
     <ol className="flex flex-col">
       {EXPLAINER_STEPS.map((step, i) => {
@@ -237,7 +256,7 @@ const BridgeStepsRail: React.FC = () => {
 
   const panelBody = (onClose?: () => void) => (
     <>
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge in 4 steps</p>
         {onClose && (
           <button
@@ -250,8 +269,8 @@ const BridgeStepsRail: React.FC = () => {
           </button>
         )}
       </div>
-      {stepsList}
-      <div className="mt-1 border-t border-[#F0F0F0] pt-3">
+      <div className="min-h-0 flex-1 overflow-y-auto">{stepsList}</div>
+      <div className="mt-1 shrink-0 border-t border-[#F0F0F0] pt-3">
         <button
           onClick={openModal}
           className="flex items-center gap-1.5 text-[12px] font-medium text-[#737373] hover:text-[#0A0A0A] transition-colors"
@@ -284,11 +303,12 @@ const BridgeStepsRail: React.FC = () => {
             animate={{ width: 260, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
-            className="absolute right-[calc(100%_+_12px)] top-1/2 -translate-y-1/2 overflow-hidden"
+            className="absolute bottom-0 right-[calc(100%_+_12px)] overflow-hidden"
           >
             <div
               id={panelId}
-              className="w-[260px] rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
+              style={{ maxHeight: maxPanelHeight }}
+              className="flex max-h-[calc(100dvh-1.5rem)] w-[260px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
             >
               {panelBody(closeDesktop)}
             </div>

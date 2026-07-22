@@ -205,6 +205,22 @@ export default function Home() {
         ? `Reconnect your linked EVM wallet ${shortAddr(bindingConflict.counterpart)}`
         : `Switch to your linked wallet pair ${shortAddr(bindingConflict.counterpart)}`
 
+  // Specific reason the primary button is blocked by a deposit-side fuel/auth gate (the same
+  // condition that drives BridgeActionButton's isDisabled). Surfaced under the button so a
+  // disabled state never reads as a silent greyed control. These gates leave the label as the
+  // plain "Bridge Tokens", so the reason line is what tells the user what to fix.
+  const depositGateActive =
+    bridgeConfig.direction === BridgeDirection.L1_TO_L2 && isWaapConnected && isAztecConnected
+  const bridgeDisabledReason = authFailed
+    ? 'Session error. Reconnect your wallet to continue.'
+    : depositGateActive && !fuelAmountValid
+      ? 'Gas top-up must be less than the bridge amount.'
+      : depositGateActive && !fuelSufficient
+        ? 'Increase gas top-up to cover the L2 claim.'
+        : depositGateActive && !fuelRecipientValid
+          ? 'Check the fee juice recipient address.'
+          : undefined
+
   // Success callbacks
   const mintL1SBTOnSuccess = (_data: any) => {
     setShowSBTModal(false)
@@ -704,6 +720,7 @@ export default function Home() {
                     (!fuelSufficient || !fuelRecipientValid || !fuelAmountValid)) ||
                   authFailed
                 }
+                disabledReason={bridgeDisabledReason}
                 // Binding conflict guard — disable + name the linked wallet
                 // before bridging into a guaranteed-failing pair.
                 bindingBlocked={!!bindingConflict}

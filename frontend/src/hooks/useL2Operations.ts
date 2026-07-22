@@ -86,6 +86,12 @@ export const useL2TokenBalance = () => {
     queryKey,
     queryFn,
     enabled: !!aztecAddress && !!walletAdapter,
+    // Always refetch when a balance-displaying view (bridge / activity) mounts so
+    // a completed bridge shows the credited cUSDC balance instead of the value
+    // restored from the persisted cache (#230b).
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    staleTime: 0,
     meta: {
       persist: true, // Mark this query for persistence
     },
@@ -351,9 +357,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             notify(
               'warn',
               {
-                heading: 'Do Not Reload',
-                message:
-                  'Your withdrawal transaction is being prepared. Closing or reloading this page now may make recovery harder.',
+                heading: 'Do not reload',
+                message: 'Keep this page open so your funds stay recoverable.',
               },
               { autoClose: false, toastId: 'l2-to-l1-do-not-reload' },
             )
@@ -388,16 +393,14 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             notify(
               'warn',
               {
-                heading: 'Withdrawal In Progress',
-                message:
-                  'Please keep this page open while your withdrawal completes. Your data is encrypted and backed up — only you can access it.',
+                heading: 'Withdrawal in progress',
+                message: 'Keep this page open while your withdrawal completes.',
               },
               { autoClose: false, feed: false },
             )
             pushNotification({
               type: 'withdrawal',
               title: 'Withdrawal in progress',
-              message: `Your withdrawal of ${amountDisplayL2} is being processed on Aztec.`,
             })
             break
           case BridgeEventType.BURN_CONFIRMED:
@@ -414,9 +417,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             notify(
               'warn',
               {
-                heading: 'Withdrawal Confirmed',
-                message:
-                  'Your withdrawal is confirmed on L2. Click here to export a full backup — this includes all the data needed to resume if anything interrupts the process.',
+                heading: 'Withdrawal confirmed',
+                message: 'Click to export a recovery backup.',
               },
               {
                 autoClose: false,
@@ -464,11 +466,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               l2Address: aztecAddress,
               userAction: DatadogUserAction.BRIDGE_L2_TO_L1_PROVEN_POLL,
             })
-            notify(
-              'info',
-              `Waiting for L2 block to be proven on L1 (proven: ${event.provenBlock}, need: ${event.neededBlock}, ${Math.round(event.elapsedMs / 60_000)} min elapsed)...`,
-              { toastId: 'l2-to-l1-progress', autoClose: 15000 },
-            )
+            notify('info', `Finalizing on L1 (${Math.round(event.elapsedMs / 60_000)} min elapsed).`, {
+              toastId: 'l2-to-l1-progress',
+              autoClose: 15000,
+            })
             break
           case BridgeEventType.PROVEN_FALLBACK:
             logInfo('L2→L1 proven fallback', {
@@ -478,7 +479,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               l2Address: aztecAddress,
               userAction: DatadogUserAction.BRIDGE_L2_TO_L1_PROVEN_FALLBACK,
             })
-            notify('info', `Waiting ~${Math.round(event.fixedWaitMs / 60_000)} min for block finalization...`, {
+            notify('info', `Finalizing on L1. About ${Math.round(event.fixedWaitMs / 60_000)} min left.`, {
               toastId: 'l2-to-l1-progress',
               autoClose: 15000,
             })
@@ -500,7 +501,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             pushNotification({
               type: 'withdrawal',
               title: 'Withdrawal complete',
-              message: 'Your tokens have been withdrawn to Ethereum.',
+              message: 'Tokens withdrawn to Ethereum.',
             })
             break
           }
@@ -538,9 +539,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             notify(
               'warn',
               {
-                heading: 'Backup Warning',
-                message:
-                  'Could not save withdrawal proof to server. Please do not close this page until the withdrawal completes.',
+                heading: 'Backup warning',
+                message: 'Could not save recovery data. Keep this page open.',
               },
               { autoClose: false },
             )
@@ -593,15 +593,15 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               event.fundsAtRisk
                 ? {
                     type: 'error',
-                    title: isBlockNotProvenHint ? 'L1 withdraw blocked — try again later' : 'L1 withdraw failed — funds burned on L2',
+                    title: isBlockNotProvenHint ? 'Withdrawal blocked, try later' : "L1 withdraw didn't finish",
                     message: isBlockNotProvenHint
-                      ? errorMsgRaw.slice(0, 160)
-                      : 'Your tokens were burned on L2 but the L1 withdrawal did not complete. Go to Activity to resume.',
+                      ? 'The network needs more time. Try again later.'
+                      : 'Your funds are safe on L2. Resume from Activity.',
                   }
                 : {
                     type: 'error',
                     title: 'Withdrawal failed',
-                    message: errorMsgRaw.slice(0, 160),
+                    message: 'No funds moved. You can retry.',
                   },
             )
             // feed:false on every toast below — the semantic error push above is
@@ -611,13 +611,12 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                 'warn',
                 isBlockNotProvenHint
                   ? {
-                      heading: 'L1 Withdraw Blocked — Try Again Later',
-                      message: errorMsgRaw,
+                      heading: 'Withdrawal blocked',
+                      message: 'The network needs more time. Try again later.',
                     }
                   : {
-                      heading: 'L1 Withdraw Failed — Funds Burned on L2',
-                      message:
-                        'Your tokens were burned on L2 but the L1 withdrawal did not complete. Go to Activity to resume.',
+                      heading: "L1 withdraw didn't finish",
+                      message: 'Your funds are safe on L2. Resume from Activity.',
                     },
                 { autoClose: false, feed: false },
               )
@@ -632,9 +631,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                 notify(
                   'error',
                   {
-                    heading: 'Contract Artifact Not Found',
-                    message:
-                      'The contract artifact is not available in the public registry. Please upload it to https://testnet.aztec-registry.xyz/ to make it available for the wallet.',
+                    heading: 'Contract artifact not found',
+                    message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
                   },
                   { feed: false },
                 )
@@ -642,9 +640,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                 notify(
                   'error',
                   {
-                    heading: 'Withdrawal Failed — No Funds Moved',
-                    message:
-                      'The transaction was not sent. Your balance is unchanged and no recovery is needed. You can safely retry.',
+                    heading: 'Withdrawal failed',
+                    message: 'No funds moved. You can retry.',
                   },
                   { feed: false },
                 )
@@ -723,8 +720,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         notify(
           'error',
           {
-            heading: 'Backup Failed — Withdrawal Aborted',
-            message: errorMessage.length > 200 ? errorMessage.slice(0, 200) + '...' : errorMessage,
+            heading: 'Backup failed, withdrawal stopped',
+            message: 'Could not save your backup. Please try again.',
           },
           { autoClose: false },
         )
@@ -779,11 +776,10 @@ export function useL2RecoverWithdrawal() {
               l2Address: aztecAddress,
               userAction: DatadogUserAction.RESUME_L2_TO_L1_PROVEN_POLL,
             })
-            notify(
-              'info',
-              `Waiting for L2 block to be proven (proven: ${event.provenBlock}, need: ${event.neededBlock}, ${Math.round(event.elapsedMs / 60_000)} min)...`,
-              { toastId: 'resume-l2-to-l1-progress', autoClose: false },
-            )
+            notify('info', `Finalizing on L1 (${Math.round(event.elapsedMs / 60_000)} min elapsed).`, {
+              toastId: 'resume-l2-to-l1-progress',
+              autoClose: false,
+            })
             break
           case BridgeEventType.PROVEN_FALLBACK:
             logInfo('L2→L1 resume proven fallback', {
@@ -793,7 +789,7 @@ export function useL2RecoverWithdrawal() {
               l2Address: aztecAddress,
               userAction: DatadogUserAction.RESUME_L2_TO_L1_PROVEN_FALLBACK,
             })
-            notify('info', `Waiting ~${Math.round(event.fixedWaitMs / 60_000)} min for block finalization...`, {
+            notify('info', `Finalizing on L1. About ${Math.round(event.fixedWaitMs / 60_000)} min left.`, {
               toastId: 'resume-l2-to-l1-progress',
               autoClose: false,
             })
@@ -835,8 +831,8 @@ export function useL2RecoverWithdrawal() {
             notify(
               'warn',
               {
-                heading: 'Backup Warning',
-                message: `Could not save ${event.label} to server. Do not close this page.`,
+                heading: 'Backup warning',
+                message: `Could not save ${event.label}. Keep this page open.`,
               },
               { autoClose: false },
             )
@@ -855,14 +851,12 @@ export function useL2RecoverWithdrawal() {
               event.error,
             )
             if (event.fundsAtRisk) {
-              notify(
-                'error',
-                {
-                  heading: 'Recovery Error — Funds Safe',
-                  message: 'Your withdrawal proof is saved. Go to Activity to try again.',
-                },
-                { autoClose: false },
-              )
+              // Route through the Messages feed / peek bubble (no autoClose:false) rather than a
+              // pinned corner toast, matching the L1 resume path.
+              notify('warn', {
+                heading: "Recovery didn't finish",
+                message: 'Your withdrawal proof is saved. Resume from Activity.',
+              })
             }
             break
         }

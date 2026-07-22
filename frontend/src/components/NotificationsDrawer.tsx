@@ -21,17 +21,21 @@ type PeekSignal = { id: string; open: boolean }
 
 const PANEL_WIDTH = 300
 // Fixed page size. The panel paginates rather than scrolls, matching the app's
-// no-scroll direction. Kept at 4 so the taller, roomier rows still fit without a
-// scrollbar (#208).
-const PAGE_SIZE = 4
+// no-scroll direction. Kept small (3) so the taller, roomier rows plus header and
+// pager fit inside the viewport-capped panel height without clipping (#208/#229).
+const PAGE_SIZE = 3
 
-// #208. One spacing scale for the Messages feed so rows breathe instead of
-// crowding. Defined once and reused for every row. ROW_LAYOUT sets the icon gap
-// and vertical padding between rows. ROW_STACK sets a single consistent gap
-// between a row's title, body, and status line. Change here to retune the whole
-// feed at once.
-const ROW_LAYOUT = 'flex gap-3 py-3.5 border-b border-[#F0F0F0] last:border-b-0 last:pb-0'
-const ROW_STACK = 'min-w-0 flex-1 flex flex-col gap-1.5'
+// #208/#225. One spacing scale for the Messages feed so rows and the panel
+// breathe instead of crowding. Defined once and reused. PANEL_PADDING sets the
+// panel's edge breathing room; PANEL_SECTION_GAP the space around the header and
+// pagination footer. ROW_LAYOUT sets the icon gap and vertical padding between
+// rows; ROW_STACK the consistent gap between a row's title, body, and status
+// line. Change here to retune the whole feed at once.
+const PANEL_PADDING = 'p-5'
+const PANEL_SECTION_GAP = 'mb-4'
+const PANEL_FOOTER_GAP = 'mt-4 pt-4'
+const ROW_LAYOUT = 'flex gap-3.5 py-4 border-b border-[#F0F0F0] last:border-b-0 last:pb-0'
+const ROW_STACK = 'min-w-0 flex-1 flex flex-col gap-2'
 
 const ICON_FOR: Record<NotificationType, string> = {
   signature: 'ph:pen-nib',
@@ -113,6 +117,11 @@ const NotificationsDrawer: React.FC = () => {
   const [hovered, setHovered] = useState(false)
   const [pinned, setPinned] = useState(false)
   const [page, setPage] = useState(0)
+  // The panel's bottom is anchored to the tab and it grows UPWARD (#229), so it
+  // never spills below the tab into the floating chat widget. This caps its
+  // height to the room actually above the tab's bottom edge, so the top row and
+  // the pager always stay on-screen no matter where the tab dock sits.
+  const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined)
   // Tracks whether one of the SIBLING tabs is open, so the message peek bubble
   // never pops out over an open Tutorial/Activity panel (#160/#181).
   const [othersOpen, setOthersOpen] = useState(false)
@@ -205,6 +214,21 @@ const NotificationsDrawer: React.FC = () => {
   useEffect(() => {
     if (open) markAllRead()
   }, [open, markAllRead])
+
+  // Measure the space above the tab's bottom edge and cap the panel to it, so the
+  // upward-growing panel is never clipped by the viewport top (or, on short
+  // screens, forced to overlap the chat widget below). Re-measures on resize.
+  useEffect(() => {
+    if (!open) return
+    const measure = () => {
+      const rect = handleRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - 12)))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [open])
 
   const pageCount = Math.max(1, Math.ceil(notifications.length / PAGE_SIZE))
 
@@ -334,7 +358,7 @@ const NotificationsDrawer: React.FC = () => {
 
   const panelBody = (onClose?: () => void) => (
     <>
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className={`${PANEL_SECTION_GAP} flex shrink-0 items-center justify-between gap-2`}>
         <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Messages</p>
         <div className="flex items-center gap-1">
           {notifications.length > 0 && (
@@ -363,9 +387,9 @@ const NotificationsDrawer: React.FC = () => {
         emptyState()
       ) : (
         <>
-          <ul className="flex flex-col">{pageItems.map(renderItem)}</ul>
+          <ul className="flex min-h-0 flex-1 flex-col overflow-y-auto">{pageItems.map(renderItem)}</ul>
           {notifications.length > 0 && (
-            <div className="mt-3 flex items-center justify-between border-t border-[#F0F0F0] pt-3">
+            <div className={`${PANEL_FOOTER_GAP} flex shrink-0 items-center justify-between border-t border-[#F0F0F0]`}>
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
@@ -446,11 +470,12 @@ const NotificationsDrawer: React.FC = () => {
             animate={{ width: PANEL_WIDTH, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
-            className="absolute right-[calc(100%_+_12px)] top-1/2 -translate-y-1/2 overflow-hidden"
+            className="absolute bottom-0 right-[calc(100%_+_12px)] overflow-hidden"
           >
             <div
               id={panelId}
-              className="w-[300px] rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
+              style={{ maxHeight: maxPanelHeight }}
+              className={`flex max-h-[calc(100dvh-1.5rem)] w-[300px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white ${PANEL_PADDING} shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]`}
             >
               {panelBody(closeDesktop)}
             </div>

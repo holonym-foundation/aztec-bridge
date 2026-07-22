@@ -63,6 +63,11 @@ const ActivityDrawer: React.FC = () => {
   const [pinned, setPinned] = useState(false)
   const [resumingId, setResumingId] = useState<string | null>(null)
   const [recoverOpen, setRecoverOpen] = useState(false)
+  // The panel is anchored to the tab's bottom and grows UPWARD (#229), so it
+  // never spills below the tab into the floating chat widget. Cap its height to
+  // the room actually above the tab's bottom edge so the header and the "View
+  // full activity" footer always stay on-screen no matter where the dock sits.
+  const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined)
   const open = hovered || pinned
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
@@ -114,6 +119,21 @@ const ActivityDrawer: React.FC = () => {
       document.removeEventListener('pointerdown', onPointerDown)
     }
   }, [pinned])
+
+  // Measure the space above the tab's bottom edge and cap the panel to it, so the
+  // upward-growing panel is never clipped by the viewport top (or, on short
+  // screens, forced to overlap the chat widget below). Re-measures on resize.
+  useEffect(() => {
+    if (!open) return
+    const measure = () => {
+      const rect = handleRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - 12)))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [open])
 
   // Esc closes the recovery overlay.
   useEffect(() => {
@@ -245,7 +265,21 @@ const ActivityDrawer: React.FC = () => {
     return (
       <li key={op.id} className="border-b border-[#F0F0F0] py-2.5 last:border-b-0 last:pb-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[12px] font-semibold text-[#0A0A0A]">{directionLabel}</span>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="text-[12px] font-semibold text-[#0A0A0A]">{directionLabel}</span>
+            {/* Public (globe/navy) vs private (lock/maroon) — same language as ActivityCard (#230a). */}
+            {op.isPrivacyModeEnabled ? (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-[#FDE7F3] px-1.5 py-0.5 text-[9px] font-semibold text-[#81133B]">
+                <Icon icon="ph:lock-key-fill" width={9} height={9} />
+                Private
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-[#E5EFFF] px-1.5 py-0.5 text-[9px] font-semibold text-[#17235E]">
+                <Icon icon="ph:globe-hemisphere-west-fill" width={9} height={9} />
+                Public
+              </span>
+            )}
+          </div>
           <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${meta.className}`}>
             {meta.label}
           </span>
@@ -271,7 +305,7 @@ const ActivityDrawer: React.FC = () => {
 
   const panelBody = (onClose?: () => void) => (
     <>
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge activity</p>
           {resumableCount > 0 && (
@@ -310,31 +344,33 @@ const ActivityDrawer: React.FC = () => {
           )}
         </div>
       </div>
-      {isLoading && <p className="text-[12px] text-[#989898]">Loading…</p>}
-      {!isLoading &&
-        recentOps.length === 0 &&
-        (isWaapConnected ? (
-          // Connected but no operations yet — genuine empty state.
-          <p className="text-[12px] text-[#989898]">No bridge operations yet.</p>
-        ) : (
-          // Not connected — don't imply the history is empty (#163). Prompt to connect.
-          <div className="flex flex-col items-center gap-2 py-5 text-center">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E5EFFF] text-[#17235E]">
-              <Icon icon="ph:plugs" width={18} height={18} />
-            </span>
-            <p className="text-[12px] font-medium text-[#737373]">Connect your wallet to see your activity</p>
-            <button
-              type="button"
-              onClick={() => connectWaapWallet().catch(() => {})}
-              className="mt-0.5 inline-flex items-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#17235E]/90"
-            >
-              <Icon icon="ph:wallet" width={14} height={14} />
-              Connect wallet
-            </button>
-          </div>
-        ))}
-      {recentOps.length > 0 && <ul className="flex flex-col">{recentOps.map(renderOp)}</ul>}
-      <div className="mt-3 border-t border-[#F0F0F0] pt-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {isLoading && <p className="text-[12px] text-[#989898]">Loading…</p>}
+        {!isLoading &&
+          recentOps.length === 0 &&
+          (isWaapConnected ? (
+            // Connected but no operations yet — genuine empty state.
+            <p className="text-[12px] text-[#989898]">No bridge operations yet.</p>
+          ) : (
+            // Not connected — don't imply the history is empty (#163). Prompt to connect.
+            <div className="flex flex-col items-center gap-2 py-5 text-center">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E5EFFF] text-[#17235E]">
+                <Icon icon="ph:plugs" width={18} height={18} />
+              </span>
+              <p className="text-[12px] font-medium text-[#737373]">Connect your wallet to see your activity</p>
+              <button
+                type="button"
+                onClick={() => connectWaapWallet().catch(() => {})}
+                className="mt-0.5 inline-flex items-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#17235E]/90"
+              >
+                <Icon icon="ph:wallet" width={14} height={14} />
+                Connect wallet
+              </button>
+            </div>
+          ))}
+        {recentOps.length > 0 && <ul className="flex flex-col">{recentOps.map(renderOp)}</ul>}
+      </div>
+      <div className="mt-3 shrink-0 border-t border-[#F0F0F0] pt-3">
         <button
           onClick={() => router.push('/activity')}
           className="flex items-center gap-1.5 text-[12px] font-medium text-[#737373] transition-colors hover:text-[#0A0A0A]"
@@ -369,11 +405,12 @@ const ActivityDrawer: React.FC = () => {
             animate={{ width: 280, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
-            className="absolute right-[calc(100%_+_12px)] top-1/2 -translate-y-1/2 overflow-hidden"
+            className="absolute bottom-0 right-[calc(100%_+_12px)] overflow-hidden"
           >
             <div
               id={panelId}
-              className="w-[280px] rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
+              style={{ maxHeight: maxPanelHeight }}
+              className="flex max-h-[calc(100dvh-1.5rem)] w-[280px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
             >
               {panelBody(closeDesktop)}
             </div>

@@ -127,6 +127,13 @@ interface FeeJuiceTopUpProps {
    * does NOT apply and fresh private Fee Juice must be added.
    */
   landingClaimShort?: boolean
+  /**
+   * True when the interrupted claim's L1→L2 message was already consumed by a prior successful
+   * claim (the "no non-nullified message" case). The deposit very likely already completed, so a
+   * top-up cannot fix it and "you have enough, resume" must never show — the panel points the user
+   * at their L2 balance instead.
+   */
+  depositLikelyCompleted?: boolean
   /** Reports whether the existing balance already covers the interrupted claim (public mode). */
   onLandingCoveredChange?: (covered: boolean) => void
   /** Called with the L2 tx hash once the top-up completes and FJ lands on L2. */
@@ -147,6 +154,7 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
   feeJuiceBalance,
   privateFeeJuiceBalance,
   landingClaimShort = false,
+  depositLikelyCompleted = false,
   onLandingCoveredChange,
   onSuccess,
 }) => {
@@ -171,15 +179,6 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
       setConnecting(false)
     }
   }
-
-  // Subtly pulse the Privacy Mode toggle in the top nav so the user learns that's how modes
-  // switch (we deliberately do NOT build a second toggle here). Class-toggling an element
-  // outside this subtree is the only way to reach the shared nav; cleaned up on unmount.
-  const pulsePrivacyToggle = (on: boolean) => {
-    if (typeof document === 'undefined') return
-    document.querySelector('.privacy-mode-toggle')?.classList.toggle('fj-mode-hint', on)
-  }
-  useEffect(() => () => pulsePrivacyToggle(false), [])
 
   const fuelType: 'public' | 'private' = isPrivacyModeEnabled && hasBridgedFpc ? 'private' : 'public'
 
@@ -218,7 +217,10 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
   // That's why "already enough" must be false here even if the private balance looks sufficient
   // (this is what prevents the contradictory "you have enough" next to "claim ran short").
   const selfFundLandingShort = landingClaimShort && fuelType === 'private'
-  const alreadyEnough = needFj != null && existingFj >= needFj && !selfFundLandingShort
+  // "You have enough" must never sit next to a failure a top-up can't fix. A consumed-message
+  // recovery (deposit likely already completed) is exactly that case, so it can't be "enough".
+  const alreadyEnough =
+    needFj != null && existingFj >= needFj && !selfFundLandingShort && !depositLikelyCompleted
   const effectiveSufficient: boolean | null =
     alreadyEnough
       ? true
@@ -251,11 +253,6 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
     prices,
   )
 
-  // Flag an auto amount that's inflated by the mis-priced testnet pool (well above a $10 buy),
-  // so we can explain the "why so expensive" up front instead of leaving the user guessing.
-  const tenUsdToken = Number(usdToTokenAmount(10, fundingSymbol, prices)) || 0
-  const autoHigh = recommended != null && tenUsdToken > 0 && Number(recommended) > tenUsdToken
-
   const walletsReady = isWaapConnected && isAztecConnected
   const amountValid = !!fuelAmount && Number(fuelAmount) > 0
   const confirmDisabled =
@@ -280,39 +277,67 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
     spend(spendAmount)
   }
 
-  // One-tap "auto": fill the recommended amount AND fire the top-up in a single
-  // click. It is NOT silent — the user chooses it — but it removes the sizing step.
-  const autoReady = canTopUp && walletsReady && !!recommended && !topUp.isPending
-  const handleAuto = () => {
-    if (!autoReady || !recommended) return
-    setSpendAmount(recommended)
-    spend(recommended)
-  }
-
   // Covered = the applicable-mode balance already meets the claim, so no top-up is required.
   // Drives the headline (no "Add Fee Juice" call-to-action when nothing needs adding) and
   // hides the form behind a subtle opt-in.
   const covered = alreadyEnough
-  const showForm = !covered || optionalTopUpOpen
+  // Likely-completed and covered both mean no top-up is needed, so the buy form collapses behind
+  // the subtle opt-in in either case.
+  const noTopUpNeeded = covered || depositLikelyCompleted
+  const showForm = !noTopUpNeeded || optionalTopUpOpen
   const modeIsPrivate = fuelType === 'private'
-  const modeIcon = modeIsPrivate ? 'ph:lock-key-fill' : 'ph:globe-hemisphere-west-fill'
   const modeColor = modeIsPrivate ? '#81133B' : '#17235E'
   const modeLabel = modeIsPrivate ? 'Private' : 'Public'
+  // Solid -fill glyph for the compact "you have" chip; the header indicator uses the lighter
+  // globe / lock-simple glyph the owner specified.
+  const modeIcon = modeIsPrivate ? 'ph:lock-key-fill' : 'ph:globe-hemisphere-west-fill'
+  const modeIndicatorIcon = modeIsPrivate ? 'ph:lock-simple' : 'ph:globe'
   const haveBalance = applicableBalanceStr != null && applicableBalanceStr !== '--' ? applicableBalanceStr : '--'
   const needLabel = claimFeeLoading || claimFeeFj == null ? '…' : `~${claimFeeFj} FJ`
 
+  // Header state: never headline "Add Fee Juice" when none is needed, and never "you have enough"
+  // next to a failure a top-up can't fix.
+  const headerState: 'completed' | 'covered' | 'add' = depositLikelyCompleted
+    ? 'completed'
+    : covered
+      ? 'covered'
+      : 'add'
+  const headerIcon = headerState === 'add' ? 'ph:plus-circle-fill' : 'ph:check-circle-fill'
+  const headerColor = headerState === 'add' ? '#81133B' : '#17235E'
+  const headerLabel =
+    headerState === 'completed'
+      ? 'Deposit complete'
+      : headerState === 'covered'
+        ? 'You have enough Fee Juice'
+        : 'Add Fee Juice'
+
   return (
     <div className="rounded-md border border-[#81133B]/40 bg-[#F9EEF3] px-3 py-3 space-y-2.5">
-      <div className="flex items-center gap-1.5">
-        <Icon
-          icon={covered ? 'ph:check-circle-fill' : 'ph:plus-circle-fill'}
-          width={16}
-          height={16}
-          style={{ color: covered ? '#17235E' : '#81133B' }}
-        />
-        <p className="text-13 font-semibold" style={{ color: covered ? '#17235E' : '#81133B' }}>
-          {covered ? 'You have enough Fee Juice' : 'Add Fee Juice'}
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <Icon icon={headerIcon} width={16} height={16} style={{ color: headerColor }} />
+          <p className="text-13 font-semibold" style={{ color: headerColor }}>
+            {headerLabel}
+          </p>
+          <span
+            className="cursor-help leading-none text-latest-grey-500"
+            title={`Buy Fee Juice with ${fundingSymbol} on Ethereum, bridged to Aztec for L2 gas.`}
+          >
+            <Icon icon="ph:info" width={14} height={14} />
+          </span>
+        </div>
+        {/* Mode indicator (#222/#223): icon + one-word tag, colored by mode. The tooltip is the
+            only pointer to the nav Privacy Mode — no inline "change mode" instruction. */}
+        <div
+          title="Mode follows Privacy Mode in the top nav"
+          className={`flex shrink-0 cursor-help items-center gap-1 rounded-full border px-2 py-0.5 text-11 font-semibold ${
+            modeIsPrivate ? 'border-[#81133B]/30 bg-[#81133B]/[0.06]' : 'border-[#17235E]/30 bg-[#17235E]/[0.06]'
+          }`}
+          style={{ color: modeColor }}
+        >
+          <Icon icon={modeIndicatorIcon} width={12} height={12} />
+          {modeLabel}
+        </div>
       </div>
 
       {!canTopUp ? (
@@ -321,15 +346,7 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
         </p>
       ) : (
         <>
-          <style>{`
-            @keyframes fjModePulse {
-              0%, 100% { box-shadow: 0 0 0 0 rgba(129, 19, 59, 0); }
-              50% { box-shadow: 0 0 0 4px rgba(129, 19, 59, 0.35); }
-            }
-            .privacy-mode-toggle.fj-mode-hint { animation: fjModePulse 1s ease-in-out infinite; border-radius: 9999px; }
-          `}</style>
-
-          {/* Available vs required — one compact, mode-aware line (#204). Globe = public, lock = private. */}
+          {/* Available vs required — one compact, mode-aware line. Globe = public, lock = private. */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-11 text-latest-grey-600">
             <span className="flex items-center gap-1">
               <Icon icon="ph:gas-pump-fill" width={12} height={12} className="text-[#17235E]" />
@@ -342,32 +359,21 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
             </span>
           </div>
 
-          {/* Single mode indicator: which Fee Juice you're buying, with a worded pointer to the
-              Privacy Mode slider in the top nav. Hovering pulses that slider (no toggle built here). */}
-          <div
-            onMouseEnter={() => pulsePrivacyToggle(true)}
-            onMouseLeave={() => pulsePrivacyToggle(false)}
-            title="Change modes with the Privacy Mode slider in the top nav"
-            className={`cursor-help rounded-md border px-2.5 py-1.5 ${
-              modeIsPrivate ? 'border-[#81133B]/40 bg-[#81133B]/[0.06]' : 'border-[#17235E]/30 bg-[#17235E]/[0.06]'
-            }`}
-          >
-            <div className="flex items-center gap-1.5 text-12 font-semibold" style={{ color: modeColor }}>
-              <Icon icon={modeIcon} width={14} height={14} />
-              {modeLabel} Fee Juice
-            </div>
-            <div className="mt-0.5 flex items-center gap-1 text-11 text-latest-grey-500">
-              <Icon icon="ph:arrow-up-bold" width={10} height={10} />
-              Change in Privacy Mode (top nav)
-            </div>
-          </div>
-
           {pricesError && (
             <p className="text-11 text-amber-600">Live prices unavailable, using fallback prices</p>
           )}
 
-          {/* One coherent status line — mode-specific, never two opposing statements. */}
-          {covered ? (
+          {/* One coherent status line — mode-specific, never two opposing statements. A failure a
+              top-up can't fix (deposit already completed) never shows "you have enough / resume". */}
+          {depositLikelyCompleted ? (
+            <div className="flex items-start gap-1.5 rounded-md bg-[#17235E]/[0.08] px-2.5 py-1.5">
+              <Icon icon="ph:check-circle-fill" width={14} height={14} className="mt-0.5 flex-shrink-0 text-[#17235E]" />
+              <p className="text-11 leading-[15px] text-[#737373]">
+                <span className="font-semibold text-[#17235E]">This deposit likely already completed.</span> Check your
+                L2 balance. No top-up or resume needed.
+              </p>
+            </div>
+          ) : covered ? (
             <p className="flex items-center gap-1.5 text-11 leading-[15px] text-[#737373]">
               <Icon icon="ph:check-circle-fill" width={13} height={13} className="flex-shrink-0 text-[#17235E]" />
               {landingClaimShort ? 'You can resume now, no top-up needed.' : 'No top-up needed.'}
@@ -388,13 +394,9 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
                 then resume. Your funds stay safe.
               </p>
             </div>
-          ) : (
-            <p className="text-11 leading-[15px] text-[#737373]">
-              Buy with {fundingSymbol} on Ethereum, bridged to Aztec.
-            </p>
-          )}
+          ) : null}
 
-          {covered && !optionalTopUpOpen && (
+          {noTopUpNeeded && !optionalTopUpOpen && (
             <button
               type="button"
               onClick={() => setOptionalTopUpOpen(true)}
@@ -406,41 +408,7 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
 
           {showForm && (
             <>
-              {/* One-tap auto: recommended amount + immediate top-up (single click, never silent).
-                  Becomes an active connect prompt when a wallet is missing — never a dead button. */}
-              {walletsReady ? (
-                <button
-                  type="button"
-                  onClick={handleAuto}
-                  disabled={!autoReady}
-                  title="Sized to cover your claim shortfall. Testnet pool pricing can make this higher than mainnet."
-                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-[#17235E]/40 bg-[#17235E]/[0.08] px-3 py-2 text-12 font-semibold text-[#17235E] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Icon icon="ph:magic-wand-fill" width={13} height={13} />
-                  {topUp.isPending
-                    ? 'Topping up…'
-                    : recommended
-                      ? `Auto top up ~${recommended} ${fundingSymbol}`
-                      : 'Calculating…'}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleConnect}
-                  disabled={connecting}
-                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-[#17235E]/40 bg-[#17235E]/[0.08] px-3 py-2 text-12 font-semibold text-[#17235E] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Icon icon="ph:plugs-connected-fill" width={13} height={13} />
-                  {connecting ? 'Connecting…' : `${connectLabel} to auto top up`}
-                </button>
-              )}
-              {walletsReady && autoHigh && (
-                <p className="flex items-start gap-1 text-11 leading-[15px] text-latest-grey-500">
-                  <Icon icon="ph:info" width={12} height={12} className="mt-0.5 flex-shrink-0" />
-                  High due to live testnet pool pricing. The real cost on mainnet is far lower.
-                </p>
-              )}
-
+              {/* Minimal top-up entry: amount input + a couple of presets + the primary buy button. */}
               <div className="flex items-center gap-1.5 max-w-full">
                 <input
                   type="text"

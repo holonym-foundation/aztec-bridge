@@ -711,7 +711,7 @@ export default function ShieldOnboarding() {
               <button className="ob-next" onClick={advance}>{screen.cta}</button>
             </div>
             <p className="ob-secured">
-              Secured by <strong>human.tech</strong>
+              Secured by <strong className="ob-htmark" role="img" aria-label="human.tech" />
               <span className="ob-dot">·</span>
               Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
             </p>
@@ -765,7 +765,7 @@ export default function ShieldOnboarding() {
           in the splash's bottom footer now, not tucked under the developer CTA. */}
       <footer className="ob-splash-footer">
         <p className="ob-secured">
-          Secured by <strong>human.tech</strong>
+          Secured by <strong className="ob-htmark" role="img" aria-label="human.tech" />
           <span className="ob-dot">·</span>
           Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
         </p>
@@ -864,7 +864,8 @@ export default function ShieldOnboarding() {
         .ob-visual { height: 72px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; width: 100%; }
         .ob-alpha { position: relative; display: inline-flex; margin: 0 auto 10px; }
         .ob-alpha-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
-          background: rgba(195,129,29,0.10); color: #b0781f; border: 1px solid rgba(195,129,29,0.26);
+          background: rgba(255,255,255,0.55); color: #9a6512; border: 1px solid rgba(176,120,31,0.45);
+          -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
           font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; cursor: default; outline: none; }
         .ob-alpha-pill:focus-visible { outline: 2px solid #b06f16; outline-offset: 2px; }
         /* #156: pin the Alphanet tooltip ABOVE its badge (never below, where the
@@ -955,6 +956,12 @@ export default function ShieldOnboarding() {
         .ob-back:hover { background: rgba(129,19,59,0.05); }
         .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; justify-content: center; }
         .ob-secured strong { color: #5a4650; font-family: 'PP Hatton', 'Suisse Intl', sans-serif; font-weight: 600; }
+        /* human.tech icon + wordmark, painted from the shared SVG via mask so it inherits the
+           .ob-secured strong colour rules (light / dark / splash) instead of a fixed black.
+           align-self centres the mark on the line under the container's baseline alignment. */
+        .ob-htmark { display: inline-block; width: 61px; height: 15px; align-self: center; background-color: currentColor;
+          -webkit-mask: url(/assets/svg/human.tech.logo.svg) no-repeat center / contain;
+          mask: url(/assets/svg/human.tech.logo.svg) no-repeat center / contain; }
         .ob-dot { opacity: 0.5; }
         /* #157: splash trust-line footer, pinned to the bottom of the splash. */
         .ob-splash-footer { position: relative; z-index: 3; padding: 0 24px 20px; display: flex; justify-content: center; }

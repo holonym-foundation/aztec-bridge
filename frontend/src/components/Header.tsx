@@ -1205,7 +1205,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           }}
           className="flex items-center justify-center hover:opacity-80 transition-opacity duration-200"
         >
-          <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={100} height={27} />
+          <Image src={isDark ? '/assets/svg/shield-lockup-white.svg' : '/assets/svg/shield-lockup-maroon.svg'} alt="Shield" width={100} height={27} />
         </Link>
         <DeploymentSelector />
       </div>

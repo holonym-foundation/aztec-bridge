@@ -451,6 +451,9 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
     if (!aztecAddress) throw new Error('Aztec wallet not connected')
     if (!walletAdapter) throw new Error('Aztec wallet adapter not ready')
 
+    const notifyAmount = `${amountDisplayL1} ${selectedToken?.symbol ?? 'USDC'}`
+    const notifyMode: 'public' | 'private' = isPrivacyModeEnabled ? 'private' : 'public'
+
     // Validate the optional third-party fuel recipient. If invalid, refuse to proceed —
     // we don't want to silently fall back to the user's own L2 when they intended to send
     // the fee juice elsewhere.
@@ -574,6 +577,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               type: 'deposit',
               title: 'Deposit in progress',
               message: 'Keep this page open while it completes.',
+              amount: notifyAmount,
+              mode: notifyMode,
             })
             break
           case BridgeEventType.DEPOSIT_CONFIRMED:
@@ -599,6 +604,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               type: 'deposit',
               title: 'Deposit confirmed',
               message: 'Claiming on Aztec. Export a recovery backup to stay safe.',
+              amount: notifyAmount,
+              mode: notifyMode,
               action: {
                 label: 'Export recovery backup',
                 onClick: () => {
@@ -705,6 +712,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               type: 'claim',
               title: 'Bridge complete',
               message: 'Tokens claimed on Aztec.',
+              amount: notifyAmount,
+              mode: notifyMode,
             })
             // The claim just landed on L2 — refresh the cUSDC / Clean USDC balance
             // so the user sees the credited funds without a manual reload (#230b).
@@ -834,6 +843,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 type: 'success',
                 title: 'Deposit likely already completed',
                 message: 'Check your L2 balance in Activity.',
+                amount: notifyAmount,
+                mode: notifyMode,
               })
               break
             }
@@ -845,6 +856,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 type: 'error',
                 title: "L2 claim didn't finish",
                 message: 'Your funds are safe. Resume from Activity.',
+                amount: notifyAmount,
+                mode: notifyMode,
               })
               break
             }
@@ -869,24 +882,32 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 type: 'error',
                 title: 'Aztec testnet is congested',
                 message: 'Your transaction was dropped. You can retry.',
+                amount: notifyAmount,
+                mode: notifyMode,
               })
             } else if (isReloadableErr) {
               pushNotification({
                 type: 'error',
                 title: 'Bridge failed (0xfb8f41b2)',
                 message: 'Please reload the page.',
+                amount: notifyAmount,
+                mode: notifyMode,
               })
             } else if (isArtifactErr) {
               pushNotification({
                 type: 'error',
                 title: 'Contract artifact not found',
                 message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
+                amount: notifyAmount,
+                mode: notifyMode,
               })
             } else {
               pushNotification({
                 type: 'error',
                 title: 'Deposit failed',
                 message: 'No funds moved. You can retry.',
+                amount: notifyAmount,
+                mode: notifyMode,
               })
             }
             break

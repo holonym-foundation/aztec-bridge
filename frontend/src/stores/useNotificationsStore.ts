@@ -40,6 +40,11 @@ export interface AppNotification {
   title: string
   message?: string
   action?: NotificationAction
+  // Optional transaction context for a message row. `amount` is an already-formatted
+  // display string (e.g. "100 USDC"); `mode` mirrors the operation's privacy mode so a
+  // lifecycle row identifies the transaction the way an Activity card does.
+  amount?: string
+  mode?: 'public' | 'private'
   timestamp: number
   read: boolean
 }
@@ -71,6 +76,8 @@ interface NotificationsState {
     message?: string
     key?: string
     action?: NotificationAction
+    amount?: string
+    mode?: 'public' | 'private'
   }) => void
   dismiss: (id: string) => void
   dismissAll: () => void
@@ -86,7 +93,7 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
   unreadCount: 0,
   lastGenie: null,
 
-  pushNotification: ({ type, title, message, key, action }) =>
+  pushNotification: ({ type, title, message, key, action, amount, mode }) =>
     set((state) => {
       // Keyed upsert — refresh the existing row in place (new text/timestamp,
       // bumped to the top) and preserve its read state so a progress row the
@@ -101,6 +108,8 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
             title,
             message,
             action,
+            amount,
+            mode,
             timestamp: Date.now(),
           }
           const rest = state.notifications.filter((_, i) => i !== idx)
@@ -127,6 +136,8 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
         title,
         message,
         action,
+        amount,
+        mode,
         timestamp: Date.now(),
         read: false,
       }
@@ -160,4 +171,6 @@ export const pushNotification = (input: {
   message?: string
   key?: string
   action?: NotificationAction
+  amount?: string
+  mode?: 'public' | 'private'
 }) => useNotificationsStore.getState().pushNotification(input)

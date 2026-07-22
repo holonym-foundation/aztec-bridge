@@ -97,6 +97,22 @@ const STATE_META: Record<Exclude<MessageState, 'plain'>, { label: string; classN
   stale: { label: 'Expired', className: 'bg-[#F0F0F0] text-[#989898]' },
 }
 
+// Compact privacy badge, mirroring ActivityCard's PrivacyBadge (#230a) so the
+// transaction mode reads the same everywhere: globe/navy for public, lock/maroon
+// for private. Same tokens and icons, sized down a touch for the denser feed row.
+const PrivacyBadge: React.FC<{ mode: 'public' | 'private' }> = ({ mode }) =>
+  mode === 'private' ? (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[#FDE7F3] px-1.5 py-0.5 text-[9px] font-semibold text-[#81133B]">
+      <Icon icon="ph:lock-key-fill" width={10} height={10} />
+      Private
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[#E5EFFF] px-1.5 py-0.5 text-[9px] font-semibold text-[#17235E]">
+      <Icon icon="ph:globe-hemisphere-west-fill" width={10} height={10} />
+      Public
+    </span>
+  )
+
 type NotificationsDrawerProps = { variant?: 'rail' | 'dock' }
 
 const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'rail' }) => {
@@ -307,6 +323,12 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
               <Icon icon="ph:x-bold" width={11} height={11} />
             </button>
           </div>
+          {(n.amount || n.mode) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {n.amount && <span className="text-[11px] font-semibold tabular-nums text-[#0A0A0A]">{n.amount}</span>}
+              {n.mode && <PrivacyBadge mode={n.mode} />}
+            </div>
+          )}
           {n.message && (
             <p className="text-[11px] leading-[16px] text-[#737373] break-words [overflow-wrap:anywhere]">
               {n.message}
@@ -318,7 +340,7 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
               onClick={() => n.action?.onClick()}
               className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-[#E5EFFF] px-2.5 py-1.5 text-[11px] font-semibold text-[#17235E] transition-colors hover:bg-[#17235E]/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#17235E]/40"
             >
-              <Icon icon="ph:download-simple" width={12} height={12} />
+              <Icon icon="ph:key" width={12} height={12} />
               {n.action.label}
             </button>
           )}

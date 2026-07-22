@@ -72,6 +72,7 @@ import {
   MAINTENANCE_TITLE,
   SWAP_BRIDGE_ROUTER_ADDRESS,
 } from '@/config'
+import { BRIDGE_MAX_DEPOSIT_USD } from '@/config/env.config'
 
 export default function Home() {
   const router = useRouter()
@@ -653,6 +654,11 @@ export default function Home() {
               feeJuiceLoading={feeJuiceBalanceLoading}
               attestationMethod={attestationData?.method ?? null}
               passportMaxAmount={attestationData?.passportMaxAmount}
+              remainingDepositUsd={attestationData?.remainingDepositUsd}
+              passportScore={attestationData?.passportScore}
+              passportThreshold={attestationData?.passportThreshold}
+              reservedDepositUsd={attestationData?.reservedDepositUsd}
+              pochDailyLimitUsd={Number(BRIDGE_MAX_DEPOSIT_USD)}
               youWillReceive={youWillReceiveAmount}
               // Space-yielding: when either detail accordion is expanded, collapse From/To to
               // one-line summary rows so the expanded detail fits without scrolling the card.

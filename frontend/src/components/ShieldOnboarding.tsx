@@ -758,14 +758,18 @@ export default function ShieldOnboarding() {
                 <path d="m13 6 6 6-6 6" />
               </svg>
             </a>
-            <p className="ob-secured">
-              Secured by <strong>human.tech</strong>
-              <span className="ob-dot">·</span>
-              Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
-            </p>
           </div>
         </div>
       </div>
+      {/* #157: the "Secured by human.tech · Built on Clean SDK" trust line sits
+          in the splash's bottom footer now, not tucked under the developer CTA. */}
+      <footer className="ob-splash-footer">
+        <p className="ob-secured">
+          Secured by <strong>human.tech</strong>
+          <span className="ob-dot">·</span>
+          Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
+        </p>
+      </footer>
     </motion.div>
   )
 
@@ -863,7 +867,9 @@ export default function ShieldOnboarding() {
           background: rgba(195,129,29,0.10); color: #b0781f; border: 1px solid rgba(195,129,29,0.26);
           font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; cursor: default; outline: none; }
         .ob-alpha-pill:focus-visible { outline: 2px solid #b06f16; outline-offset: 2px; }
-        .ob-alpha-bubble { width: 250px; }
+        /* #156: pin the Alphanet tooltip ABOVE its badge (never below, where the
+           top nav could clip it) and lift its z above the elevated nav. */
+        .ob-alpha-bubble { width: 250px; bottom: calc(100% + 10px); top: auto; z-index: 140; }
         .ob-eyebrow { font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: ${BRAND};
           font-weight: 600; margin: 0 0 14px; white-space: pre-line; line-height: 1.7; }
         .ob-title { font-size: clamp(26px, 5vw, 40px); line-height: 1.08; letter-spacing: -0.02em; font-weight: 640;
@@ -950,6 +956,8 @@ export default function ShieldOnboarding() {
         .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
         .ob-secured strong { color: #5a4650; font-weight: 620; }
         .ob-dot { opacity: 0.5; }
+        /* #157: splash trust-line footer, pinned to the bottom of the splash. */
+        .ob-splash-footer { position: relative; z-index: 3; padding: 0 24px 20px; display: flex; justify-content: center; }
         /* Secondary, subordinate developer CTA on the splash — a quiet text link beneath the
            primary "Enter app" button, deliberately far lighter than the solid maroon CTA. */
         .ob-dev-cta { display: inline-flex; align-items: center; gap: 6px; margin: -2px auto 0; color: ${BRAND};
@@ -1007,6 +1015,7 @@ export default function ShieldOnboarding() {
           .ob-bp-track { width: 52px; }
           .ob-zk { margin-top: 14px; }
           .ob-zk-svg { width: 120px; height: 44px; }
+          .ob-splash-footer { padding: 0 20px 16px; }
         }
         @media (prefers-color-scheme: dark) {
           .ob-root { background: #150a0f; color: #f6ecf1; }

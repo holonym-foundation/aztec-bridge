@@ -7,9 +7,12 @@ import { useWalletStore } from '@/stores/walletStore'
 
 interface BridgeHeaderProps {
   onClick?: () => void
+  /** Title shown in the header pill. State-dependent so the shared chrome is
+   *  expressive per screen ("BRIDGE" on the bridge, "TOP UP" on /fee-juice, etc.). */
+  title?: string
 }
 
-const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick }) => {
+const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick, title = 'BRIDGE' }) => {
   const router = useRouter()
   const {
     getHeaderSteps,
@@ -26,6 +29,11 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick }) => {
   const progressSteps = getProgressSteps()
   const isTransferInProgress =
     progressSteps.some((s) => s.status === 'active') && !progressSteps.every((s) => s.status === 'completed')
+
+  // Only consumers that pass an explicit reset handler get an interactive title.
+  // Purpose-built screens (e.g. /fee-juice) render it with no handler, so the title
+  // is a plain, non-interactive label that can NEVER trigger a wallet disconnect/reset.
+  const resettable = !!onClick
 
   const handleResetClick = () => {
     if (!onClick) return
@@ -66,12 +74,12 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick }) => {
       <LoadingBar steps={steps} currentStep={headerStep} />
       <p
         className={`text-center text-[#0A0A0A] font-[700] text-[16px] leading-[24px] tracking-[0.32px] uppercase font-['Suisse_Intl'] ${
-          isTransferInProgress ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+          !resettable ? 'cursor-default' : isTransferInProgress ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
         }`}
-        title={isTransferInProgress ? 'Locked during transfer to protect your funds.' : undefined}
-        aria-disabled={isTransferInProgress}
-        onClick={handleResetClick}>
-        BRIDGE
+        title={resettable && isTransferInProgress ? 'Locked during transfer to protect your funds.' : undefined}
+        aria-disabled={resettable && isTransferInProgress}
+        onClick={resettable ? handleResetClick : undefined}>
+        {title}
       </p>
       <button
         onClick={() => router.push('/activity')}

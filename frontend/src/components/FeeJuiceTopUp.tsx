@@ -120,6 +120,15 @@ interface FeeJuiceTopUpProps {
   feeJuiceBalance?: string
   /** BridgedFPC balance — the applicable balance in privacy mode. */
   privateFeeJuiceBalance?: string
+  /**
+   * True when the user arrived here from an interrupted L1→L2 claim that ran short on L2 gas.
+   * Drives mode-specific status copy: in PUBLIC mode the existing balance can pay the landing
+   * claim, but in PRIVATE mode that landing claim self-funds, so the existing private balance
+   * does NOT apply and fresh private Fee Juice must be added.
+   */
+  landingClaimShort?: boolean
+  /** Reports whether the existing balance already covers the interrupted claim (public mode). */
+  onLandingCoveredChange?: (covered: boolean) => void
   /** Called with the L2 tx hash once the top-up completes and FJ lands on L2. */
   onSuccess?: (l2TxHash?: string) => void
 }
@@ -137,10 +146,40 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
   isPrivacyModeEnabled = false,
   feeJuiceBalance,
   privateFeeJuiceBalance,
+  landingClaimShort = false,
+  onLandingCoveredChange,
   onSuccess,
 }) => {
   const hasBridgedFpc = !!BRIDGED_FPC_ADDRESS
-  const { isWaapConnected, isAztecConnected } = useWalletStore()
+  const { isWaapConnected, isAztecConnected, connectWaapWallet, connectAztecWallet } = useWalletStore()
+
+  // Graceful connect: never a dead disabled button. When a wallet is missing the top-up
+  // controls become ACTIVE prompts that start the connect flow for the missing chain.
+  const missingEth = !isWaapConnected
+  const missingAztec = !isAztecConnected
+  const [connecting, setConnecting] = useState(false)
+  const connectLabel = missingEth && missingAztec ? 'Connect wallets' : missingEth ? 'Connect Ethereum wallet' : 'Connect Aztec wallet'
+  const handleConnect = async () => {
+    if ((isWaapConnected && isAztecConnected) || connecting) return
+    setConnecting(true)
+    try {
+      if (missingEth) await connectWaapWallet()
+      else if (missingAztec) await connectAztecWallet()
+    } catch {
+      // Store surfaces its own error toast.
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  // Subtly pulse the Privacy Mode toggle in the top nav so the user learns that's how modes
+  // switch (we deliberately do NOT build a second toggle here). Class-toggling an element
+  // outside this subtree is the only way to reach the shared nav; cleaned up on unmount.
+  const pulsePrivacyToggle = (on: boolean) => {
+    if (typeof document === 'undefined') return
+    document.querySelector('.privacy-mode-toggle')?.classList.toggle('fj-mode-hint', on)
+  }
+  useEffect(() => () => pulsePrivacyToggle(false), [])
 
   const fuelType: 'public' | 'private' = isPrivacyModeEnabled && hasBridgedFpc ? 'private' : 'public'
 
@@ -171,7 +210,12 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
   const existingFj = applicableBalanceStr != null && applicableBalanceStr !== '--' ? Number(applicableBalanceStr) : 0
   const needFj = claimFeeLimit != null ? Number(claimFeeLimit) / 1e18 : null
   const swapFj = fjOutput != null ? Number(fjOutput) / 1e18 : null
-  const alreadyEnough = needFj != null && existingFj >= needFj
+  // A specific interrupted claim in PRIVATE mode self-funds its landing claim, so the user's
+  // EXISTING private balance can't be applied to it — fresh private Fee Juice is required.
+  // That's why "already enough" must be false here even if the private balance looks sufficient
+  // (this is what prevents the contradictory "you have enough" next to "claim ran short").
+  const selfFundLandingShort = landingClaimShort && fuelType === 'private'
+  const alreadyEnough = needFj != null && existingFj >= needFj && !selfFundLandingShort
   const effectiveSufficient: boolean | null =
     alreadyEnough
       ? true
@@ -180,6 +224,13 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
         : fuelType === 'public'
           ? existingFj + swapFj >= needFj
           : swapFj >= needFj
+
+  // Tell the page whether the interrupted claim is already fundable from the existing balance
+  // (only possible in public mode) so it can offer Resume without a redundant top-up.
+  const landingCovered = landingClaimShort && alreadyEnough
+  useEffect(() => {
+    onLandingCoveredChange?.(landingCovered)
+  }, [landingCovered, onLandingCoveredChange])
 
   const topUp = useL1TopUpFeeJuice((l2TxHash) => {
     setSpendAmount('')
@@ -196,6 +247,11 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
     fundingSymbol,
     prices,
   )
+
+  // Flag an auto amount that's inflated by the mis-priced testnet pool (well above a $10 buy),
+  // so we can explain the "why so expensive" up front instead of leaving the user guessing.
+  const tenUsdToken = Number(usdToTokenAmount(10, fundingSymbol, prices)) || 0
+  const autoHigh = recommended != null && tenUsdToken > 0 && Number(recommended) > tenUsdToken
 
   const walletsReady = isWaapConnected && isAztecConnected
   const amountValid = !!fuelAmount && Number(fuelAmount) > 0
@@ -246,44 +302,119 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
         </p>
       ) : (
         <>
+          <style>{`
+            @keyframes fjModePulse {
+              0%, 100% { box-shadow: 0 0 0 0 rgba(129, 19, 59, 0); }
+              50% { box-shadow: 0 0 0 4px rgba(129, 19, 59, 0.35); }
+            }
+            .privacy-mode-toggle.fj-mode-hint { animation: fjModePulse 1s ease-in-out infinite; border-radius: 9999px; }
+          `}</style>
+
+          {/* Mode indicator: which Fee Juice you're buying, and where to switch. Hovering it
+              pulses the Privacy Mode toggle in the top nav (we don't build a second toggle here). */}
+          <div
+            onMouseEnter={() => pulsePrivacyToggle(true)}
+            onMouseLeave={() => pulsePrivacyToggle(false)}
+            title="Switch modes with the Privacy Mode toggle in the top bar"
+            className={`flex cursor-help items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 ${
+              fuelType === 'private' ? 'border-[#81133B]/40 bg-[#81133B]/[0.06]' : 'border-[#17235E]/30 bg-[#17235E]/[0.06]'
+            }`}
+          >
+            <span
+              className={`flex items-center gap-1 text-12 font-semibold ${
+                fuelType === 'private' ? 'text-[#81133B]' : 'text-[#17235E]'
+              }`}
+            >
+              <Icon icon={fuelType === 'private' ? 'ph:lock-key-fill' : 'ph:globe-hemisphere-west-fill'} width={13} height={13} />
+              Buying {fuelType === 'private' ? 'private' : 'public'} Fee Juice
+            </span>
+            <span className="flex items-center gap-0.5 text-11 text-latest-grey-500">
+              Privacy Mode
+              <Icon icon="ph:arrow-up-bold" width={11} height={11} />
+            </span>
+          </div>
+
           <p className="text-11 leading-[15px] text-[#737373]">
             Buy with {fundingSymbol} on Ethereum, bridged to Aztec.
-            {isPrivacyModeEnabled && (
-              <span
-                className="ml-1 inline-flex items-center gap-0.5 font-medium text-[#81133B]"
-                title="Privacy mode routes the top-up through private (BridgedFPC) fuel so your claim stays anonymous."
-              >
-                <Icon icon="ph:lock-key-fill" width={11} height={11} />
-                Private
-              </span>
-            )}
           </p>
 
           {pricesError && (
             <p className="text-11 text-amber-600">Live prices unavailable — using fallback prices</p>
           )}
 
-          {alreadyEnough ? (
-            <p className="flex items-center gap-1 text-12 font-medium text-[#17235E]">
-              <Icon icon="ph:check-circle-fill" width={14} height={14} />
-              You have enough Fee Juice — no top-up needed.
-            </p>
+          {/* Single coherent status — mode-specific, never two opposing statements (#184). */}
+          {landingClaimShort ? (
+            landingCovered ? (
+              <div className="flex items-start gap-1.5 rounded-md bg-[#17235E]/[0.08] px-2.5 py-1.5">
+                <Icon icon="ph:check-circle-fill" width={14} height={14} className="mt-0.5 flex-shrink-0 text-[#17235E]" />
+                <p className="text-11 leading-[15px] text-[#737373]">
+                  <span className="font-semibold text-[#17235E]">You have enough public Fee Juice</span> to cover this
+                  claim. No top-up needed, just resume.
+                </p>
+              </div>
+            ) : fuelType === 'private' ? (
+              <div className="flex items-start gap-1.5 rounded-md bg-[#D92D20]/[0.08] px-2.5 py-1.5">
+                <Icon icon="ph:warning-circle-fill" width={14} height={14} className="mt-0.5 flex-shrink-0 text-[#D92D20]" />
+                <p className="text-11 leading-[15px] text-[#737373]">
+                  <span className="font-semibold text-[#D92D20]">Claim ran short on L2 gas.</span> This claim needs fresh
+                  private Fee Juice; your existing private balance won&apos;t apply. Add some below, or switch to public
+                  mode with Privacy Mode.
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-start gap-1.5 rounded-md bg-[#D92D20]/[0.08] px-2.5 py-1.5">
+                <Icon icon="ph:warning-circle-fill" width={14} height={14} className="mt-0.5 flex-shrink-0 text-[#D92D20]" />
+                <p className="text-11 leading-[15px] text-[#737373]">
+                  <span className="font-semibold text-[#D92D20]">Claim ran short on L2 gas.</span> Add Fee Juice below,
+                  then resume. Your funds stay safe.
+                </p>
+              </div>
+            )
           ) : (
+            alreadyEnough && (
+              <p className="flex items-center gap-1 text-12 font-medium text-[#17235E]">
+                <Icon icon="ph:check-circle-fill" width={14} height={14} />
+                You have enough Fee Juice. No top-up needed.
+              </p>
+            )
+          )}
+
+          {!alreadyEnough && (
             <>
-              {/* One-tap auto: recommended amount + immediate top-up (single click, never silent). */}
-              <button
-                type="button"
-                onClick={handleAuto}
-                disabled={!autoReady}
-                className="w-full flex items-center justify-center gap-1.5 rounded-md border border-[#17235E]/40 bg-[#17235E]/[0.08] px-3 py-2 text-12 font-semibold text-[#17235E] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Icon icon="ph:magic-wand-fill" width={13} height={13} />
-                {topUp.isPending
-                  ? 'Topping up…'
-                  : recommended
-                    ? `Auto top up ~${recommended} ${fundingSymbol}`
-                    : 'Calculating…'}
-              </button>
+              {/* One-tap auto: recommended amount + immediate top-up (single click, never silent).
+                  Becomes an active connect prompt when a wallet is missing — never a dead button. */}
+              {walletsReady ? (
+                <button
+                  type="button"
+                  onClick={handleAuto}
+                  disabled={!autoReady}
+                  title="Sized to cover your claim shortfall. Testnet pool pricing can make this higher than mainnet."
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-[#17235E]/40 bg-[#17235E]/[0.08] px-3 py-2 text-12 font-semibold text-[#17235E] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Icon icon="ph:magic-wand-fill" width={13} height={13} />
+                  {topUp.isPending
+                    ? 'Topping up…'
+                    : recommended
+                      ? `Auto top up ~${recommended} ${fundingSymbol}`
+                      : 'Calculating…'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleConnect}
+                  disabled={connecting}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-[#17235E]/40 bg-[#17235E]/[0.08] px-3 py-2 text-12 font-semibold text-[#17235E] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Icon icon="ph:plugs-connected-fill" width={13} height={13} />
+                  {connecting ? 'Connecting…' : `${connectLabel} to auto top up`}
+                </button>
+              )}
+              {walletsReady && autoHigh && (
+                <p className="flex items-start gap-1 text-11 leading-[15px] text-latest-grey-500">
+                  <Icon icon="ph:info" width={12} height={12} className="mt-0.5 flex-shrink-0" />
+                  High due to live testnet pool pricing. The real cost on mainnet is far lower.
+                </p>
+              )}
 
               <div className="flex items-center gap-1.5 max-w-full">
                 <input
@@ -329,37 +460,43 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
                 >
                   {effectiveSufficient === false
                     ? recommended
-                      ? `Not enough yet — add ~${recommended} ${fundingSymbol} to cover your claim.`
-                      : 'Not enough yet — increase the amount.'
+                      ? `Not enough yet. Add ~${recommended} ${fundingSymbol} to cover your claim.`
+                      : 'Not enough yet. Increase the amount.'
                     : `Covers your claim (~${feeLimitFj ?? claimFeeFj} FJ needed).`}
                 </p>
               )}
-            </>
-          )}
-
-          {!walletsReady && !alreadyEnough && (
-            <p className="text-11 text-[#737373]">Connect both wallets to buy Fee Juice.</p>
-          )}
-
-          {!alreadyEnough && (
-            <button
-              type="button"
-              onClick={handleConfirm}
-              disabled={confirmDisabled}
-              className="w-full flex items-center justify-center gap-1.5 rounded-md bg-[#81133B] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {topUp.isPending ? (
-                <>
-                  <Icon icon="ph:spinner-gap-bold" width={13} height={13} className="animate-spin" />
-                  Buying Fee Juice…
-                </>
+              {/* Buy / bridge — an active connect prompt when a wallet is missing (never a dead button). */}
+              {walletsReady ? (
+                <button
+                  type="button"
+                  onClick={handleConfirm}
+                  disabled={confirmDisabled}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md bg-[#81133B] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {topUp.isPending ? (
+                    <>
+                      <Icon icon="ph:spinner-gap-bold" width={13} height={13} className="animate-spin" />
+                      Buying Fee Juice…
+                    </>
+                  ) : (
+                    <>
+                      <Icon icon="ph:lightning-fill" width={13} height={13} />
+                      Buy &amp; bridge Fee Juice
+                    </>
+                  )}
+                </button>
               ) : (
-                <>
-                  <Icon icon="ph:lightning-fill" width={13} height={13} />
-                  Buy &amp; bridge Fee Juice
-                </>
+                <button
+                  type="button"
+                  onClick={handleConnect}
+                  disabled={connecting}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md bg-[#81133B] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Icon icon="ph:plugs-connected-fill" width={13} height={13} />
+                  {connecting ? 'Connecting…' : `${connectLabel} to buy Fee Juice`}
+                </button>
               )}
-            </button>
+            </>
           )}
 
           {topUp.isPending && (

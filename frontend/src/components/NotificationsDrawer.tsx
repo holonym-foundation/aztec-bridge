@@ -309,6 +309,16 @@ const NotificationsDrawer: React.FC = () => {
               {n.message}
             </p>
           )}
+          {n.action && (
+            <button
+              type="button"
+              onClick={() => n.action?.onClick()}
+              className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-[#E5EFFF] px-2.5 py-1.5 text-[11px] font-semibold text-[#17235E] transition-colors hover:bg-[#17235E]/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#17235E]/40"
+            >
+              <Icon icon="ph:download-simple" width={12} height={12} />
+              {n.action.label}
+            </button>
+          )}
           <div className="flex items-center gap-1.5">
             {meta && (
               <span
@@ -443,17 +453,19 @@ const NotificationsDrawer: React.FC = () => {
             animate={{ x: 0, opacity: 1, scale: 1 }}
             exit={{ x: 18, opacity: 0, scale: 0.96 }}
             transition={{ duration: DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
-            className="absolute right-[calc(100%_+_10px)] top-1/2 flex max-w-[260px] -translate-y-1/2 items-center gap-2 rounded-2xl rounded-br-md border border-[#D4D4D4] bg-white py-2 pl-2.5 pr-3 text-left shadow-[0px_12px_28px_0px_rgba(0,0,0,0.12)]"
+            className="absolute right-[calc(100%_+_10px)] top-1/2 flex max-w-[260px] -translate-y-1/2 items-center gap-3 rounded-2xl rounded-br-md border border-[#D4D4D4] bg-white py-2.5 pl-3 pr-3.5 text-left shadow-[0px_12px_28px_0px_rgba(0,0,0,0.12)]"
           >
             <span
               className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${ICON_TINT[peek.note.type]}`}
             >
               <Icon icon={ICON_FOR[peek.note.type]} width={13} height={13} />
             </span>
-            <span className="min-w-0">
-              <span className="block truncate text-[12px] font-semibold text-[#0A0A0A]">{peek.note.title}</span>
+            <span className="flex min-w-0 flex-col gap-1">
+              <span className="block truncate text-[12px] font-semibold leading-[16px] text-[#0A0A0A]">
+                {peek.note.title}
+              </span>
               {peek.important && (
-                <span className="block text-[10px] font-medium text-[#81133B]">
+                <span className="block text-[10px] font-medium leading-[14px] text-[#81133B]">
                   {peek.note.type === 'signature' ? 'Signature required' : 'Needs your attention'}
                 </span>
               )}

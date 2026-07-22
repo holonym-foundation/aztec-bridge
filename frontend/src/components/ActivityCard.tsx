@@ -5,7 +5,8 @@ import { Icon } from '@iconify/react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import type { BridgeOperation } from '@human.tech/clean.sdk'
 import { formatUnits } from 'viem'
-import { L1_TOKEN_METADATA } from '@/config'
+import { L1_TOKEN_METADATA, L1_NETWORKS, AZTEC_VERSION } from '@/config'
+import StyledImage from '@/components/StyledImage'
 import { isResumable, hasPossibleLockedFunds, isLikelyCompleted } from '@/utils/resumability'
 import { copyToClipboard } from '@/utils'
 import { useToast } from '@/hooks/useToast'
@@ -19,6 +20,34 @@ const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   pending_finalize: { label: 'Finalizing', className: 'bg-indigo-100 text-indigo-800' },
   completed: { label: 'Completed', className: 'bg-green-100 text-green-800' },
   failed: { label: 'Failed', className: 'bg-red-100 text-red-800' },
+}
+
+// Network/deployment this app instance runs against. The operation record does
+// not persist a per-op network or Aztec version, so we surface the current active
+// deployment. Same source (config-derived, never hardcoded) and same "vX Alpha"
+// language the DeploymentSelector uses in the nav.
+const DEPLOYMENT_LABEL = [L1_NETWORKS[0]?.title, AZTEC_VERSION ? `v${AZTEC_VERSION} Alpha` : null]
+  .filter(Boolean)
+  .join(' · ')
+
+// Deposit = Ethereum (L1) to Aztec (L2); withdraw = Aztec (L2) to Ethereum (L1).
+// Reuses the same logo assets + arrow glyph the ProgressCard from/to block uses,
+// so the direction reads consistently across the app. The visible text label is
+// gone, so the group carries an aria-label/title announcing the direction.
+function DirectionLogos({ direction }: { direction: BridgeOperation['direction'] }) {
+  const isDeposit = direction === 'L1_TO_L2'
+  const eth = '/assets/svg/ethLogo.svg'
+  const aztec = '/assets/svg/aztec.svg'
+  const first = isDeposit ? eth : aztec
+  const second = isDeposit ? aztec : eth
+  const label = isDeposit ? 'L1 to L2' : 'L2 to L1'
+  return (
+    <span role="img" aria-label={label} title={label} className="inline-flex items-center gap-1">
+      <StyledImage src={first} alt="" className="h-4 w-4 shrink-0" />
+      <Icon icon="ph:arrow-right" width={12} height={12} className="text-gray-400" aria-hidden="true" />
+      <StyledImage src={second} alt="" className="h-4 w-4 shrink-0" />
+    </span>
+  )
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -133,15 +162,12 @@ export default function ActivityCard({
   const tokenSymbol = operation.tokenSymbol ?? operation.tokenSymbolL1 ?? L1_TOKEN_METADATA.symbol
   const amount =
     operation.amountDisplayL1 ?? (operation.amountL1 ? formatUnits(BigInt(operation.amountL1), decimals) : '?')
-  const date = new Date(operation.createdAt).toLocaleDateString(undefined, {
+  const date = new Date(operation.createdAt).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
+    hour: 'numeric',
     minute: '2-digit',
   })
-  const directionLabel = operation.direction === 'L1_TO_L2' ? 'L1 → L2' : 'L2 → L1'
-
   // Resume button shown for both standard resumable states AND the edge case
   // where status='pending' but a tx hash exists (session died after tx send
   // but before the status-update PATCH landed — funds may be locked on-chain).
@@ -168,7 +194,7 @@ export default function ActivityCard({
     <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-          <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{directionLabel}</span>
+          <DirectionLogos direction={operation.direction} />
           <StatusBadge status={operation.status} />
           <PrivacyBadge isPrivate={!!operation.isPrivacyModeEnabled} />
           {likelyCompleted && (
@@ -188,6 +214,7 @@ export default function ActivityCard({
       <p className="text-base font-semibold leading-none mt-1.5">
         {amount} {tokenSymbol}
       </p>
+      {DEPLOYMENT_LABEL && <p className="mt-1 text-[11px] text-gray-400">{DEPLOYMENT_LABEL}</p>}
 
       {likelyCompleted ? (
         <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-emerald-700">

@@ -310,14 +310,13 @@ const createToast = (
 ) => {
   // #202/#207. Record the event in the Messages feed first. When it lands
   // there, the feed row plus the peek-from-tab bubble ARE the surfacing, so the
-  // corner toast is redundant and is suppressed. The one exception is a banner
-  // the caller explicitly pins open (autoClose:false), a persistent interactive
-  // surface such as a "keep this page open" warning, which is not a
-  // fire-and-forget notification and still renders in the corner. Everything
-  // else (signature/claim/deposit/withdraw/success/info/error) surfaces via the
-  // peek bubble plus feed only.
+  // corner toast is always redundant and is suppressed — including pinned
+  // (autoClose:false) or interactive banners, which now surface via the feed
+  // (with an inline action where one is needed) plus the peek bubble only.
+  // Persistent safety text that must stay on-screen lives in its own page
+  // component (e.g. ProgressCard's "keep this page open" banner), not a toast.
   const mirrored = mirrorToFeed(type, message, heading, options)
-  if (mirrored && options.autoClose !== false) return null
+  if (mirrored) return null
 
   // For error toasts, check if this exact message is already active
   // Use only the heading for de-dupe when message is non-string (JSX),
@@ -397,12 +396,11 @@ const updateToastState = (
   options: ToastOptionsWithFeed = {},
 ) => {
   // #202/#207. Mirror the resolved state into the feed. When it lands there it
-  // surfaces via the peek bubble plus feed, so retire the transient loading
-  // toast rather than morphing it into a redundant corner success/error. A
-  // caller that explicitly pinned the resolved state open (autoClose:false)
-  // keeps its corner banner.
+  // surfaces via the peek bubble plus feed, so always retire the transient
+  // loading toast rather than morphing it into a redundant corner success/error
+  // — even when the caller pinned the resolved state open (autoClose:false).
   const mirrored = mirrorToFeed(type, message, heading, options)
-  if (mirrored && options.autoClose !== false) {
+  if (mirrored) {
     toast.dismiss(toastId)
     return
   }

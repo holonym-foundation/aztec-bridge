@@ -13,9 +13,10 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useToast } from '@/hooks/useToast'
 import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
-import { L1_TOKEN_METADATA } from '@/config'
+import { L1_TOKEN_METADATA, L1_NETWORKS, AZTEC_VERSION } from '@/config'
 import { BridgeDirection } from '@/types/bridge'
 import { LocalRecoveryPanel } from '@/components/LocalRecoveryPanel'
+import StyledImage from '@/components/StyledImage'
 
 // Motion values mirrored from the human-tech design system (docs/tokens.css):
 // --dur-enter / --ease-slide for the panel that slides out from the tab.
@@ -41,6 +42,33 @@ const STATUS_META: Record<string, StatusMeta> = {
 }
 
 const MAX_VISIBLE_OPS = 5
+
+// Network/deployment this app instance runs against. The operation record does
+// not persist a per-op network or Aztec version, so we surface the current active
+// deployment. Same config-derived source and "vX Alpha" language the nav's
+// DeploymentSelector uses.
+const DEPLOYMENT_LABEL = [L1_NETWORKS[0]?.title, AZTEC_VERSION ? `v${AZTEC_VERSION} Alpha` : null]
+  .filter(Boolean)
+  .join(' · ')
+
+// Deposit = Ethereum (L1) to Aztec (L2); withdraw = Aztec (L2) to Ethereum (L1).
+// Same logo assets + arrow the ProgressCard from/to block uses. Visible text is
+// gone, so the group carries an aria-label/title announcing the direction.
+function DirectionLogos({ direction }: { direction: BridgeOperation['direction'] }) {
+  const isDeposit = direction === 'L1_TO_L2'
+  const eth = '/assets/svg/ethLogo.svg'
+  const aztec = '/assets/svg/aztec.svg'
+  const first = isDeposit ? eth : aztec
+  const second = isDeposit ? aztec : eth
+  const label = isDeposit ? 'L1 to L2' : 'L2 to L1'
+  return (
+    <span role="img" aria-label={label} title={label} className="inline-flex items-center gap-1">
+      <StyledImage src={first} alt="" className="h-[15px] w-[15px] shrink-0" />
+      <Icon icon="ph:arrow-right" width={11} height={11} className="text-[#989898]" aria-hidden="true" />
+      <StyledImage src={second} alt="" className="h-[15px] w-[15px] shrink-0" />
+    </span>
+  )
+}
 
 // Recent-bridge-operations peek, mirroring BridgeStepsRail's drawer pattern but
 // on the card's right edge. Reuses useBridgeOperations for data and duplicates
@@ -262,7 +290,6 @@ const ActivityDrawer: React.FC = () => {
       undefined,
       { hour: 'numeric', minute: '2-digit' },
     )}`
-    const directionLabel = op.direction === 'L1_TO_L2' ? 'L1 → L2' : 'L2 → L1'
     const meta = STATUS_META[op.status] ?? { label: op.status, className: 'bg-gray-100 text-gray-800' }
     const showResume = isResumable(op) || hasPossibleLockedFunds(op)
 
@@ -270,7 +297,7 @@ const ActivityDrawer: React.FC = () => {
       <li key={op.id} className="border-b border-[#F0F0F0] py-2.5 last:border-b-0 last:pb-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="text-[12px] font-semibold text-[#0A0A0A]">{directionLabel}</span>
+            <DirectionLogos direction={op.direction} />
             {/* Public (globe/navy) vs private (lock/maroon) — same language as ActivityCard (#230a). */}
             {op.isPrivacyModeEnabled ? (
               <span className="inline-flex items-center gap-0.5 rounded-full bg-[#FDE7F3] px-1.5 py-0.5 text-[9px] font-semibold text-[#81133B]">
@@ -294,6 +321,9 @@ const ActivityDrawer: React.FC = () => {
           </span>
           <span className="flex-shrink-0 text-[11px] text-[#989898]">{date}</span>
         </div>
+        {DEPLOYMENT_LABEL && (
+          <p className="mt-0.5 truncate text-[10px] text-[#989898]">{DEPLOYMENT_LABEL}</p>
+        )}
         {showResume && (
           <button
             onClick={() => handleResume(op)}

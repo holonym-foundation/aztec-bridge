@@ -152,7 +152,10 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   return (
     <div className="flex flex-col">
       {/* From Section */}
-      <div className="bg-[#F5F5F5] rounded-md p-2.5 relative">
+      {/* Extra bottom padding (pb-5) keeps the last content row clear of the swap
+          toggle, which is absolutely positioned at bottom-[-30px] and straddles the
+          From/To boundary. Without it the toggle's top edge overlaps the attestation pill. */}
+      <div className="bg-[#F5F5F5] rounded-md p-2.5 pb-5 relative">
         <p className="text-14 font-semibold text-latest-grey-100">From</p>
         <div className="flex justify-between">
           {/* Network selector */}
@@ -233,7 +236,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
           </div>
         </div>
         {attestationMethod && (
-          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 mt-3">
             {/* Compact attestation badge: icon + method + cap. Full detail on hover. */}
             {attestationMethod === 'poch' ? (
               <span
@@ -284,7 +287,9 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
       </div>
 
       {/* To Section */}
-      <div className="mt-1.5 bg-[#F5F5F5] rounded-md p-2.5">
+      {/* mt-6 opens the inter-card gap so the swap toggle (44px, hanging 30px below the
+          From card) has clear space and does not crowd the "To" header below it. */}
+      <div className="mt-6 bg-[#F5F5F5] rounded-md p-2.5">
         <p className="text-14 font-semibold text-latest-grey-100">To</p>
         <div className="flex justify-between">
           {/* Network selector */}

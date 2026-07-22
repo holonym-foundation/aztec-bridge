@@ -5,12 +5,19 @@ import { Icon } from '@iconify/react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { useNotificationsStore, type AppNotification, type NotificationType } from '@/stores/useNotificationsStore'
-import { GENIE_LANDED_EVENT } from '@/hooks/useToast'
+import { useWalletStore } from '@/stores/walletStore'
 
 // Motion values mirrored from the human-tech design system (docs/tokens.css):
 // --dur-enter / --ease-slide for the panel that slides out from the tab.
 const DS_DUR_ENTER = 0.32
 const DS_EASE_SLIDE: [number, number, number, number] = [0.32, 0.72, 0, 1]
+
+// Shared right-edge peek coordination (#160): every binder tab announces its
+// open state on this event; a tab that sees ANOTHER tab open closes itself, so
+// only one panel peeks/opens at a time and they never overlap. BridgeStepsRail
+// and ActivityDrawer speak the same event.
+const PEEK_EVENT = 'shield:peek'
+type PeekSignal = { id: string; open: boolean }
 
 const PANEL_WIDTH = 300
 // Fixed page size — the panel paginates rather than scrolls, matching the app's
@@ -39,14 +46,57 @@ const ICON_TINT: Record<NotificationType, string> = {
   warning: 'text-[#7A4A00] bg-[#FFF1D6]',
 }
 
+// ── Message state (#176) ────────────────────────────────────────────────────
+// A message that asks the user to act (sign / approve / confirm) is PENDING
+// until something resolves it, then it reads DONE; if it sits unresolved past
+// STALE_MS it reads STALE so a "Signature required" never lingers as if still
+// live after the user has already signed (or walked away).
+type MessageState = 'pending' | 'done' | 'stale' | 'plain'
+
+const RESOLVING_TYPES: NotificationType[] = ['success', 'claim', 'deposit', 'withdrawal']
+const ACTION_TEXT = /\b(sign|signature|approve|confirm|awaiting|pending|action required|required)\b/i
+const RESOLVED_TEXT = /\b(signed|approved|confirmed|complete|completed|success|claimed|deposited)\b/i
+const STALE_MS = 3 * 60 * 1000
+
+const isActionRequired = (n: AppNotification): boolean => {
+  if (n.type === 'signature') return true
+  if (n.type === 'info' || n.type === 'warning') return ACTION_TEXT.test(`${n.title} ${n.message ?? ''}`)
+  return false
+}
+
+// `list` is newest-first (the store prepends). A pending action is DONE once any
+// LATER message resolves it (a success/claim/deposit/withdrawal, or text that
+// reads as completed) — those sit at a lower index than the pending row.
+const deriveState = (list: AppNotification[], index: number, now: number): MessageState => {
+  const n = list[index]
+  if (!isActionRequired(n)) return 'plain'
+  const resolvedAfter = list
+    .slice(0, index)
+    .some((m) => RESOLVING_TYPES.includes(m.type) || RESOLVED_TEXT.test(`${m.title} ${m.message ?? ''}`))
+  if (resolvedAfter) return 'done'
+  if (now - n.timestamp > STALE_MS) return 'stale'
+  return 'pending'
+}
+
+const STATE_META: Record<Exclude<MessageState, 'plain'>, { label: string; className: string }> = {
+  pending: { label: 'Action required', className: 'bg-[#E5EFFF] text-[#17235E]' },
+  done: { label: 'Done', className: 'bg-[#DBFAAE] text-[#2F5214]' },
+  stale: { label: 'Expired', className: 'bg-[#F0F0F0] text-[#989898]' },
+}
+
 const NotificationsDrawer: React.FC = () => {
   const notifications = useNotificationsStore((s) => s.notifications)
   const unreadCount = useNotificationsStore((s) => s.unreadCount)
+  const lastGenie = useNotificationsStore((s) => s.lastGenie)
   const dismiss = useNotificationsStore((s) => s.dismiss)
   const dismissAll = useNotificationsStore((s) => s.dismissAll)
   const markAllRead = useNotificationsStore((s) => s.markAllRead)
 
+  const isWaapConnected = useWalletStore((s) => s.isWaapConnected)
+  const connectWaapWallet = useWalletStore((s) => s.connectWaapWallet)
+
   const panelId = useId()
+  const peekId = useId()
   const prefersReducedMotion = useReducedMotion()
 
   // Hover previews the panel; a click pins it open. On touch (no hover) the tap
@@ -54,22 +104,87 @@ const NotificationsDrawer: React.FC = () => {
   const [hovered, setHovered] = useState(false)
   const [pinned, setPinned] = useState(false)
   const [page, setPage] = useState(0)
+  // Tracks whether one of the SIBLING tabs is open, so the message peek bubble
+  // never pops out over an open Tutorial/Activity panel (#160/#181).
+  const [othersOpen, setOthersOpen] = useState(false)
   const open = hovered || pinned
+
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
 
-  // Genie-into-tab: the actual toast flies into this tab as it auto-closes (see
-  // useToast's GenieToastTransition). The moment it lands, the toast dispatches
-  // GENIE_LANDED_EVENT and we pulse the unread badge — so the flight and the
-  // badge read as one motion. Motion is fully gated on prefers-reduced-motion:
-  // reduced-motion users get no fly and no pulse, just the incremented badge.
+  // Badge pulse fires on every genuinely-new message (keyed on the store's
+  // lastGenie), independent of any toast animation — so it can't silently fail
+  // the way the old toast-flight did (#180). Reduced-motion users get the count
+  // bump with no scale animation.
   const [pulseKey, setPulseKey] = useState(0)
 
+  // The peek bubble: a new message slides softly out of the Messages tab like an
+  // iMessage chat bubble, pauses, then drops back in (#181). Important messages
+  // (errors / action-required) linger; routine ones settle quickly.
+  const [peek, setPeek] = useState<{ note: AppNotification; important: boolean } | null>(null)
+  const seenGenieRef = useRef<string | null>(null)
+
+  // Re-tick so time-based state (pending → stale) refreshes while the feed has
+  // any action-required message the user hasn't resolved.
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  const hasActionable = useMemo(() => notifications.some(isActionRequired), [notifications])
   useEffect(() => {
-    const onLanded = () => setPulseKey((k) => k + 1)
-    window.addEventListener(GENIE_LANDED_EVENT, onLanded)
-    return () => window.removeEventListener(GENIE_LANDED_EVENT, onLanded)
-  }, [])
+    if (!hasActionable) return
+    const t = setInterval(() => setNowTick(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [hasActionable])
+
+  const stateById = useMemo(() => {
+    const map = new Map<string, MessageState>()
+    notifications.forEach((_, i) => map.set(notifications[i].id, deriveState(notifications, i, nowTick)))
+    return map
+  }, [notifications, nowTick])
+
+  // ── Peek coordination (#160): announce our open state; close on a sibling's.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent<PeekSignal>(PEEK_EVENT, { detail: { id: peekId, open } }))
+  }, [open, peekId])
+
+  useEffect(() => {
+    const onPeek = (e: Event) => {
+      const detail = (e as CustomEvent<PeekSignal>).detail
+      if (!detail || detail.id === peekId) return
+      setOthersOpen(detail.open)
+      if (detail.open) {
+        setHovered(false)
+        setPinned(false)
+      }
+    }
+    window.addEventListener(PEEK_EVENT, onPeek)
+    return () => window.removeEventListener(PEEK_EVENT, onPeek)
+  }, [peekId])
+
+  // ── New-message surfacing (#180/#181): pulse the badge + peek the bubble.
+  useEffect(() => {
+    if (!lastGenie || seenGenieRef.current === lastGenie.id) return
+    seenGenieRef.current = lastGenie.id
+    setPulseKey((k) => k + 1)
+    if (prefersReducedMotion) return // reduced-motion: badge only, no bubble travel
+    if (open || othersOpen) return // don't pop over an open panel
+    const note = notifications.find((n) => n.id === lastGenie.id)
+    if (!note) return
+    const important = note.type === 'error' || note.type === 'signature' || note.type === 'warning'
+    setPeek({ note, important })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastGenie])
+
+  // Auto-retract the bubble (routine settles fast; important lingers).
+  useEffect(() => {
+    if (!peek) return
+    const ms = peek.important ? 5200 : 2600
+    const t = window.setTimeout(() => setPeek(null), ms)
+    return () => window.clearTimeout(t)
+  }, [peek])
+
+  // Retract immediately if any panel opens while it's peeking.
+  useEffect(() => {
+    if (open || othersOpen) setPeek(null)
+  }, [open, othersOpen])
 
   const closeDesktop = () => {
     setPinned(false)
@@ -124,36 +239,94 @@ const NotificationsDrawer: React.FC = () => {
     }
   }, [pinned])
 
-  const renderItem = (n: AppNotification) => (
-    <li key={n.id} className="flex gap-2.5 border-b border-[#F0F0F0] py-2.5 last:border-b-0 last:pb-0">
-      <span
-        className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${ICON_TINT[n.type]}`}
+  const renderItem = (n: AppNotification) => {
+    const state = stateById.get(n.id) ?? 'plain'
+    const meta = state === 'plain' ? null : STATE_META[state]
+    return (
+      <li
+        key={n.id}
+        className={`flex gap-2.5 border-b border-[#F0F0F0] py-2.5 last:border-b-0 last:pb-0 ${
+          state === 'stale' ? 'opacity-55' : ''
+        }`}
       >
-        <Icon icon={ICON_FOR[n.type]} width={13} height={13} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-[12px] font-semibold text-[#0A0A0A] break-words [overflow-wrap:anywhere]">{n.title}</p>
-          <button
-            type="button"
-            onClick={() => dismiss(n.id)}
-            aria-label="Dismiss notification"
-            className="-mr-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[#B7B7B7] transition-colors hover:bg-[#F0F0F0] hover:text-[#0A0A0A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#81133B]/40"
-          >
-            <Icon icon="ph:x-bold" width={11} height={11} />
-          </button>
+        <span
+          className={`relative mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${ICON_TINT[n.type]}`}
+        >
+          <Icon icon={ICON_FOR[n.type]} width={13} height={13} />
+          {state === 'pending' && (
+            // Live pending marker. Ping is reduced-motion safe: the dot stays put,
+            // only the halo animates and CSS drops it under prefers-reduced-motion.
+            <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
+              {!prefersReducedMotion && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#17235E] opacity-60" />
+              )}
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#17235E] ring-2 ring-white" />
+            </span>
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[12px] font-semibold text-[#0A0A0A] break-words [overflow-wrap:anywhere]">{n.title}</p>
+            <button
+              type="button"
+              onClick={() => dismiss(n.id)}
+              aria-label="Dismiss notification"
+              className="-mr-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[#B7B7B7] transition-colors hover:bg-[#F0F0F0] hover:text-[#0A0A0A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#81133B]/40"
+            >
+              <Icon icon="ph:x-bold" width={11} height={11} />
+            </button>
+          </div>
+          {n.message && (
+            <p className="mt-0.5 text-[11px] leading-[16px] text-[#737373] break-words [overflow-wrap:anywhere]">
+              {n.message}
+            </p>
+          )}
+          <div className="mt-1 flex items-center gap-1.5">
+            {meta && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.3px] ${meta.className}`}
+              >
+                {state === 'done' && <Icon icon="ph:check-bold" width={9} height={9} />}
+                {meta.label}
+              </span>
+            )}
+            <span className="text-[10px] font-medium uppercase tracking-[0.3px] text-[#B7B7B7]">
+              {formatDistanceToNowStrict(new Date(n.timestamp), { addSuffix: true })}
+            </span>
+          </div>
         </div>
-        {n.message && (
-          <p className="mt-0.5 text-[11px] leading-[16px] text-[#737373] break-words [overflow-wrap:anywhere]">
-            {n.message}
-          </p>
-        )}
-        <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.3px] text-[#B7B7B7]">
-          {formatDistanceToNowStrict(new Date(n.timestamp), { addSuffix: true })}
-        </p>
+      </li>
+    )
+  }
+
+  const emptyState = () =>
+    isWaapConnected ? (
+      // Connected but nothing to show — the genuine "caught up" state.
+      <div className="flex flex-col items-center gap-1.5 py-6 text-center">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F0F0F0] text-[#B7B7B7]">
+          <Icon icon="ph:bell-simple" width={18} height={18} />
+        </span>
+        <p className="text-[12px] font-medium text-[#737373]">You&rsquo;re all caught up</p>
+        <p className="text-[11px] text-[#B7B7B7]">Signing, claims and bridge updates will show up here.</p>
       </div>
-    </li>
-  )
+    ) : (
+      // Not connected — don't imply there's nothing to see (#163). Prompt to
+      // connect so messages have somewhere to come from.
+      <div className="flex flex-col items-center gap-2 py-6 text-center">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E5EFFF] text-[#17235E]">
+          <Icon icon="ph:plugs" width={18} height={18} />
+        </span>
+        <p className="text-[12px] font-medium text-[#737373]">Connect your wallet to see your messages</p>
+        <button
+          type="button"
+          onClick={() => connectWaapWallet().catch(() => {})}
+          className="mt-0.5 inline-flex items-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#17235E]/90"
+        >
+          <Icon icon="ph:wallet" width={14} height={14} />
+          Connect wallet
+        </button>
+      </div>
+    )
 
   const panelBody = (onClose?: () => void) => (
     <>
@@ -183,13 +356,7 @@ const NotificationsDrawer: React.FC = () => {
       </div>
 
       {notifications.length === 0 ? (
-        <div className="flex flex-col items-center gap-1.5 py-6 text-center">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F0F0F0] text-[#B7B7B7]">
-            <Icon icon="ph:bell-simple" width={18} height={18} />
-          </span>
-          <p className="text-[12px] font-medium text-[#737373]">You're all caught up</p>
-          <p className="text-[11px] text-[#B7B7B7]">Signing, claims and bridge updates will show up here.</p>
-        </div>
+        emptyState()
       ) : (
         <>
           <ul className="flex flex-col">{pageItems.map(renderItem)}</ul>
@@ -205,7 +372,7 @@ const NotificationsDrawer: React.FC = () => {
                 <Icon icon="ph:caret-left-bold" width={13} height={13} />
               </button>
               <span className="text-[11px] font-medium tabular-nums text-[#989898]">
-                {rangeStart}–{rangeEnd} of {notifications.length}
+                {rangeStart}&ndash;{rangeEnd} of {notifications.length}
               </span>
               <button
                 type="button"
@@ -234,6 +401,39 @@ const NotificationsDrawer: React.FC = () => {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+      {/* New-message peek bubble (#181): slides out of the tab, pauses, drops back. */}
+      <AnimatePresence>
+        {peek && !open && (
+          <motion.button
+            key={peek.note.id}
+            type="button"
+            onClick={() => {
+              setPeek(null)
+              setPinned(true)
+            }}
+            initial={{ x: 18, opacity: 0, scale: 0.96 }}
+            animate={{ x: 0, opacity: 1, scale: 1 }}
+            exit={{ x: 18, opacity: 0, scale: 0.96 }}
+            transition={{ duration: DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+            className="absolute right-[calc(100%_+_10px)] top-1/2 flex max-w-[260px] -translate-y-1/2 items-center gap-2 rounded-2xl rounded-br-md border border-[#D4D4D4] bg-white py-2 pl-2.5 pr-3 text-left shadow-[0px_12px_28px_0px_rgba(0,0,0,0.12)]"
+          >
+            <span
+              className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${ICON_TINT[peek.note.type]}`}
+            >
+              <Icon icon={ICON_FOR[peek.note.type]} width={13} height={13} />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[12px] font-semibold text-[#0A0A0A]">{peek.note.title}</span>
+              {peek.important && (
+                <span className="block text-[10px] font-medium text-[#81133B]">
+                  {peek.note.type === 'signature' ? 'Signature required' : 'Needs your attention'}
+                </span>
+              )}
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
@@ -278,6 +478,7 @@ const NotificationsDrawer: React.FC = () => {
         ) : (
           <span className="h-1.5 w-1.5 rounded-full bg-[#D4D4D4]" />
         )}
+        <Icon icon="ph:envelope" width={15} height={15} className="text-[#737373]" aria-hidden="true" />
         <span
           className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}

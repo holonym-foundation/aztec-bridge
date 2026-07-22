@@ -3,6 +3,9 @@ import StyledImage from './StyledImage'
 import { BridgeDirection, BridgeState, Network as NetworkType, Token as TokenType } from '@/types/bridge'
 import { motion } from 'framer-motion'
 import SwapIcon from './SwapIcon'
+import { Icon } from '@iconify/react'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
+import { POCH_MINT_URL } from '@/config'
 
 interface BridgeSectionProps {
   bridgeConfig: BridgeState
@@ -69,6 +72,23 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
     setSwapRotation((prev) => prev + 180)
     if (onSwap) onSwap()
   }
+
+  // Attestation indicator + Proof of Clean Hands nudge.
+  // Passport (uniqueness) carries a per-tx USD cap; PoCH lifts it. The cap comes
+  // from the attestation result (passportMaxAmount, token base units), never a
+  // hardcoded 1000, so it tracks whatever the backend enforces.
+  const passportCapUsd = passportMaxAmount != null ? Number(passportMaxAmount) / 1e6 : undefined
+  const capLabel =
+    passportCapUsd != null ? `$${passportCapUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : ''
+  const amountNum = Number(inputAmount)
+  // Nudge only on the Passport path, only as the amount nears or crosses the cap.
+  // PoCH-verified users already have the higher limit, so they are never nagged.
+  const nearPassportCap =
+    attestationMethod === 'passport' &&
+    passportCapUsd != null &&
+    !isNaN(amountNum) &&
+    amountNum > 0 &&
+    amountNum >= passportCapUsd * 0.9
 
   // Compact summary rows shown while a detail accordion is expanded — e.g.
   // "From Eth Sepolia · 100 USDC" / "To Aztec · cUSDC". Tapping a row re-selects
@@ -194,11 +214,48 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             )}
           </div>
         </div>
-        {attestationMethod === 'passport' && passportMaxAmount != null && (
-          <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 mt-1.5">
-            <p className="text-12 text-blue-700">
-              Using Passport attestation. Max: {(Number(passportMaxAmount) / 1e6).toFixed(2)} USDC per transaction.
-            </p>
+        {attestationMethod && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+            {/* Compact attestation badge: icon + method + cap. Full detail on hover. */}
+            {attestationMethod === 'poch' ? (
+              <span
+                data-tooltip-id="attestation-info"
+                data-tooltip-content="Verified with Proof of Clean Hands. Higher per-transaction limit than the Passport tier."
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-12 font-medium cursor-default bg-[rgba(15,123,79,0.10)] text-[#0F7B4F]"
+              >
+                <Icon icon="ph:seal-check-fill" width={13} height={13} className="shrink-0" />
+                Clean Hands
+              </span>
+            ) : (
+              passportMaxAmount != null && (
+                <span
+                  data-tooltip-id="attestation-info"
+                  data-tooltip-content={`Verified with Passport (uniqueness). Max ${capLabel} per transaction. Verify with Proof of Clean Hands for a higher limit.`}
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-12 font-medium cursor-default bg-[rgba(23,35,94,0.08)] text-[#17235E]"
+                >
+                  <Icon icon="ph:shield-check-fill" width={13} height={13} className="shrink-0" />
+                  Passport · max {capLabel}
+                </span>
+              )
+            )}
+            {/* Contextual nudge: only near/over the Passport cap; links out to mint PoCH. */}
+            {nearPassportCap && (
+              <a
+                href={POCH_MINT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-12 font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708] hover:bg-[rgba(181,71,8,0.18)] transition-colors"
+              >
+                <Icon icon="ph:arrow-up-right-bold" width={12} height={12} className="shrink-0" />
+                Above {capLabel} needs Proof of Clean Hands
+              </a>
+            )}
+            <ReactTooltip
+              id="attestation-info"
+              place="top"
+              className="z-[100]"
+              style={{ fontSize: '12px', maxWidth: '220px' }}
+            />
           </div>
         )}
         {onSwap && <SwapIcon onClick={onSwap} />}

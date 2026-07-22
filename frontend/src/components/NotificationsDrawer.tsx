@@ -97,7 +97,10 @@ const STATE_META: Record<Exclude<MessageState, 'plain'>, { label: string; classN
   stale: { label: 'Expired', className: 'bg-[#F0F0F0] text-[#989898]' },
 }
 
-const NotificationsDrawer: React.FC = () => {
+type NotificationsDrawerProps = { variant?: 'rail' | 'dock' }
+
+const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'rail' }) => {
+  const isDock = variant === 'dock'
   const notifications = useNotificationsStore((s) => s.notifications)
   const unreadCount = useNotificationsStore((s) => s.unreadCount)
   const lastGenie = useNotificationsStore((s) => s.lastGenie)
@@ -427,6 +430,69 @@ const NotificationsDrawer: React.FC = () => {
       )}
     </>
   )
+
+  // Narrow-viewport dock (#243): a compact round icon button in the bottom-left
+  // mobile dock. Keeps the envelope identity + the unread count badge (with its
+  // pulse) and opens the same Messages feed as a bottom-anchored sheet that stays
+  // on-screen on phones. The new-message peek bubble is a right-edge affordance,
+  // so it is dropped here; the badge pulse still surfaces new messages.
+  if (isDock) {
+    return (
+      <div
+        ref={drawerRef}
+        className="pointer-events-auto relative"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key="panel"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+              className="fixed bottom-[76px] left-4 z-40 w-[300px] max-w-[calc(100vw-2rem)]"
+            >
+              <div
+                id={panelId}
+                className={`flex max-h-[70dvh] flex-col rounded-[16px] border border-[#D4D4D4] bg-white ${PANEL_PADDING} shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]`}
+              >
+                {panelBody(closeDesktop)}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          ref={handleRef}
+          type="button"
+          data-messages-tab
+          aria-expanded={open}
+          aria-controls={panelId}
+          aria-label={unreadCount > 0 ? `Messages, ${unreadCount} unread` : 'Messages'}
+          onClick={() => setPinned((p) => !p)}
+          className={`relative flex h-11 w-11 items-center justify-center rounded-full border bg-white shadow-[0px_6px_16px_0px_rgba(0,0,0,0.12)] transition-colors ${
+            open ? 'border-[#0A0A0A]/40' : 'border-[#D4D4D4]'
+          }`}
+        >
+          <Icon icon="ph:envelope" width={18} height={18} className="text-[#737373]" aria-hidden="true" />
+          {unreadCount > 0 ? (
+            <motion.span
+              key={pulseKey}
+              animate={prefersReducedMotion ? undefined : { scale: [1, 1.35, 1] }}
+              transition={{ duration: 0.36, ease: 'easeOut' }}
+              className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#81133B] px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white"
+            >
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </motion.span>
+          ) : (
+            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#D4D4D4] ring-2 ring-white" />
+          )}
+        </button>
+      </div>
+    )
+  }
 
   // A slim binder tab pinned to the viewport's right edge, stacked below the
   // Tutorial and Activity tabs by the dock in ClientLayout. Hover or click peeks

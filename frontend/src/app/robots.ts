@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next'
+import { IS_PROD_DEPLOYMENT } from '@/config'
 
 const SITE_URL = 'https://shield.human.tech'
 
@@ -6,6 +7,13 @@ const SITE_URL = 'https://shield.human.tech'
 const APP_STATE_PATHS = ['/progress', '/claim-fuel', '/complete', '/fee-juice', '/activity', '/api/']
 
 export default function robots(): MetadataRoute.Robots {
+  // Only the production (Ethereum-mainnet) deployment is indexable. Non-prod hosts
+  // (testnet.shield.human.tech, Vercel previews) block all crawling so they never get
+  // indexed alongside — or compete with — the canonical prod site. Their pages still
+  // canonicalize to shield.human.tech, so any leaked URL consolidates onto prod.
+  if (!IS_PROD_DEPLOYMENT) {
+    return { rules: [{ userAgent: '*', disallow: '/' }] }
+  }
   return {
     rules: [
       {

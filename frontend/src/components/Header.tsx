@@ -658,7 +658,7 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="true"
         aria-expanded={open}
-        className={`flex items-center gap-1.5 sm:gap-2 h-14 sm:h-16 px-2.5 sm:px-3 rounded-[18px] ${glassPill(isDark, open)} cursor-pointer`}
+        className={`flex items-center gap-1.5 sm:gap-2 h-14 sm:h-16 px-2.5 sm:px-3 rounded-[18px] transition-colors duration-200 ${open ? activeTint(isDark) : hoverTint(isDark)} cursor-pointer`}
       >
         <div className="flex flex-col justify-center gap-1.5">
           {/* Humanity row. The green pulsing glow (ported DS chip--glow) is a
@@ -1036,12 +1036,15 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   }
 
   const privacyToggle = (
+    // Flat segment, not a pill (#185). Carries no glass-pill fill/shadow/blur of
+    // its own so it doesn't read as a pill stacked on the main nav pill. The
+    // toggle switch itself supplies the interactive affordance, and a hairline on
+    // the wrapper (see below) divides it from the centered nav links.
     <div
-      className={`flex px-[3px] py-[3px] pl-[8px] items-center gap-[6px] sm:gap-[8px] h-9 sm:h-10 rounded-full ${glassPill(isDark)} privacy-mode-toggle relative flex-shrink-0`}
+      className={`flex items-center gap-[6px] sm:gap-[8px] h-9 sm:h-10 privacy-mode-toggle relative flex-shrink-0`}
       data-tooltip-id="privacy-mode-tooltip"
       data-tooltip-content={isPrivacyModeEnabled ? 'Private transactions enabled' : 'Enable private transactions'}
     >
-      <Image src="/assets/svg/human.aztec.svg" alt="Aztec" width={24} height={24} />
       <span
         className={`hidden sm:inline ${isDark ? 'text-white/[0.90]' : 'text-[#0A0A0A]'} text-[13px] font-[450] leading-[20px] font-sans whitespace-nowrap`}
       >
@@ -1251,8 +1254,17 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       <div
         className={`flex-1 min-w-0 flex items-center justify-between gap-2 min-h-11 sm:min-h-12 py-1 sm:py-1.5 px-2 sm:px-3 rounded-full ${glassPill(isDark)}`}
       >
-        {/* Left: Privacy Mode pinned to the far left of the middle section (#159). */}
-        <div className="flex items-center flex-shrink-0">
+        {/* Left: Privacy Mode pinned to the far left of the middle section (#159).
+            Flat segment now (#185). A flush hairline on its right edge divides it
+            from the centered nav links at lg+ (where those links are present),
+            mirroring the wallet cluster's border-l hairline instead of stacking a
+            pill. Below lg the border collapses to 0 width so no hairline floats in
+            the empty gap. */}
+        <div
+          className={`flex items-center flex-shrink-0 lg:border-r lg:pr-3 ${
+            isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
+          }`}
+        >
           {privacyToggle}
         </div>
 

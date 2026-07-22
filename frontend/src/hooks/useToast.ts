@@ -308,6 +308,17 @@ const createToast = (
   heading?: string,
   options: ToastOptionsWithFeed = {},
 ) => {
+  // #202/#207. Record the event in the Messages feed first. When it lands
+  // there, the feed row plus the peek-from-tab bubble ARE the surfacing, so the
+  // corner toast is redundant and is suppressed. The one exception is a banner
+  // the caller explicitly pins open (autoClose:false), a persistent interactive
+  // surface such as a "keep this page open" warning, which is not a
+  // fire-and-forget notification and still renders in the corner. Everything
+  // else (signature/claim/deposit/withdraw/success/info/error) surfaces via the
+  // peek bubble plus feed only.
+  const mirrored = mirrorToFeed(type, message, heading, options)
+  if (mirrored && options.autoClose !== false) return null
+
   // For error toasts, check if this exact message is already active
   // Use only the heading for de-dupe when message is non-string (JSX),
   // since JSX nodes can't be reliably stringified for keying.
@@ -334,12 +345,6 @@ const createToast = (
   const Component = TOAST_COMPONENTS[type]
   const { feed: _feed, ...toastableOptions } = options
   const toastOptions = createMergedOptions({}, { ...typeOverrides(type), ...toastableOptions })
-
-  // Record it in the Messages feed (single source of truth) before surfacing the
-  // transient toast. Reaching here means we're actually showing the toast — the
-  // error-dedupe branch above already returned for suppressed duplicates. The
-  // feed push is what makes the Messages tab peek the new message out (#181).
-  mirrorToFeed(type, message, heading, options)
 
   const finalOptions = {
     className: `${type}-toast`,
@@ -391,6 +396,17 @@ const updateToastState = (
   heading?: string,
   options: ToastOptionsWithFeed = {},
 ) => {
+  // #202/#207. Mirror the resolved state into the feed. When it lands there it
+  // surfaces via the peek bubble plus feed, so retire the transient loading
+  // toast rather than morphing it into a redundant corner success/error. A
+  // caller that explicitly pinned the resolved state open (autoClose:false)
+  // keeps its corner banner.
+  const mirrored = mirrorToFeed(type, message, heading, options)
+  if (mirrored && options.autoClose !== false) {
+    toast.dismiss(toastId)
+    return
+  }
+
   // For error toasts, check if this exact message is already active.
   // Match createToast's keying so JSX messages don't trigger string interpolation.
   if (type === 'error') {
@@ -417,11 +433,6 @@ const updateToastState = (
   const Component = TOAST_COMPONENTS[type]
   const { feed: _feed, ...toastableOptions } = options
   const mergedOptions = createMergedOptions({}, { ...typeOverrides(type), ...toastableOptions })
-
-  // Mirror the resolved success/error state into the feed. `toastId` here is the
-  // (numeric) loading-toast id; pass the caller-supplied stable id through
-  // `options.toastId` if present so keyed de-dupe still works.
-  mirrorToFeed(type, message, heading, options)
 
   toast.update(toastId, {
     // `message` widened to ReactNode for ErrorToast; the other toast

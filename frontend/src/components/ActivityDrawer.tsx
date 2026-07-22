@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/useToast'
 import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
 import { L1_TOKEN_METADATA } from '@/config'
 import { BridgeDirection } from '@/types/bridge'
+import { LocalRecoveryPanel } from '@/components/LocalRecoveryPanel'
 
 // Motion values mirrored from the human-tech design system (docs/tokens.css):
 // --dur-enter / --ease-slide for the panel that slides out from the tab.
@@ -61,6 +62,7 @@ const ActivityDrawer: React.FC = () => {
   const [hovered, setHovered] = useState(false)
   const [pinned, setPinned] = useState(false)
   const [resumingId, setResumingId] = useState<string | null>(null)
+  const [recoverOpen, setRecoverOpen] = useState(false)
   const open = hovered || pinned
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
@@ -112,6 +114,16 @@ const ActivityDrawer: React.FC = () => {
       document.removeEventListener('pointerdown', onPointerDown)
     }
   }, [pinned])
+
+  // Esc closes the recovery overlay.
+  useEffect(() => {
+    if (!recoverOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setRecoverOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [recoverOpen])
 
   const recentOps = useMemo(() => {
     if (!operations) return []
@@ -270,10 +282,15 @@ const ActivityDrawer: React.FC = () => {
         </div>
         <div className="flex flex-shrink-0 items-center gap-0.5">
           {/* Recover from local backup, reduced to a key icon (#179) so it no longer
-              eats a full row. Tooltip explains the action on hover/focus. */}
+              eats a full row. Opens as an overlay over the current view (#195) rather
+              than navigating away. Tooltip explains the action on hover/focus. */}
           <button
             type="button"
-            onClick={() => router.push('/activity/local-recovery')}
+            onClick={() => {
+              setPinned(false)
+              setHovered(false)
+              setRecoverOpen(true)
+            }}
             data-tooltip-id="activity-recover-tip"
             data-tooltip-content="Restore a bridge from a local backup key if it is missing here."
             aria-label="Recover from local backup"
@@ -337,6 +354,7 @@ const ActivityDrawer: React.FC = () => {
   // never reflows (splits apart) the sibling tabs (#114). The dock is fixed, so
   // it never adds page scroll and persists across every app screen.
   return (
+    <>
     <div
       ref={drawerRef}
       className="pointer-events-auto relative flex items-center justify-end"
@@ -401,6 +419,33 @@ const ActivityDrawer: React.FC = () => {
         </span>
       </button>
     </div>
+
+    {/* Recover-from-local-backup overlay (#195): opens OVER the current view
+        instead of navigating to a full page. */}
+    <AnimatePresence>
+      {recoverOpen && (
+        <motion.div
+          key="recover-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: prefersReducedMotion ? 0 : 0.18 }}
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4"
+          onClick={() => setRecoverOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Recover from local backup"
+        >
+          <div
+            className="w-[360px] max-w-full max-h-[calc(90vh-2rem)] min-h-[520px] overflow-hidden rounded-xl bg-white shadow-[0px_15px_34px_0px_rgba(0,0,0,0.20)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <LocalRecoveryPanel variant="modal" onClose={() => setRecoverOpen(false)} />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
   )
 }
 

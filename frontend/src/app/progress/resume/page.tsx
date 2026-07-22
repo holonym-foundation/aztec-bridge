@@ -13,11 +13,9 @@ import { useL1TokenBalances } from '@/hooks/useL1Operations'
 import { useResumeL1BridgeToL2 } from '@/hooks/useResumeL1BridgeToL2'
 import { useResumeL2WithdrawToL1 } from '@/hooks/useResumeL2WithdrawToL1'
 import { L1_TOKEN_METADATA, L2_TOKEN_METADATA, L1_NETWORKS, L2_NETWORKS } from '@/config'
-import { useToast } from '@/hooks/useToast'
 
 export default function ResumePage() {
   const router = useRouter()
-  const notify = useToast()
   const operationStarted = useRef(false)
 
   const {
@@ -54,12 +52,10 @@ export default function ResumePage() {
     if (aztecAddress) {
       refetches.push(refetchL2Balance(), refetchFeeJuiceBalance())
     }
-    notify.promise(Promise.allSettled(refetches), {
-      pending: 'Refreshing balances...',
-      success: 'Balances updated',
-      error: 'Failed to refresh balances',
-    })
-  }, [notify, aztecAddress, refetchL1Balance, refetchL2Balance, refetchFeeJuiceBalance])
+    // BridgeHeader now surfaces the live "Refreshing balances" status from the
+    // shared balance-query fetching flags, so no corner toast is raised here.
+    void Promise.allSettled(refetches)
+  }, [aztecAddress, refetchL1Balance, refetchL2Balance, refetchFeeJuiceBalance])
 
   const {
     mutate: resumeL1ToL2,

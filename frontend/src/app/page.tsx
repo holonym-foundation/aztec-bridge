@@ -59,6 +59,7 @@ import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModal
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { pushNotification } from '@/stores/useNotificationsStore'
 import { useBindingStatus, describeConflict, shortAddr } from '@/hooks/useBindingStatus'
 import { useRouter } from 'next/navigation'
 import MaintenanceOverlay from '@/components/MaintenanceOverlay'
@@ -363,19 +364,17 @@ export default function Home() {
   // Bridge success callback (runs after L1→L2 bridge or L2→L1 withdrawal)
   const handleBridgeSuccess = useCallback(
     (_data: any) => {
-      notify.promise(
-        Promise.all([
-          refetchL1Balance(),
-          refetchL2Balance(),
-          refetchFeeJuiceBalance(),
-          refetchPrivateFeeJuiceBalance(),
-        ]),
-        {
-          pending: 'Refreshing balances...',
-          success: 'Balances updated',
-          error: 'Failed to refresh balances',
-        },
-      )
+      // BridgeHeader now carries the live "Refreshing balances" status (it reads
+      // the same balance-query fetching flags), so the pending/success corner
+      // toast is gone. Only a genuine refresh failure is surfaced, via the feed.
+      Promise.all([
+        refetchL1Balance(),
+        refetchL2Balance(),
+        refetchFeeJuiceBalance(),
+        refetchPrivateFeeJuiceBalance(),
+      ]).catch(() => {
+        pushNotification({ type: 'error', title: 'Failed to refresh balances' })
+      })
       setBridgeConfig({
         ...bridgeConfig,
         amount: '',
@@ -393,7 +392,6 @@ export default function Home() {
       refetchPrivateFeeJuiceBalance,
       setBridgeConfig,
       bridgeConfig,
-      notify,
     ],
   )
 

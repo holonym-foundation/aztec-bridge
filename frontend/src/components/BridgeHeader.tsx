@@ -5,6 +5,8 @@ import StyledImage from './StyledImage'
 import LoadingBar from './LoadingBar'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
+import { useL1TokenBalance } from '@/hooks/useL1Operations'
+import { useL2TokenBalance } from '@/hooks/useL2Operations'
 
 interface BridgeHeaderProps {
   onClick?: () => void
@@ -47,6 +49,14 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick, title = 'BRIDGE' }
     isAztecConnected
   } = useWalletStore()
 
+  // Inline "refreshing balances" status, sourced from the SAME balance-query
+  // fetching flags BalanceCard derives its own spinner from. react-query dedupes
+  // these subscriptions, so reading the hooks here adds no extra network calls.
+  // It just mirrors the shared query state into the header chrome.
+  const { isFetching: l1TokenIsFetching } = useL1TokenBalance()
+  const { isFetching: l2IsFetching } = useL2TokenBalance()
+  const isRefreshing = l1TokenIsFetching || l2IsFetching
+
   // Update step statuses based on wallet connections
   React.useEffect(() => {
     if (isWaapConnected) {
@@ -73,15 +83,37 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick, title = 'BRIDGE' }
       />
 
       <LoadingBar steps={steps} currentStep={headerStep} />
-      <p
-        className={`text-center text-[#0A0A0A] font-[700] text-[16px] leading-[24px] tracking-[0.32px] uppercase font-['Suisse_Intl'] ${
-          !resettable ? 'cursor-default' : isTransferInProgress ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
-        }`}
-        title={resettable && isTransferInProgress ? 'Locked during transfer to protect your funds.' : undefined}
-        aria-disabled={resettable && isTransferInProgress}
-        onClick={resettable ? handleResetClick : undefined}>
-        {title}
-      </p>
+      <div className='flex min-w-0 items-center'>
+        <p
+          className={`shrink-0 text-center text-[#0A0A0A] font-[700] text-[16px] leading-[24px] tracking-[0.32px] uppercase font-['Suisse_Intl'] ${
+            !resettable ? 'cursor-default' : isTransferInProgress ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+          }`}
+          title={resettable && isTransferInProgress ? 'Locked during transfer to protect your funds.' : undefined}
+          aria-disabled={resettable && isTransferInProgress}
+          onClick={resettable ? handleResetClick : undefined}>
+          {title}
+        </p>
+        {/* Balance-refresh status. Collapses to zero width when idle (no layout
+            shift), fades + expands into the empty space beside the title while a
+            balance query is fetching. Spinner holds still under reduced motion. */}
+        <span
+          role='status'
+          aria-live='polite'
+          aria-hidden={!isRefreshing}
+          className={`flex items-center overflow-hidden whitespace-nowrap transition-all duration-300 ease-out ${
+            isRefreshing ? 'ml-[8px] max-w-[140px] opacity-100' : 'ml-0 max-w-0 opacity-0'
+          }`}>
+          <Icon
+            icon='ph:spinner-gap-bold'
+            width={12}
+            height={12}
+            className='shrink-0 animate-spin motion-reduce:animate-none text-[#737373]'
+          />
+          <span className="ml-[4px] text-[11px] font-[500] leading-[16px] tracking-[0.2px] text-[#737373] font-['Suisse_Intl']">
+            Refreshing…
+          </span>
+        </span>
+      </div>
       <button
         onClick={() => router.push('/activity')}
         className='ml-auto flex items-center justify-center p-1 rounded-full hover:bg-gray-100 transition-colors'

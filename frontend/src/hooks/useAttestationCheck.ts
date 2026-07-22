@@ -18,6 +18,10 @@ interface AttestationCheckResult {
   // Travel Rule: USD budget left before the threshold (undefined = disabled). Lets the UI
   // pre-block a deposit that would cross, before the user submits.
   travelRuleRemainingUsd?: number
+  // USD held by an outstanding attestation reservation (already netted out of the remaining
+  // budgets above). Present only when > 0 — a block carrying it is a temporary hold, not a
+  // permanent cap, so the UI can say "retry once your pending deposit confirms".
+  reservedDepositUsd?: number
 }
 
 /**
@@ -66,6 +70,7 @@ export function useAttestationCheck() {
             depositLimitReached: passportData.depositLimitReached,
             remainingDepositUsd: passportData.remainingUsd,
             travelRuleRemainingUsd: passportData.travelRuleRemainingUsd,
+            reservedDepositUsd: passportData.reservedUsd,
           }
         }
 
@@ -80,6 +85,7 @@ export function useAttestationCheck() {
           remainingDepositUsd: passportData.remainingUsd,
           travelRuleExceeded: passportData.travelRuleExceeded,
           travelRuleRemainingUsd: passportData.travelRuleRemainingUsd,
+          reservedDepositUsd: passportData.reservedUsd,
         }
       } catch (err: any) {
         const parsed = err?.parsedBody as { reason?: string; error?: string } | null | undefined

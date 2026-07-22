@@ -1082,9 +1082,16 @@ export async function bridgeL1ToL2(
       },
     )
 
-    const l1TxPatchOk = await patchOperationWithRetry(apiClient, operationId, { l1TxHash, l1TxUrl }, { label: 'l1TxHash' })
+    const l1TxPatchData: Record<string, unknown> = { l1TxHash, l1TxUrl }
+    // Report the passport nonce this deposit consumed so the server stops
+    // double-counting its budget reservation once the deposit confirms. Only the
+    // passport path carries one (cleanHands/POCH deposits reserve no budget).
+    if (passportData.signature.length > 2) {
+      l1TxPatchData.attestationNonce = passportData.nonce.toString()
+    }
+    const l1TxPatchOk = await patchOperationWithRetry(apiClient, operationId, l1TxPatchData, { label: 'l1TxHash' })
     if (!l1TxPatchOk) {
-      emit({ type: BridgeEventType.PATCH_FAILED, operationId: operationId!, label: 'l1TxHash', data: { l1TxHash, l1TxUrl } })
+      emit({ type: BridgeEventType.PATCH_FAILED, operationId: operationId!, label: 'l1TxHash', data: l1TxPatchData })
     }
 
     // Wait for receipt — only AFTER receipt confirms do we know funds are locked.

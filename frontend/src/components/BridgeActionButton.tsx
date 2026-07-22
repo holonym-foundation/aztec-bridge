@@ -105,6 +105,11 @@ interface BridgeActionButtonProps {
   travelRuleBlocked?: boolean
   // Travel Rule: USD budget left before the threshold (undefined = disabled).
   travelRuleRemainingUsd?: number
+  // USD held by an outstanding attestation reservation (already netted out of the remaining
+  // budgets above). When a block is charged to this, it's temporary — clears when the pending
+  // deposit confirms or the reservation expires (<= 30 min) — so we disable with a hold label
+  // rather than routing the user to Clean Hands verification.
+  reservedDepositUsd?: number
 
   // Operation completion state
   bridgeCompleted?: boolean
@@ -160,6 +165,7 @@ function BridgeActionButton({
   remainingDepositUsd,
   travelRuleBlocked = false,
   travelRuleRemainingUsd,
+  reservedDepositUsd,
   bridgeCompleted = false,
   l2NodeError = false,
   l2NodeIsReadyLoading = false,
@@ -271,8 +277,9 @@ function BridgeActionButton({
     }
 
     // Travel Rule: over the cumulative deposit cap — route to the Clean Hands / Passport
-    // upgrade screen instead of dead-ending on a disabled button.
-    if (travelRuleBlockedDeposit) {
+    // upgrade screen instead of dead-ending on a disabled button. A temporary hold is NOT
+    // an upgrade prompt (the user just needs to wait), so it stays a disabled button below.
+    if (travelRuleBlockedDeposit && !pendingHoldBlocked) {
       onRequestVerification?.()
       return
     }
@@ -393,6 +400,17 @@ function BridgeActionButton({
       (travelRuleRemainingUsd != null &&
         (travelRuleRemainingUsd <= 0 || parseFloat(inputAmount || '0') >= travelRuleRemainingUsd - 1e-6)))
 
+  // A block is a *temporary hold* (a signed-but-unconfirmed deposit reserving budget), not a
+  // permanent cap, when a reservation exists and it — not settled volume — is what zeroed the
+  // remaining budget. `travelRuleBlocked` is settled-only, so it distinguishes a genuine
+  // Travel Rule exhaustion (route to Clean Hands) from a hold (wait / disable with a hint).
+  const holdUsd =
+    direction === BridgeDirection.L1_TO_L2 && reservedDepositUsd != null ? reservedDepositUsd : 0
+  const depositHeldOut = holdUsd > 0 && remainingDepositUsd != null && remainingDepositUsd <= 0
+  const travelRuleHeldOut =
+    holdUsd > 0 && !travelRuleBlocked && travelRuleRemainingUsd != null && travelRuleRemainingUsd <= 0
+  const pendingHoldBlocked = depositHeldOut || travelRuleHeldOut
+
   // Binding conflict is only meaningful once BOTH wallets are connected (it's
   // derived from the connected pair). Before that the button is a Connect CTA,
   // so never let the guard suppress those.
@@ -409,6 +427,7 @@ function BridgeActionButton({
     bridgeTokensToL2Pending ||
     isOperationPending ||
     depositLimitBlocked ||
+    pendingHoldBlocked ||
     bindingConflictBlocked ||
     bridgeCompleted
 
@@ -448,6 +467,12 @@ function BridgeActionButton({
     // the user knows exactly which account to switch to before bridging.
     if (bindingConflictBlocked) {
       return bindingBlockedLabel || 'Switch to your linked wallet to continue'
+    }
+
+    // Temporary reservation hold: a signed-but-unconfirmed deposit is holding the user's
+    // budget. Distinct from a permanent cap — say it clears itself so they wait, not verify.
+    if (pendingHoldBlocked) {
+      return 'Pending deposit — limit frees in ≤30 min'
     }
 
     // Travel Rule: passport tier exhausted, POCH required (deposits only)

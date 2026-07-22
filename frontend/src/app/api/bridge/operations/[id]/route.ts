@@ -219,6 +219,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const fuelMessageHash = sanitizeHexString(body.fuelMessageHash, 130)
     const fuelMessageLeafIndex = sanitizeNumericString(body.fuelMessageLeafIndex)
     const fuelAmount = sanitizeNumericString(body.fuelAmount)
+    const attestationNonce = sanitizeNumericString(body.attestationNonce)
 
     // ── Immutable field guard ───────────────────────────────────────────
     // These fields are set once during operation creation and must never be
@@ -339,6 +340,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (fuelMessageHash) updateData.fuelMessageHash = fuelMessageHash
     if (fuelMessageLeafIndex) updateData.fuelMessageLeafIndex = fuelMessageLeafIndex
     if (fuelAmount) updateData.fuelAmount = fuelAmount
+    // Write-once: the nonce binds this deposit to the attestation that authorized it,
+    // so the budget ledger stops re-charging its reservation. Never allow relabelling
+    // it to a different attestation's nonce (would let a spent deposit retire an
+    // unrelated live reservation).
+    if (attestationNonce && !operation.attestationNonce) updateData.attestationNonce = attestationNonce
     // L2→L1 witness epoch
     if (epoch != null) updateData.epoch = epoch
     if (numCheckpointsInEpoch != null) updateData.numCheckpointsInEpoch = numCheckpointsInEpoch

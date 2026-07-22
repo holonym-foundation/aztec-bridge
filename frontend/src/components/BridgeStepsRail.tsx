@@ -421,9 +421,9 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
         aria-controls={panelId}
         aria-label="Bridge in 4 steps"
         onClick={() => setPinned((p) => !p)}
-        className={`flex h-[120px] w-9 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-colors ${
+        className={`flex h-[120px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-[width,border-color] duration-200 ease-out ${
           open ? 'border-[#81133B]/40' : 'border-[#D4D4D4] hover:border-[#81133B]/30'
-        }`}
+        } ${open && !prefersReducedMotion ? 'w-[42px]' : 'w-9'}`}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${eligible && bothConnected ? 'bg-[#17235E]' : 'bg-[#81133B]'}`} />
         <Icon icon="ph:graduation-cap" width={15} height={15} className="text-[#737373]" aria-hidden="true" />

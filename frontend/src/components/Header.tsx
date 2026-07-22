@@ -702,13 +702,24 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
                 />
               </div>
               <p className="text-[11px] leading-snug text-white/[0.75] mt-2">
-                A cumulative proof-of-personhood score. Higher means stronger proof you&apos;re a real, unique human. From Proof of Clean Hands and{' '}
+                A cumulative proof-of-personhood score. Higher means stronger proof you&apos;re a real, unique human. From{' '}
+                <a
+                  href={POCH_MINT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 align-middle underline font-medium"
+                >
+                  <Icon icon="ph:hand-soap" width={13} height={13} className="text-[#FA8FC4]" />
+                  Proof of Clean Hands
+                </a>{' '}
+                and{' '}
                 <a
                   href="https://app.passport.xyz"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline font-medium"
+                  className="inline-flex items-center gap-1 align-middle underline font-medium"
                 >
+                  <Icon icon="ph:identification-card" width={13} height={13} className="text-[#FA8FC4]" />
                   Human Passport
                 </a>
                 .

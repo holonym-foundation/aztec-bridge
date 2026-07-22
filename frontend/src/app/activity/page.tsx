@@ -7,7 +7,6 @@ import { Icon } from '@iconify/react'
 import RootStyle from '@/components/RootStyle'
 import BridgeHeader from '@/components/BridgeHeader'
 import ActivityCard from '@/components/ActivityCard'
-import TextButton from '@/components/TextButton'
 import FuelClaimLinkModal from '@/components/FuelClaimLinkModal'
 import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
@@ -39,13 +38,15 @@ export default function ActivityPage() {
   const { data: operations, isLoading, isError, error } = useBridgeOperations()
 
   // Fixed batch of cards per page keeps the card body inside the shell's height
-  // budget (card is capped at calc(90vh-5rem) ≈ 568px at innerHeight 720) with no
-  // internal scrollbar. The fixed chrome (BridgeHeader + "Bridge Activity" + the
-  // pagination row + footer) eats ~260px, leaving ~300px for the batch. A compact
-  // card runs ~96px (completed) to ~130px (failed: single-line error + Resume +
-  // tx links), so two per page fit 720/800/900; three of the taller cards would
-  // spill past 720 and reintroduce the scrollbar. Measured, not guessed.
-  const PAGE_SIZE = 2
+  // budget (card is capped at calc(90vh-5rem) ≈ 568px at innerHeight 720). The
+  // fixed chrome (BridgeHeader + "Bridge Activity" + the pagination row + footer)
+  // shrank once the footer collapsed from two stacked full-width buttons to a
+  // single 20/80 back+CTA row (~48px reclaimed), leaving ~348px for the batch. A
+  // compact card runs ~96px (completed) to ~130px (failed: single-line error +
+  // Resume + tx links), so three compact cards fit 720/800/900. The list lives in
+  // a capped overflow-y-auto region, so a rare all-tall-failed page scrolls INSIDE
+  // that region without ever page-scrolling the shell. Measured, not guessed.
+  const PAGE_SIZE = 3
   const ops = useMemo(() => operations ?? [], [operations])
   const totalPages = Math.max(1, Math.ceil(ops.length / PAGE_SIZE))
   useEffect(() => {
@@ -286,14 +287,27 @@ export default function ActivityPage() {
           )}
         </div>
 
-        <div className="mt-3 flex shrink-0 flex-col gap-2">
-          <TextButton onClick={() => router.push('/')}>Back to Bridge</TextButton>
-          <TextButton
+        {/* Footer: a single 20/80 row (SOP §4 / #194) instead of two stacked
+            same-weight buttons. The compact icon-only back button (~20%) shares
+            the row with the brand-filled primary CTA (~80%), mirroring the
+            back+primary split used across the ProgressCard recovery states. */}
+        <div className="mt-3 flex w-full shrink-0 items-stretch gap-2">
+          <button
+            type="button"
+            onClick={() => router.push('/')}
+            title="Back to Bridge"
+            aria-label="Back to Bridge"
+            className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"
+          >
+            <Icon icon="ph:arrow-left-bold" width={18} height={18} />
+          </button>
+          <button
+            type="button"
             onClick={() => router.push('/activity/local-recovery')}
-            className="!bg-transparent !text-gray-600 hover:!text-gray-900 !font-medium"
+            className="flex-[8_1_0%] rounded-lg bg-[#17235E] py-[10px] font-semibold text-white transition-opacity hover:opacity-80"
           >
             Recover from local data
-          </TextButton>
+          </button>
         </div>
       </div>
       <FuelClaimLinkModal

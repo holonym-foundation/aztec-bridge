@@ -2,8 +2,9 @@ import Link from 'next/link'
 import React from 'react'
 
 export const metadata = {
-  title: 'Docs · Shield',
-  description: 'Documentation for the Aztec Token Bridge — user guides and SDK reference.',
+  title: 'Documentation',
+  description: 'Documentation for Shield, the human.tech bridge to Aztec — user guides and SDK reference.',
+  alternates: { canonical: '/docs' },
 }
 
 interface DocCard {

@@ -10,6 +10,8 @@ import ActivityDrawer from '@/components/ActivityDrawer'
 import NotificationsDrawer from '@/components/NotificationsDrawer'
 import SupportTab from '@/components/SupportTab'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
+import AppLoadingScreen from '@/components/AppLoadingScreen'
+import IrisWidget from '@/components/IrisWidget'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useNotificationsStore } from '@/stores/useNotificationsStore'
 import { useWalletStore } from '@/stores/walletStore'
@@ -24,6 +26,21 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   // Docs is a public, neutral reading surface: reachable without the onboarding gate and
   // rendered on a clean near-white background rather than the pink paper-shader field.
   const isDocs = pathname?.startsWith('/docs') ?? false
+
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // The wallet-heavy bridge app is never server-rendered (its tree touches browser-only
+  // wallet/WASM state), so app routes keep a client-only loading screen until hydration.
+  // Docs are pure content: they render on the server so search engines and AI agents can
+  // read the guides. The interactive chrome (Header/Footer/background/drawers) is gated on
+  // `mounted` below so it never blocks the server-rendered docs content — and so the first
+  // client render matches the server (no hydration mismatch).
+  if (!isDocs && !mounted) {
+    return <AppLoadingScreen />
+  }
   // Docs is a neutral reading view — keep the light background even when privacy mode is on.
   const showPrivacyBackground = isPrivacyModeEnabled && !isDocs
 
@@ -157,12 +174,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           onboarding splash overlay (z-100) for connected users. See data-ob-splash.
           z-50 keeps the nav (banners + Header) ABOVE the binder dock (z-40) and its
           drawer panels, so an open drawer can never occlude the top nav (#318). The
-          connected-splash elevation to z-130 still wins via `!important`. */}
-      <div className="ob-header-elevate relative z-50 flex flex-col">
-        <BannerAztecTestnet />
-        <BannerAztecNodeError />
-        <Header />
-      </div>
+          connected-splash elevation to z-130 still wins via `!important`. Gated on
+          `mounted` so the wallet chrome hydrates in after the server-rendered docs
+          content rather than blocking or crashing its server render. */}
+      {mounted && (
+        <div className="ob-header-elevate relative z-50 flex flex-col">
+          <BannerAztecTestnet />
+          <BannerAztecNodeError />
+          <Header />
+        </div>
+      )}
       {/* Main content — a flex-grow column between header and footer. It is
           overflow-VISIBLE, not a clipped scroller: the fixed-height card is sized to
           fit this space (RootStyle: h-[min(85vh,100dvh-11rem)]), and each page scrolls
@@ -178,10 +199,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       {/* Footer pinned to the bottom of the fixed shell (shrink-0 so it keeps its
           height). It rests at the bottom edge on every route and can never be clipped:
           when a short viewport can't fit the card, the column above scrolls under this
-          footer rather than pushing it off-screen or forcing a document scroll. */}
-      <div className="relative z-20 shrink-0">
-        <Footer />
-      </div>
+          footer rather than pushing it off-screen or forcing a document scroll. Gated on
+          `mounted` so it hydrates in after the server-rendered docs content. */}
+      {mounted && (
+        <div className="relative z-20 shrink-0">
+          <Footer />
+        </div>
+      )}
       {/* Persistent binder dock: app-shell chrome mounted once, so the Tutorial /
           Activity / Messages tabs are present on EVERY route and navigation never
           drops them (their badges stay live across routes because they read global
@@ -229,7 +253,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           }}
         />
       )}
-      <HowItWorksModal />
+      {mounted && <HowItWorksModal />}
+      {/* Iris chat widget loader — client-side; re-homed out of the (now server) root
+          layout. Self-guards to the top frame and single-load, so rendering it here on
+          every route matches the original always-load behaviour. */}
+      <IrisWidget />
     </div>
   )
 }

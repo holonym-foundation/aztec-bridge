@@ -77,14 +77,6 @@ type ToastMessages = {
 // CONSTANTS
 // ============================================================================
 
-// Fired the instant a toast finishes flying into the Messages tab, so the tab's
-// unread badge can pulse as one continuous motion with the arriving toast.
-// NotificationsDrawer listens for this (see its badge pulse).
-export const GENIE_LANDED_EVENT = 'shield:genie-landed'
-
-// Duration of the toast's "genie into Messages" exit flight.
-const GENIE_FLY_MS = 520
-
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   typeof window.matchMedia === 'function' &&
@@ -95,50 +87,10 @@ const prefersReducedMotion = () =>
 const collapse = (node: HTMLElement, done: () => void, ms: number) =>
   (collapseToast as (n: HTMLElement, d: () => void, duration?: number) => void)(node, done, ms)
 
-// Animate a closing toast flying toward the Messages tab handle (right edge,
-// lower area) while it shrinks and fades — reinforcing that the message is being
-// collected in Messages. On landing it pulses the tab badge, then the toast's
-// now-invisible slot collapses so the stack above settles.
-const flyToastToMessagesTab = (node: HTMLElement, done: () => void) => {
-  const toastRect = node.getBoundingClientRect()
-  const tab = typeof document !== 'undefined' ? document.querySelector('[data-messages-tab]') : null
-  const tabRect = tab instanceof HTMLElement ? tab.getBoundingClientRect() : null
-
-  // Fall back to the right-edge/lower-area the tab dock lives in if the tab
-  // isn't mounted, so the flight direction still reads correctly.
-  const targetX = tabRect ? tabRect.left + tabRect.width / 2 : window.innerWidth - 18
-  const targetY = tabRect ? tabRect.top + tabRect.height / 2 : window.innerHeight * 0.6
-  const dx = targetX - (toastRect.left + toastRect.width / 2)
-  const dy = targetY - (toastRect.top + toastRect.height / 2)
-
-  let settled = false
-  const land = () => {
-    if (settled) return
-    settled = true
-    node.removeEventListener('transitionend', onTransitionEnd)
-    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(GENIE_LANDED_EVENT))
-    collapse(node, done, 160)
-  }
-  const onTransitionEnd = (e: TransitionEvent) => {
-    if (e.target === node && e.propertyName === 'transform') land()
-  }
-
-  node.style.pointerEvents = 'none'
-  node.style.transformOrigin = 'center'
-  node.style.transition = `transform ${GENIE_FLY_MS}ms cubic-bezier(0.32, 0.72, 0, 1), opacity ${GENIE_FLY_MS}ms ease-in`
-  node.style.willChange = 'transform, opacity'
-  node.addEventListener('transitionend', onTransitionEnd)
-  requestAnimationFrame(() => {
-    node.style.transform = `translate(${dx}px, ${dy}px) scale(0.08)`
-    node.style.opacity = '0'
-  })
-  // Safety net if transitionend is missed (e.g. tab off-screen).
-  window.setTimeout(land, GENIE_FLY_MS + 140)
-}
-
-// Default (non-genie) exit: the same slide-out react-toastify's Slide used
-// before, for toasts that aren't collected in Messages (e.g. the privacy-mode
-// toggle) so they don't fly toward a tab that holds nothing for them.
+// Toast exit: react-toastify's slide-out. New messages are surfaced from the
+// Messages tab itself (NotificationsDrawer's peek bubble, driven by the feed
+// store), so the toast no longer flies into the tab — it just slides away while
+// the tab peeks the message out and pulses its unread badge.
 const slideExit = (node: HTMLElement, done: () => void, position: string) => {
   const exitClasses = `Toastify--animate Toastify__slide-exit--${position}`.split(' ')
   const onEnd = () => {
@@ -151,8 +103,7 @@ const slideExit = (node: HTMLElement, done: () => void, position: string) => {
 
 // Custom react-toastify transition. Entrance is unchanged from the previous
 // `Slide` (same position-appended enter classes, whose CSS the library injects).
-// Only the EXIT is customised: mirrored toasts genie into the Messages tab; the
-// rest slide out; reduced-motion / drag-dismiss just close with no travel.
+// The EXIT slides out; reduced-motion / drag-dismiss just close with no travel.
 const GenieToastTransition = ({
   children,
   position,
@@ -193,11 +144,7 @@ const GenieToastTransition = ({
       done()
       return
     }
-    if (node.classList.contains('genie-fly')) {
-      flyToastToMessagesTab(node, done)
-    } else {
-      slideExit(node, done, position)
-    }
+    slideExit(node, done, position)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isIn])
 
@@ -390,13 +337,12 @@ const createToast = (
 
   // Record it in the Messages feed (single source of truth) before surfacing the
   // transient toast. Reaching here means we're actually showing the toast — the
-  // error-dedupe branch above already returned for suppressed duplicates.
-  // A mirrored toast earns `genie-fly` so its exit flies into the Messages tab;
-  // toasts that don't land in Messages (default/privacy-mode) slide out instead.
-  const mirrored = mirrorToFeed(type, message, heading, options)
+  // error-dedupe branch above already returned for suppressed duplicates. The
+  // feed push is what makes the Messages tab peek the new message out (#181).
+  mirrorToFeed(type, message, heading, options)
 
   const finalOptions = {
-    className: `${type}-toast${mirrored ? ' genie-fly' : ''}`,
+    className: `${type}-toast`,
     ...(type === 'privacy-mode' ? { toastId: 'privacy-mode-toastId' } : {}),
     ...toastOptions,
   }
@@ -475,14 +421,14 @@ const updateToastState = (
   // Mirror the resolved success/error state into the feed. `toastId` here is the
   // (numeric) loading-toast id; pass the caller-supplied stable id through
   // `options.toastId` if present so keyed de-dupe still works.
-  const mirrored = mirrorToFeed(type, message, heading, options)
+  mirrorToFeed(type, message, heading, options)
 
   toast.update(toastId, {
     // `message` widened to ReactNode for ErrorToast; the other toast
     render:
       // components type it as string but React renders ReactNode fine at runtime.
       React.createElement(Component as any, { heading, message }),
-    className: `${type}-toast from-loading${mirrored ? ' genie-fly' : ''}`,
+    className: `${type}-toast from-loading`,
     type,
     isLoading: false,
     ...mergedOptions,

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { formatUnits } from 'viem'
@@ -19,6 +20,11 @@ import { BridgeDirection } from '@/types/bridge'
 // --dur-enter / --ease-slide for the panel that slides out from the tab.
 const DS_DUR_ENTER = 0.32
 const DS_EASE_SLIDE: [number, number, number, number] = [0.32, 0.72, 0, 1]
+
+// Shared right-edge peek coordination (#160): each binder tab announces its open
+// state; a tab that sees another open closes itself, so only one peeks at a time.
+const PEEK_EVENT = 'shield:peek'
+type PeekSignal = { id: string; open: boolean }
 
 type StatusMeta = { label: string; className: string }
 
@@ -43,9 +49,10 @@ const ActivityDrawer: React.FC = () => {
   const router = useRouter()
   const notify = useToast()
   const panelId = useId()
+  const peekId = useId()
   const prefersReducedMotion = useReducedMotion()
 
-  const { waapAddress: l1Address, signWaapMessage } = useWalletStore()
+  const { waapAddress: l1Address, signWaapMessage, isWaapConnected, connectWaapWallet } = useWalletStore()
   const { setRecovery, setWithdrawalRecovery, setDirection } = useBridgeStore()
   const { data: operations, isLoading } = useBridgeOperations()
 
@@ -63,6 +70,22 @@ const ActivityDrawer: React.FC = () => {
     setHovered(false)
     handleRef.current?.focus()
   }
+
+  // ── Peek coordination (#160): announce our open state; close on a sibling's.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent<PeekSignal>(PEEK_EVENT, { detail: { id: peekId, open } }))
+  }, [open, peekId])
+
+  useEffect(() => {
+    const onPeek = (e: Event) => {
+      const detail = (e as CustomEvent<PeekSignal>).detail
+      if (!detail || detail.id === peekId || !detail.open) return
+      setHovered(false)
+      setPinned(false)
+    }
+    window.addEventListener(PEEK_EVENT, onPeek)
+    return () => window.removeEventListener(PEEK_EVENT, onPeek)
+  }, [peekId])
 
   // Esc + outside click close a pinned desktop drawer. Only wired up while
   // pinned so hover-only previews don't pay for a global listener.
@@ -245,38 +268,65 @@ const ActivityDrawer: React.FC = () => {
             </span>
           )}
         </div>
-        {onClose && (
+        <div className="flex flex-shrink-0 items-center gap-0.5">
+          {/* Recover from local backup, reduced to a key icon (#179) so it no longer
+              eats a full row. Tooltip explains the action on hover/focus. */}
           <button
             type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="-mr-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[#989898] transition-colors hover:bg-[#F0F0F0] hover:text-[#0A0A0A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#17235E]/40"
+            onClick={() => router.push('/activity/local-recovery')}
+            data-tooltip-id="activity-recover-tip"
+            data-tooltip-content="Restore a bridge from a local backup key if it is missing here."
+            aria-label="Recover from local backup"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-[#81133B] transition-colors hover:bg-[#FDE7F3] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#81133B]/40"
           >
-            <Icon icon="ph:x-bold" width={13} height={13} />
+            <Icon icon="ph:key" width={14} height={14} />
           </button>
-        )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="-mr-1 flex h-6 w-6 items-center justify-center rounded-full text-[#989898] transition-colors hover:bg-[#F0F0F0] hover:text-[#0A0A0A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#17235E]/40"
+            >
+              <Icon icon="ph:x-bold" width={13} height={13} />
+            </button>
+          )}
+        </div>
       </div>
       {isLoading && <p className="text-[12px] text-[#989898]">Loading…</p>}
-      {!isLoading && recentOps.length === 0 && (
-        <p className="text-[12px] text-[#989898]">No bridge operations yet.</p>
-      )}
+      {!isLoading &&
+        recentOps.length === 0 &&
+        (isWaapConnected ? (
+          // Connected but no operations yet — genuine empty state.
+          <p className="text-[12px] text-[#989898]">No bridge operations yet.</p>
+        ) : (
+          // Not connected — don't imply the history is empty (#163). Prompt to connect.
+          <div className="flex flex-col items-center gap-2 py-5 text-center">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E5EFFF] text-[#17235E]">
+              <Icon icon="ph:plugs" width={18} height={18} />
+            </span>
+            <p className="text-[12px] font-medium text-[#737373]">Connect your wallet to see your activity</p>
+            <button
+              type="button"
+              onClick={() => connectWaapWallet().catch(() => {})}
+              className="mt-0.5 inline-flex items-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#17235E]/90"
+            >
+              <Icon icon="ph:wallet" width={14} height={14} />
+              Connect wallet
+            </button>
+          </div>
+        ))}
       {recentOps.length > 0 && <ul className="flex flex-col">{recentOps.map(renderOp)}</ul>}
-      <div className="mt-3 flex flex-col gap-1.5 border-t border-[#F0F0F0] pt-3">
+      <div className="mt-3 border-t border-[#F0F0F0] pt-3">
         <button
           onClick={() => router.push('/activity')}
           className="flex items-center gap-1.5 text-[12px] font-medium text-[#737373] transition-colors hover:text-[#0A0A0A]"
         >
-          <Icon icon="ph:list-bullets" width={15} height={15} />
+          <Icon icon="ph:clock-counter-clockwise" width={15} height={15} />
           View full activity
         </button>
-        <button
-          onClick={() => router.push('/activity/local-recovery')}
-          className="flex items-center gap-1.5 text-[12px] font-medium text-[#81133B] transition-colors hover:text-[#81133B]/80"
-        >
-          <Icon icon="ph:key" width={15} height={15} />
-          Recover from local backup
-        </button>
       </div>
+      <ReactTooltip id="activity-recover-tip" place="left" className="z-[100]" style={{ fontSize: '11px', maxWidth: '200px' }} />
     </>
   )
 
@@ -342,6 +392,7 @@ const ActivityDrawer: React.FC = () => {
         ) : (
           <span className="h-1.5 w-1.5 rounded-full bg-[#17235E]" aria-hidden="true" />
         )}
+        <Icon icon="ph:clock-counter-clockwise" width={15} height={15} className="text-[#737373]" aria-hidden="true" />
         <span
           className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}

@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useId, useState } from 'react'
 import { Icon } from '@iconify/react'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
 import type { BridgeOperation } from '@human.tech/clean.sdk'
 import { formatUnits } from 'viem'
 import { L1_TOKEN_METADATA } from '@/config'
@@ -131,6 +132,9 @@ export default function ActivityCard({
   const lockedFunds = hasPossibleLockedFunds(operation)
   const showResume = resumable || lockedFunds
 
+  // Unique per card so multiple cards' tooltips don't collide.
+  const fuelTipId = `share-fuel-${useId()}`
+
   const hasActionRow =
     operation.l1TxUrl ||
     operation.l2TxUrl ||
@@ -183,13 +187,25 @@ export default function ActivityCard({
 
           <div className="ml-auto flex items-center gap-2">
             {onShareFuelClaim && hasFuelClaimData(operation) && (
-              <button
-                onClick={() => onShareFuelClaim(operation)}
-                disabled={!!sharingFuelClaim}
-                className="text-xs font-semibold text-black bg-amber-100 hover:bg-amber-200 disabled:opacity-50 px-3 py-1 rounded-lg whitespace-nowrap"
-              >
-                {sharingFuelClaim ? 'Decrypting…' : 'Share fuel claim'}
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => onShareFuelClaim(operation)}
+                  disabled={!!sharingFuelClaim}
+                  className="text-xs font-semibold text-black bg-amber-100 hover:bg-amber-200 disabled:opacity-50 px-3 py-1 rounded-lg whitespace-nowrap"
+                >
+                  {sharingFuelClaim ? 'Decrypting…' : 'Share fuel claim'}
+                </button>
+                <button
+                  type="button"
+                  data-tooltip-id={fuelTipId}
+                  data-tooltip-content="Create a link that lets someone else claim this transfer's Fee Juice (Aztec gas). Useful when you funded gas for another wallet."
+                  aria-label="What is Share fuel claim?"
+                  className="text-gray-400 hover:text-[#81133B] p-0.5 rounded"
+                >
+                  <Icon icon="ph:info" width={14} height={14} />
+                </button>
+                <ReactTooltip id={fuelTipId} place="top" className="z-[100]" style={{ fontSize: '11px', maxWidth: '220px' }} />
+              </div>
             )}
             {showResume && (
               <button

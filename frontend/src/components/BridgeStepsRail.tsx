@@ -3,24 +3,42 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import { useWalletStore } from '@/stores/walletStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { EXPLAINER_STEPS } from '@/components/model/HowItWorksModal'
+import { POCH_MINT_URL } from '@/config'
 
 // Motion values mirrored from the human-tech design system (docs/tokens.css):
 // --dur-enter / --ease-slide for the panel that slides out from the tab.
 const DS_DUR_ENTER = 0.32
 const DS_EASE_SLIDE: [number, number, number, number] = [0.32, 0.72, 0, 1]
 
+// Shared right-edge peek coordination (#160): each binder tab announces its open
+// state; a tab that sees another open closes itself, so only one peeks at a time.
+const PEEK_EVENT = 'shield:peek'
+type PeekSignal = { id: string; open: boolean }
+
+// Human Passport builder (matches VerificationStep's constant). Clean Hands mint
+// comes from config so it tracks the active network (sandbox vs production).
+const PASSPORT_BUILD_URL = 'https://app.passport.xyz'
+
+const ACTION_PRIMARY =
+  'mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#17235E]/90'
+const ACTION_SECONDARY =
+  'mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#D4D4D4] px-3 py-1.5 text-[12px] font-semibold text-[#17235E] transition-colors hover:border-[#17235E]/50'
+
 type StepStatus = 'done' | 'active' | 'upcoming'
 
 const BridgeStepsRail: React.FC = () => {
-  const { isWaapConnected, isAztecConnected } = useWalletStore()
+  const { isWaapConnected, isAztecConnected, connectWaapWallet, setShowWalletModal } = useWalletStore()
   const attestation = useAttestationCheck()
   const { openModal } = useExplainerStore()
+  const router = useRouter()
   const prefersReducedMotion = useReducedMotion()
   const panelId = useId()
+  const peekId = useId()
 
   // Hover previews the panel; a click pins it open. On touch (no hover) the tap
   // toggles `pinned`, so the same handle works on every size.
@@ -34,6 +52,29 @@ const BridgeStepsRail: React.FC = () => {
     setPinned(false)
     setHovered(false)
     handleRef.current?.focus()
+  }
+
+  // ── Peek coordination (#160): announce our open state; close on a sibling's.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent<PeekSignal>(PEEK_EVENT, { detail: { id: peekId, open } }))
+  }, [open, peekId])
+
+  useEffect(() => {
+    const onPeek = (e: Event) => {
+      const detail = (e as CustomEvent<PeekSignal>).detail
+      if (!detail || detail.id === peekId || !detail.open) return
+      setHovered(false)
+      setPinned(false)
+    }
+    window.addEventListener(PEEK_EVENT, onPeek)
+    return () => window.removeEventListener(PEEK_EVENT, onPeek)
+  }, [peekId])
+
+  // A single wallet-connect affordance for the first step: L1 first, then open
+  // the Aztec wallet picker for the second wallet.
+  const handleConnect = () => {
+    if (!isWaapConnected) connectWaapWallet().catch(() => {})
+    else setShowWalletModal(true)
   }
 
   const bothConnected = isWaapConnected && isAztecConnected
@@ -66,6 +107,45 @@ const BridgeStepsRail: React.FC = () => {
       return EXPLAINER_STEPS[1].body
     }
     return EXPLAINER_STEPS[index].body
+  }
+
+  // Per-step action that routes the user to the next thing to do (#175). Only the
+  // active step surfaces one, so the tutorial reads as "here is your next move".
+  const actionFor = (index: number): React.ReactNode => {
+    if (index !== currentStep) return null
+    if (index === 0) {
+      return (
+        <button type="button" onClick={handleConnect} className={ACTION_PRIMARY}>
+          <Icon icon="ph:wallet" width={14} height={14} />
+          Connect wallet
+        </button>
+      )
+    }
+    if (index === 1) {
+      // Smaller amounts pass with a Human Passport score; larger amounts (or the
+      // Clean-Hands path) mint Proof of Clean Hands. Offer both.
+      return (
+        <div className="flex flex-wrap gap-2">
+          <a href={PASSPORT_BUILD_URL} target="_blank" rel="noopener noreferrer" className={ACTION_PRIMARY}>
+            <Icon icon="ph:identification-card" width={14} height={14} />
+            Verify with Human Passport
+          </a>
+          <a href={POCH_MINT_URL} target="_blank" rel="noopener noreferrer" className={ACTION_SECONDARY}>
+            <Icon icon="ph:seal-check" width={14} height={14} />
+            Proof of Clean Hands
+          </a>
+        </div>
+      )
+    }
+    if (index === 2) {
+      return (
+        <button type="button" onClick={() => router.push('/fee-juice')} className={ACTION_PRIMARY}>
+          <Icon icon="ph:gas-pump" width={14} height={14} />
+          Top up Fee Juice
+        </button>
+      )
+    }
+    return null
   }
 
   // Esc + outside click close a pinned desktop drawer. Only wired up while
@@ -139,11 +219,12 @@ const BridgeStepsRail: React.FC = () => {
               {i === 1 && status === 'active' && (
                 <button
                   onClick={openModal}
-                  className="mt-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80 transition-opacity"
+                  className="mt-1 block text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80 transition-opacity"
                 >
                   Why is this needed?
                 </button>
               )}
+              {actionFor(i)}
             </div>
           </li>
         )
@@ -224,6 +305,7 @@ const BridgeStepsRail: React.FC = () => {
         }`}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${eligible && bothConnected ? 'bg-[#17235E]' : 'bg-[#81133B]'}`} />
+        <Icon icon="ph:graduation-cap" width={15} height={15} className="text-[#737373]" aria-hidden="true" />
         <span
           className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}

@@ -66,14 +66,21 @@ function assertReceiptSuccess(receipt: {
   txHash: { toString(): string }
 }) {
   const hash = receipt.txHash.toString()
+  // The structured txHash lets the SDK's claim retry loop watch the submitted
+  // tx instead of parsing the hash back out of the message text.
+  const fail = (message: string): never => {
+    const err = new Error(message)
+    ;(err as any).txHash = hash
+    throw err
+  }
   if (receipt.status === 'dropped') {
-    throw new Error(`L2 transaction was dropped by the network (${hash}). ${receipt.error ?? 'Try again.'}`)
+    fail(`L2 transaction was dropped by the network (${hash}). ${receipt.error ?? 'Try again.'}`)
   }
   if (receipt.status === 'pending') {
-    throw new Error(`L2 transaction is still pending and was not included in a block (${hash}).`)
+    fail(`L2 transaction is still pending and was not included in a block (${hash}).`)
   }
   if (receipt.executionResult && receipt.executionResult !== 'success') {
-    throw new Error(`L2 transaction reverted (${receipt.executionResult}): ${receipt.error ?? hash}`)
+    fail(`L2 transaction reverted (${receipt.executionResult}): ${receipt.error ?? hash}`)
   }
 }
 

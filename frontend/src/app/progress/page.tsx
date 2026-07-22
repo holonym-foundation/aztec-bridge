@@ -37,6 +37,7 @@ export default function ProgressPage() {
     fuelEnabled,
     fuelAmount: fuelAmountStr,
     fuelType,
+    isPrivacyModeEnabled,
   } = useBridgeStore()
 
   const steps = getProgressSteps()
@@ -76,9 +77,17 @@ export default function ProgressPage() {
   }, [notify, refetchL1Balance, refetchL2Balance, refetchFeeJuiceBalance, refetchPrivateFeeJuiceBalance])
 
   // Fresh bridge operations only — resume lives at /progress/resume
-  const { mutate: bridgeTokensToL2, isError: isBridgeTokensToL2Error } = useL1BridgeToL2(handleBridgeSuccess)
+  const {
+    mutate: bridgeTokensToL2,
+    isError: isBridgeTokensToL2Error,
+    error: bridgeTokensToL2Err,
+  } = useL1BridgeToL2(handleBridgeSuccess)
 
-  const { mutate: withdrawTokensToL1, isError: withdrawTokensToL1Error } = useL2WithdrawTokensToL1(handleBridgeSuccess)
+  const {
+    mutate: withdrawTokensToL1,
+    isError: withdrawTokensToL1Error,
+    error: withdrawTokensToL1Err,
+  } = useL2WithdrawTokensToL1(handleBridgeSuccess)
 
   const L1_TO_L2_TIME = 15 * 60 // seconds
   const L2_TO_L1_TIME = 50 * 60 // seconds
@@ -137,20 +146,30 @@ export default function ProgressPage() {
     }
   }, [isBridgeTokensToL2Error, withdrawTokensToL1Error, steps, setProgressStep])
 
-  // Arm beforeunload only inside the irrecoverable window: a tx is broadcast and the bridge
-  // hasn't reached a terminal state. Otherwise nothing is at risk and the prompt is noise.
+  const hasError = isBridgeTokensToL2Error || withdrawTokensToL1Error
+  const errorMessage =
+    (bridgeTokensToL2Err instanceof Error ? bridgeTokensToL2Err.message : null) ??
+    (withdrawTokensToL1Err instanceof Error ? withdrawTokensToL1Err.message : null)
+
+  // A transfer is genuinely "in progress" once an operation step has gone active and the
+  // flow hasn't reached a terminal state (all steps completed, or an errored step). This is
+  // the single signal that gates every state-loss guard on this screen.
+  const isAllComplete = steps.length > 0 && steps.every((step) => step.status === 'completed')
+  const isTransferInProgress = !isAllComplete && !hasError && steps.some((step) => step.status === 'active')
+
+  // While in progress, warn on any full-page unload (reload, tab close, hard navigation) —
+  // the live progress view and pending on-chain state would be dropped. Attach only in that
+  // window; the cleanup detaches the moment the flow completes or errors (deps re-run).
   useEffect(() => {
-    const hasInFlightTx = !!(l1TxUrl || l2TxUrl)
-    const hasActiveStep = steps.some((step) => step.status === 'active')
-    if (!hasInFlightTx || !hasActiveStep) return
+    if (!isTransferInProgress) return
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault()
+      // Legacy browsers require a returnValue to trigger the native confirm.
+      e.returnValue = ''
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [steps, l1TxUrl, l2TxUrl])
-
-  const hasError = isBridgeTokensToL2Error || withdrawTokensToL1Error
+  }, [isTransferInProgress])
 
   // Amount display with optional fuel breakdown. Preserved from the pre-split
   // page: if fuel is enabled and > 0, show "<bridged> <symbol> to bridge +
@@ -170,27 +189,38 @@ export default function ProgressPage() {
   const toNetwork = bridgeConfig.to.network?.title ?? ''
 
   return (
-    <RootStyle className="">
-      <div className="px-5 pt-5">
-        <div className="flex items-center gap-4">
-          <BridgeHeader />
+    // No-scroll budget: same cap as the bridge card (see app/page.tsx) so the progress card
+    // never grows the RootStyle region past its 90vh floor. The header stays pinned; the
+    // card body scrolls inside itself if it can't fit, never the page.
+    <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
+      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden">
+        <div className="px-5 pt-5">
+          <div className="flex items-center gap-4">
+            <BridgeHeader />
+          </div>
         </div>
 
-        <ProgressCard
-          steps={steps}
-          progressStep={progressStep}
-          hasError={hasError}
-          l1TxUrl={l1TxUrl}
-          l2TxUrl={l2TxUrl}
-          estimatedTimeSeconds={estimatedTimeSeconds}
-          amountDisplay={amountDisplay}
-          fuelBreakdown={fuelBreakdown}
-          fromNetwork={fromNetwork}
-          toNetwork={toNetwork}
-          direction={direction === BridgeDirection.L1_TO_L2 ? 'L1_TO_L2' : 'L2_TO_L1'}
-        />
+        {/* Scrolls internally (never the page) if the card can't fit the viewport. */}
+        <div className="px-5 pb-5 min-h-0 flex-1 overflow-y-auto">
+          <ProgressCard
+            steps={steps}
+            progressStep={progressStep}
+            hasError={hasError}
+            l1TxUrl={l1TxUrl}
+            l2TxUrl={l2TxUrl}
+            estimatedTimeSeconds={estimatedTimeSeconds}
+            amountDisplay={amountDisplay}
+            fuelBreakdown={fuelBreakdown}
+            fromNetwork={fromNetwork}
+            toNetwork={toNetwork}
+            direction={direction === BridgeDirection.L1_TO_L2 ? 'L1_TO_L2' : 'L2_TO_L1'}
+            errorMessage={errorMessage}
+            isPrivate={isPrivacyModeEnabled}
+            currentPrivacyMode={isPrivacyModeEnabled}
+          />
 
-        <FuelClaimLinkPanel />
+          <FuelClaimLinkPanel />
+        </div>
       </div>
     </RootStyle>
   )

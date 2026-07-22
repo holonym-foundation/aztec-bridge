@@ -18,10 +18,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatUnits, encodeFunctionData } from 'viem'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { useToast, useToastMutation, useToastQuery } from './useToast'
+import { pushNotification } from '@/stores/useNotificationsStore'
 import { requestWaapWallet, useWalletStore, WAAP_METHOD } from '@/stores/walletStore'
 import { I_UserTokenBalance, T_AlchemyTokenBalanceResponse, T_UserTokenType } from '@/types/token.balances.types'
 import { axiosErrorMessage } from './helper'
 import { networkConfig } from '@/config/l1.config'
+import { isConsumedMessageError } from '@/utils/resumability'
 import { useBridge } from '@/hooks/useBridge'
 import type { BridgeEvent, StepStatus } from '@human.tech/clean.sdk'
 import { STORAGE_KEYS, BridgeEventType } from '@human.tech/clean.sdk'
@@ -150,8 +152,15 @@ export function useL1TokenBalances() {
 
       return tokenBalnces
     } catch (error) {
-      const errMsg = axiosErrorMessage(error)
-      notify('error', errMsg)
+      // Balance refresh is a non-critical, auto-retrying display enhancement. Never surface the
+      // raw "Bridge API POST /api/alchemy/tokens-balances failed (0)" to users — keep the technical
+      // detail in the console and record a friendly, keyed note in the Messages feed instead. The
+      // key collapses every retry into one calm info row (no corner toast, no genie re-badging) so a
+      // transient Alchemy hiccup never reads as a scary failure.
+      console.error('[l1TokenBalances] Failed to refresh balances:', axiosErrorMessage(error), error)
+      notify('info', "Couldn't refresh balances, retrying", {
+        toastId: 'l1-balances-refresh-failed',
+      })
 
       throw error
     }
@@ -518,9 +527,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             notify(
               'warn',
               {
-                heading: 'Do Not Reload',
-                message:
-                  'Your deposit transaction is being prepared. Closing or reloading this page now may make recovery harder.',
+                heading: 'Do not reload',
+                message: 'Keep this page open so your funds stay recoverable.',
               },
               { autoClose: false, toastId: TOAST_ID_L1L2_DO_NOT_RELOAD },
             )
@@ -560,15 +568,13 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             setTransactionUrls(event.l1TxUrl, null)
             // Tx is in mempool — the "Do Not Reload" prep banner is now stale.
             notify.dismiss(TOAST_ID_L1L2_DO_NOT_RELOAD)
-            notify(
-              'warn',
-              {
-                heading: 'Deposit In Progress',
-                message:
-                  'Please keep this page open while your deposit completes. Your data is encrypted and backed up — only you can access it.',
-              },
-              { autoClose: false, toastId: TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS },
-            )
+            // Feed-only: the ProgressCard banner carries the live "keep this
+            // page open" safety text, so the message stays concise here.
+            pushNotification({
+              type: 'deposit',
+              title: 'Deposit in progress',
+              message: 'Keep this page open while it completes.',
+            })
             break
           case BridgeEventType.DEPOSIT_CONFIRMED:
             logInfo('L1 deposit confirmed', {
@@ -586,17 +592,15 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             // toasts are now stale.
             notify.dismiss(TOAST_ID_L1L2_DO_NOT_RELOAD)
             notify.dismiss(TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS)
-            // Prompt user to backup their claim secret (matches old flow)
-            notify(
-              'warn',
-              {
-                heading: 'Deposit Confirmed',
-                message:
-                  'Your deposit is confirmed on L1. Click here to export a full backup — this includes all the data needed to resume if anything interrupts the process.',
-              },
-              {
-                autoClose: false,
-                toastId: TOAST_ID_L1L2_DEPOSIT_CONFIRMED,
+            // Feed-only, with the recovery-backup export carried as an inline
+            // action so the user can still export from Messages now that no
+            // corner toast exists to click.
+            pushNotification({
+              type: 'deposit',
+              title: 'Deposit confirmed',
+              message: 'Claiming on Aztec. Export a recovery backup to stay safe.',
+              action: {
+                label: 'Export recovery backup',
                 onClick: () => {
                   try {
                     const claims = localStorage.getItem(STORAGE_KEYS.deposits)
@@ -607,11 +611,11 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                       if (latest) exportClaimData(latest)
                     }
                   } catch (e) {
-                    console.error('[L1→L2] Failed to export claim data on toast click:', e)
+                    console.error('[L1→L2] Failed to export claim data on action click:', e)
                   }
                 },
               },
-            )
+            })
             break
           // token registration observability.
           case BridgeEventType.TOKEN_REGISTERED:
@@ -649,8 +653,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             notify(
               'info',
               {
-                heading: 'Waiting for L1→L2 sync',
-                message: `Aztec is syncing your deposit message from L1. Total wait is usually ~5–15 minutes — keep this tab open. (${event.elapsedMinutes.toFixed(0)} min elapsed)`,
+                heading: 'Syncing to Aztec',
+                message: `Usually 5 to 15 min. (${event.elapsedMinutes.toFixed(0)} min elapsed)`,
               },
               {
                 toastId: 'l1-to-l2-progress',
@@ -684,7 +688,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             })
             notify(
               'info',
-              `L2 node hasn't synced this message yet. Retrying in ${Math.round(event.delayMs / 60_000)} min (${event.attempt}/${event.maxAttempts})...`,
+              `Not synced yet. Retrying in ${Math.round(event.delayMs / 60_000)} min (${event.attempt}/${event.maxAttempts}).`,
               { toastId: 'l1-to-l2-progress', autoClose: 15000 },
             )
             break
@@ -697,6 +701,26 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               l1_tx_hash: event.l1TxHash ?? null,
               l2_tx_hash: event.l2TxHash ?? null,
             })
+            pushNotification({
+              type: 'claim',
+              title: 'Bridge complete',
+              message: 'Tokens claimed on Aztec.',
+            })
+            // The claim just landed on L2 — refresh the cUSDC / Clean USDC balance
+            // so the user sees the credited funds without a manual reload (#230b).
+            // Retry a couple of times because the PXE can lag a few seconds behind
+            // the claim before the new note is simulateable; a single immediate
+            // refetch would read the pre-deposit balance.
+            {
+              const refreshL2Balances = () => {
+                queryClient.invalidateQueries({ queryKey: ['l2TokenBalance', aztecAddress] })
+                queryClient.invalidateQueries({ queryKey: ['l2FeeJuiceBalance', aztecAddress] })
+                queryClient.invalidateQueries({ queryKey: ['l2PrivateFeeJuiceBalance', aztecAddress] })
+              }
+              refreshL2Balances()
+              setTimeout(refreshL2Balances, 6000)
+              setTimeout(refreshL2Balances, 15000)
+            }
             break
           }
           case BridgeEventType.ATTESTATION_FETCH:
@@ -734,9 +758,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             notify(
               'warn',
               {
-                heading: 'Backup Warning',
-                message:
-                  'Could not save recovery data to server. Please do not close this page until the bridge completes.',
+                heading: 'Backup warning',
+                message: 'Could not save recovery data. Keep this page open.',
               },
               { autoClose: false },
             )
@@ -802,52 +825,69 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             // mid-flow status banners.
             for (const id of L1L2_TRANSIENT_TOAST_IDS) notify.dismiss(id)
 
+            // "No non-nullified message" and friends mean the deposit's L1→L2 message was already
+            // consumed by a prior successful claim — this is completion, not a loss. Keep the feed
+            // in step with ProgressCard's "likely completed" state: a calm, non-alarming record that
+            // points at the L2 balance, and NO funds-at-risk / resume messaging (resuming re-fails).
+            if (isConsumedMessageError(event.error?.message)) {
+              pushNotification({
+                type: 'success',
+                title: 'Deposit likely already completed',
+                message: 'Check your L2 balance in Activity.',
+              })
+              break
+            }
+
+            // Feed-only: the classified message below is the single record for
+            // this failure. No corner toast — the peek bubble plus feed surface it.
             if (event.fundsAtRisk) {
-              notify(
-                'warn',
-                {
-                  heading: 'L2 Claim Failed — Funds Are Safe',
-                  message: 'Your deposit confirmed on L1 but the L2 claim did not complete. Go to Activity to resume.',
-                },
-                { autoClose: false },
-              )
+              pushNotification({
+                type: 'error',
+                title: "L2 claim didn't finish",
+                message: 'Your funds are safe. Resume from Activity.',
+              })
+              break
+            }
+
+            // Backup failures get a more specific record from the onError handler.
+            const errorMsg = event.error?.message ?? 'Unknown error'
+            if (errorMsg.includes('Failed to backup')) break
+
+            // Classify so the user gets actionable copy instead of a raw
+            // on-chain revert string.
+            const isCongestionErr =
+              errorMsg.includes('"path":["revertReason","functionErrorStack",0,"functionSelector"]') ||
+              (errorMsg.includes('invalid_type') && errorMsg.includes('functionSelector'))
+            const isReloadableErr = errorMsg.includes('0xfb8f41b2')
+            const isArtifactErr =
+              errorMsg.includes('Contract artifact not found') ||
+              errorMsg.includes('artifact not found') ||
+              (errorMsg.includes('artifact') && errorMsg.includes('not found'))
+
+            if (isCongestionErr) {
+              pushNotification({
+                type: 'error',
+                title: 'Aztec testnet is congested',
+                message: 'Your transaction was dropped. You can retry.',
+              })
+            } else if (isReloadableErr) {
+              pushNotification({
+                type: 'error',
+                title: 'Bridge failed (0xfb8f41b2)',
+                message: 'Please reload the page.',
+              })
+            } else if (isArtifactErr) {
+              pushNotification({
+                type: 'error',
+                title: 'Contract artifact not found',
+                message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
+              })
             } else {
-              // Skip generic toast for backup failures — onError handler shows a more specific one
-              const errorMsg = event.error?.message ?? 'Unknown error'
-              if (errorMsg.includes('Failed to backup')) break
-
-              // classify the error so the user gets actionable copy
-              // instead of a raw on-chain revert string.
-              const isCongestion =
-                errorMsg.includes('"path":["revertReason","functionErrorStack",0,"functionSelector"]') ||
-                (errorMsg.includes('invalid_type') && errorMsg.includes('functionSelector'))
-              const isReloadable = errorMsg.includes('0xfb8f41b2')
-              const isArtifact =
-                errorMsg.includes('Contract artifact not found') ||
-                errorMsg.includes('artifact not found') ||
-                (errorMsg.includes('artifact') && errorMsg.includes('not found'))
-
-              if (isCongestion) {
-                notify(
-                  'error',
-                  'The Aztec Testnet is congested right now. Unfortunately your transaction was dropped.',
-                  { autoClose: false },
-                )
-              } else if (isReloadable) {
-                notify('error', 'Bridge transaction failed (error: 0xfb8f41b2). Please reload the page.')
-              } else if (isArtifact) {
-                notify('error', {
-                  heading: 'Contract Artifact Not Found',
-                  message:
-                    'The contract artifact is not available in the public registry. Please upload it to https://testnet.aztec-registry.xyz/ to make it available for the wallet.',
-                })
-              } else {
-                notify('error', {
-                  heading: 'Deposit Failed — No Funds Moved',
-                  message:
-                    'The transaction was not sent. Your balance is unchanged and no recovery is needed. You can safely retry.',
-                })
-              }
+              pushNotification({
+                type: 'error',
+                title: 'Deposit failed',
+                message: 'No funds moved. You can retry.',
+              })
             }
             break
           }
@@ -911,12 +951,201 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         notify(
           'error',
           {
-            heading: 'Backup Failed — Bridge Aborted',
-            message: errorMessage.length > 200 ? errorMessage.slice(0, 200) + '...' : errorMessage,
+            heading: 'Backup failed, bridge stopped',
+            message: 'Could not save your backup. Please try again.',
           },
           { autoClose: false },
         )
       }
+    },
+  })
+}
+
+// -----------------------------------
+
+// Dedicated toast ids for the standalone Fee Juice top-up (withdraw side). Kept
+// separate from the deposit flow's ids so a top-up never dismisses a real
+// deposit's banners and vice-versa.
+const TOAST_ID_FJ_TOPUP_PROGRESS = 'fj-topup-progress'
+
+/**
+ * Standalone "buy + bridge Fee Juice" top-up for the WITHDRAW side.
+ *
+ * A user sitting on L2 with 0 Fee Juice can't pay the L2 burn a withdrawal needs.
+ * There is no direct L2 FJ mint, but the deposit path already knows how to buy FJ
+ * on L1 and bridge it to L2: `bridgeL1ToL2` with a `fuel` carve routes a slice of
+ * the bridged token through the SwapBridgeRouter (token → ETH → FeeJuice on V4)
+ * and claims the FeeJuice on L2. This hook reuses that EXACT SDK primitive as a
+ * standalone action — same `bridge.bridgeL1ToL2(...)` call, same wallet callbacks,
+ * same private-fuel (BridgedFPC) enforcement — it just sizes the bridge so almost
+ * all of it becomes Fee Juice instead of a token deposit.
+ *
+ * The SDK requires `fuel.amount < amount` strictly, so the caller passes a
+ * `spendAmount` (total L1 token to spend) and a `fuelAmount` (< spend) to carve
+ * into FeeJuice; a negligible token remainder lands on L2 as the paired token.
+ */
+export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void) {
+  const { waapAddress: l1Address, aztecAddress, signWaapMessage } = useWalletStore()
+  const { isPrivacyModeEnabled } = useBridgeStore()
+  const queryClient = useQueryClient()
+  const notify = useToast()
+  const walletAdapter = useWalletAdapter()
+  const bridge = useBridge()
+
+  const mutationFn = async (params: {
+    /** L1 funding token symbol (defaults to the primary L1 token, e.g. USDC). */
+    tokenSymbol?: string
+    /** Total L1 token amount to spend (human units). Must exceed fuelAmount. */
+    spendAmount: string
+    /** Token amount to carve into FeeJuice (human units). Must be > 0 and < spendAmount. */
+    fuelAmount: string
+    fuelType: 'public' | 'private'
+    /** Optional third-party L2 recipient (public fuel only; FJ is non-transferable). */
+    recipient?: string
+  }): Promise<string | undefined> => {
+    if (!l1Address) throw new Error('Ethereum wallet not connected')
+    if (!aztecAddress) throw new Error('Aztec wallet not connected')
+    if (!walletAdapter) throw new Error('Aztec wallet adapter not ready')
+
+    const tokenSymbol = params.tokenSymbol ?? L1_TOKENS[0]?.symbol ?? 'USDC'
+    const spendNum = Number(params.spendAmount)
+    const fuelNum = Number(params.fuelAmount)
+    if (!(spendNum > 0)) throw new Error('Enter an amount to convert to Fee Juice')
+    // Mirror the deposit-fuel guard: fuel is carved out of the bridge, so it must be
+    // strictly less than the amount bridged.
+    if (!(fuelNum > 0 && fuelNum < spendNum)) {
+      throw new Error('Fee Juice amount must be greater than 0 and less than the amount spent')
+    }
+
+    // Privacy mode forces private (BridgedFPC) fuel — same enforcement as the deposit path,
+    // so the topped-up Fee Juice stays private and the L2 claim doesn't deanonymize the user.
+    const effectiveFuelType: 'public' | 'private' = isPrivacyModeEnabled ? 'private' : params.fuelType
+
+    logInfo('Fee Juice top-up (L1→L2) initiated', {
+      direction: 'L1_TO_L2',
+      context: 'withdraw_fuel_topup',
+      fromToken: tokenSymbol,
+      spendAmount: params.spendAmount,
+      fuelAmount: params.fuelAmount,
+      fuelType: effectiveFuelType,
+      isPrivate: isPrivacyModeEnabled ?? false,
+      l1Address,
+      l2Address: aztecAddress,
+      userAction: DatadogUserAction.BRIDGE_L1_TO_L2_INITIATED,
+    })
+
+    const result = await bridge.bridgeL1ToL2({
+      token: tokenSymbol,
+      amount: params.spendAmount,
+      l1Address,
+      l2Address: aztecAddress,
+      isPrivate: isPrivacyModeEnabled ?? false,
+      fuel: {
+        enabled: true,
+        amount: params.fuelAmount,
+        fuelType: effectiveFuelType,
+        ...(params.recipient ? { recipient: params.recipient } : {}),
+      },
+      sendTransaction: async (tx) => {
+        return (await requestWaapWallet(WAAP_METHOD.eth_sendTransaction, [tx])) as string
+      },
+      walletAdapter: walletAdapter as any,
+      signMessage: async (msg: string) => {
+        verifyEncryptionDomain()
+        const sig = await signWaapMessage(msg)
+        if (!sig) throw new Error('Failed to sign message')
+        return sig
+      },
+      signTypedData: async (address: string, typedDataJson: string) => {
+        return (await requestWaapWallet(WAAP_METHOD.eth_signTypedData_v4, [address, typedDataJson])) as string
+      },
+      onEvent: (event: BridgeEvent) => {
+        switch (event.type) {
+          case BridgeEventType.DEPOSIT_SENT:
+            notify(
+              'warn',
+              {
+                heading: 'Buying Fee Juice',
+                message: 'On L1 now. Keep this page open while it bridges.',
+              },
+              { autoClose: false, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
+            )
+            break
+          case BridgeEventType.DEPOSIT_CONFIRMED:
+            notify(
+              'info',
+              'Top-up confirmed. Claiming Fee Juice on Aztec.',
+              { autoClose: 15000, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
+            )
+            break
+          case BridgeEventType.SYNC_POLL:
+            notify(
+              'info',
+              `Syncing your Fee Juice to Aztec. ${event.elapsedMinutes.toFixed(0)} min elapsed.`,
+              { autoClose: 15000, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
+            )
+            break
+          case BridgeEventType.CLAIM_ATTEMPT:
+            notify('info', `Claiming Fee Juice on Aztec (attempt ${event.attempt}/${event.maxAttempts})…`, {
+              autoClose: 15000,
+              toastId: TOAST_ID_FJ_TOPUP_PROGRESS,
+            })
+            break
+          case BridgeEventType.ERROR:
+            logError(
+              event.error?.message ?? 'Fee Juice top-up error event',
+              {
+                direction: 'L1_TO_L2',
+                context: 'withdraw_fuel_topup',
+                fundsAtRisk: event.fundsAtRisk,
+                operationId: event.operationId,
+                l1Address,
+                l2Address: aztecAddress,
+                userAction: 'bridge_l1_to_l2_fj_topup_error',
+              },
+              event.error,
+            )
+            notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
+            break
+        }
+      },
+    })
+
+    notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
+    logInfo('Fee Juice top-up (L1→L2) completed', {
+      direction: 'L1_TO_L2',
+      context: 'withdraw_fuel_topup',
+      l1Address,
+      l2Address: aztecAddress,
+      l1TxHash: result.l1TxHash,
+      l2TxHash: result.l2TxHash,
+      isPrivacyModeEnabled,
+      userAction: DatadogUserAction.BRIDGE_L1_TO_L2_COMPLETED,
+    })
+
+    return result.l2TxHash
+  }
+
+  return useMutation({
+    mutationFn,
+    onSuccess: (txHash) => {
+      // Refresh the FJ balances the withdraw gate reads, plus L1 token balances.
+      queryClient.invalidateQueries({ queryKey: ['l2FeeJuiceBalance', aztecAddress] })
+      queryClient.invalidateQueries({ queryKey: ['l2PrivateFeeJuiceBalance', aztecAddress] })
+      queryClient.invalidateQueries({ queryKey: ['l2TokenBalance', aztecAddress] })
+      queryClient.invalidateQueries({ queryKey: ['l1TokenBalances', l1Address] })
+      queryClient.invalidateQueries({ queryKey: ['l1TokenBalance', l1Address] })
+      pushNotification({
+        type: 'deposit',
+        title: 'Fee Juice added',
+        message: 'Finish your withdrawal now.',
+      })
+      onTopUpSuccess?.(txHash)
+    },
+    onError: (error) => {
+      notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
+      const msg = extractErrorMessage(error) || 'The top-up could not be completed. Your balances are unchanged.'
+      pushNotification({ type: 'error', title: 'Fee Juice top-up failed', message: msg })
     },
   })
 }

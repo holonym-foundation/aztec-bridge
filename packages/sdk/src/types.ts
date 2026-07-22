@@ -561,6 +561,12 @@ export interface L2ClaimDeps {
   walletAdapter: WalletAdapterInterface
   aztecAddress: string
   isPrivacyModeEnabled: boolean
+  /**
+   * Aztec node client used to resolve the fate of a submitted-but-pending
+   * claim tx (getTxReceipt) before ever re-submitting a duplicate. Without
+   * it, a pending-timeout falls back to blind resubmission.
+   */
+  aztecNode?: { getTxReceipt(txHash: any): Promise<any> }
 }
 
 export interface MessageSyncResult {
@@ -720,6 +726,32 @@ export interface PassportCheckResult {
   travelRuleExceeded?: boolean
   /** Travel Rule: USD budget left before the threshold. Present only when enabled. */
   travelRuleRemainingUsd?: number
+  /** USD held by outstanding (non-expired) attestation reservations, already subtracted from the
+   *  remaining budgets above. Present only when > 0 — signals a block is a temporary hold that
+   *  frees when the pending deposit confirms or its reservation expires (<= 30 min). */
+  reservedUsd?: number
+}
+
+/**
+ * L1-only humanity eligibility result from GET /api/attestation/l1-eligibility.
+ *
+ * Unauthenticated, keyed solely on the supplied L1 address (no session, no L2
+ * binding). Runs the same POCH → Passport cascade + sanctions screen as the
+ * authenticated check routes. Deposit-cap / Travel-Rule fields are absent by
+ * design — those are per-user and require a session.
+ */
+export interface L1EligibilityResult {
+  address: string
+  eligible: boolean
+  method: 'poch' | 'passport' | null
+  reason?: string
+  /** True when the address matched a sanctions list (all other tiers skipped). */
+  sanctioned?: boolean
+  /** Present only when the Passport tier was evaluated (POCH not satisfied). */
+  passportScore?: number
+  passportThreshold?: number
+  /** Global Passport per-tx max in token base units (string; no per-user cap applied). */
+  passportMaxAmount?: string
 }
 
 // ─── L1 Token Balance Types ──────────────────────────────────────────
@@ -763,7 +795,9 @@ export interface AttestationDepositMeta {
 
 /** POCH attestation response from POST /api/attestation/poch */
 export interface PochAttestationData {
-  l1Signature: string
+  // null for a withdrawal request — the L1 (deposit) signature is issued for
+  // deposits only, so a withdrawal attestation can't be used to authorize a deposit.
+  l1Signature: string | null
   l2Signature: number[]
   nonce: number
   circuitId: string
@@ -772,7 +806,9 @@ export interface PochAttestationData {
 
 /** Passport attestation response from POST /api/attestation/passport */
 export interface PassportAttestationData {
-  l1Signature: string
+  // null for a withdrawal request — the L1 (deposit) signature is issued for
+  // deposits only, so a withdrawal attestation can't be used to authorize a deposit.
+  l1Signature: string | null
   l2Signature: number[] | null
   nonce: number
   maxAmount: string

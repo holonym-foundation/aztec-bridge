@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useWalletStore } from '@/stores/walletStore'
 import { POCH_MINT_URL } from '@/config'
+import { useOnboardingStore } from '@/stores/useOnboardingStore'
 
 const ONBOARDED_KEY = 'shield_onboarded'
 const BRAND = '#81133B'
@@ -121,6 +122,65 @@ const SCREENS: Screen[] = [
     visual: 'zk',
   },
 ]
+
+/* Alphanet caution badge — sits above the hero eyebrow. Amber (not brand pink) so it
+   reads as a warning, with a hover/focus tooltip so users know this is an early network
+   before they bridge real value. */
+function AlphanetBadge() {
+  const [open, setOpen] = useState(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimer.current = setTimeout(() => setOpen(false), 240)
+  }
+  return (
+    <span
+      className="ob-alpha"
+      onMouseEnter={() => {
+        cancelClose()
+        setOpen(true)
+      }}
+      onMouseLeave={scheduleClose}
+    >
+      <span
+        className="ob-alpha-pill"
+        tabIndex={0}
+        role="note"
+        aria-label="Alphanet release warning"
+        onFocus={() => setOpen(true)}
+        onBlur={scheduleClose}
+      >
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" />
+        </svg>
+        Alphanet
+      </span>
+      <AnimatePresence>
+        {open && (
+          <motion.span
+            className="ob-tooltip-bubble ob-alpha-bubble"
+            role="tooltip"
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+          >
+            Shield runs on Aztec Alphanet, an early-stage network. Treat every transaction as final and bridge only what you can afford to lose.{' '}
+            <a href="https://aztec.network/blog/introducing-alpha-v5" target="_blank" rel="noopener noreferrer">Learn about Alpha v5</a>.
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </span>
+  )
+}
 
 /* Paper-shader field: real @paper-design MeshGradient in Shield tones, softened by a
    translucent veil so copy stays legible, plus a fine grain for paper texture. */
@@ -488,6 +548,8 @@ export default function ShieldOnboarding() {
   const reduce = useReducedMotion() ?? false
   const connectWaapWallet = useWalletStore((s) => s.connectWaapWallet)
   const isWaapConnected = useWalletStore((s) => s.isWaapConnected)
+  const setSplashActive = useOnboardingStore((s) => s.setSplashActive)
+  const showSplashNonce = useOnboardingStore((s) => s.showSplashNonce)
   // Start in 'loading': the shader shell renders immediately (covering the bridge from
   // the first paint) while we read localStorage / wallet state, then we resolve to the
   // real mode and the inner content fades in over the same, never-remounted shader.
@@ -522,6 +584,29 @@ export default function ShieldOnboarding() {
     }
     return () => root.removeAttribute('data-ob-splash')
   }, [mode, isWaapConnected])
+
+  // Publish "splash is up" so the elevated nav (which sits ABOVE this overlay
+  // on the light paper field) can drop its dark Privacy-Mode styling while the
+  // splash covers the dark background it would otherwise read against (#94).
+  useEffect(() => {
+    setSplashActive(mode === 'splash')
+    return () => setSplashActive(false)
+  }, [mode, setSplashActive])
+
+  // Clicking the Shield brand returns the user to the splash (#103). The brand
+  // link's own in-progress-transfer guard runs first (see Header), so by the
+  // time the nonce bumps here it's already confirmed. Skip the initial mount
+  // value so this only fires on an actual request.
+  const didMountSplashRequest = useRef(false)
+  useEffect(() => {
+    if (!didMountSplashRequest.current) {
+      didMountSplashRequest.current = true
+      return
+    }
+    setLeaving(false)
+    setIndex(0)
+    setMode('splash')
+  }, [showSplashNonce])
 
   const markOnboarded = () => {
     try {
@@ -605,6 +690,7 @@ export default function ShieldOnboarding() {
                   <div className="ob-cryptex-hero">
                     <CryptexMark reduce={reduce} shared />
                     <div className="ob-headline">
+                      <AlphanetBadge />
                       <p className="ob-eyebrow">{screen.eyebrow}</p>
                       <h1 className="ob-title">{screen.title}</h1>
                     </div>
@@ -652,6 +738,7 @@ export default function ShieldOnboarding() {
               <div className="ob-cryptex-hero">
                 <CryptexMark reduce={reduce} />
                 <div className="ob-headline">
+                  <AlphanetBadge />
                   <p className="ob-eyebrow">{SCREENS[0].eyebrow}</p>
                   <h1 className="ob-title">{SCREENS[0].title}</h1>
                 </div>
@@ -665,14 +752,25 @@ export default function ShieldOnboarding() {
             <div className="ob-btns">
               <button className="ob-next" onClick={connectFromSplash}>{isWaapConnected ? 'Enter app' : 'Connect wallet'}</button>
             </div>
-            <p className="ob-secured">
-              Secured by <strong>human.tech</strong>
-              <span className="ob-dot">·</span>
-              Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
-            </p>
+            <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-dev-cta">
+              Build your own App with Programmable Privacy
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="m13 6 6 6-6 6" />
+              </svg>
+            </a>
           </div>
         </div>
       </div>
+      {/* #157: the "Secured by human.tech · Built on Clean SDK" trust line sits
+          in the splash's bottom footer now, not tucked under the developer CTA. */}
+      <footer className="ob-splash-footer">
+        <p className="ob-secured">
+          Secured by <strong>human.tech</strong>
+          <span className="ob-dot">·</span>
+          Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
+        </p>
+      </footer>
     </motion.div>
   )
 
@@ -685,7 +783,7 @@ export default function ShieldOnboarding() {
       {mode !== 'hidden' && !leaving && (
         <motion.div
           key="ob-root"
-          className="ob-root"
+          className={`ob-root${mode === 'splash' ? ' ob-splash' : ''}`}
           initial={false}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -729,6 +827,14 @@ export default function ShieldOnboarding() {
         /* Connected user on the splash: lift the real app nav bar above this overlay so
            it stays usable. Toggled by data-ob-splash="connected" on <html>. */
         html[data-ob-splash="connected"] .ob-header-elevate { z-index: 130 !important; }
+        /* The top-nav wallet "Connect" pill(s) live in the Header, not this component, and
+           carry no meaning while the splash gate is up — the splash's own CTA is the way in.
+           Rather than leave a dead button, neutralize them through the same data-ob-splash
+           hook: non-interactive, no hover affordance, visibly dimmed. Cleared the instant the
+           splash dismisses (attribute removed), so the real nav is fully live in-app. */
+        html[data-ob-splash] .ob-header-elevate button[title*="Connect" i] {
+          pointer-events: none; cursor: default; opacity: 0.5;
+        }
         /* Inner content overlay: fades in over the persistent shader shell. */
         .ob-inner { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; }
         .ob-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
@@ -757,6 +863,14 @@ export default function ShieldOnboarding() {
         .ob-mini-pin { position: absolute; top: 24px; left: 0; right: 0; height: 72px; z-index: 2;
           display: flex; align-items: center; justify-content: center; }
         .ob-visual { height: 72px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; width: 100%; }
+        .ob-alpha { position: relative; display: inline-flex; margin: 0 auto 10px; }
+        .ob-alpha-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+          background: rgba(195,129,29,0.10); color: #b0781f; border: 1px solid rgba(195,129,29,0.26);
+          font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; cursor: default; outline: none; }
+        .ob-alpha-pill:focus-visible { outline: 2px solid #b06f16; outline-offset: 2px; }
+        /* #156: pin the Alphanet tooltip ABOVE its badge (never below, where the
+           top nav could clip it) and lift its z above the elevated nav. */
+        .ob-alpha-bubble { width: 250px; bottom: calc(100% + 10px); top: auto; z-index: 140; }
         .ob-eyebrow { font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: ${BRAND};
           font-weight: 600; margin: 0 0 14px; white-space: pre-line; line-height: 1.7; }
         .ob-title { font-size: clamp(26px, 5vw, 40px); line-height: 1.08; letter-spacing: -0.02em; font-weight: 640;
@@ -840,9 +954,18 @@ export default function ShieldOnboarding() {
         .ob-back { height: 54px; padding: 0 22px; border: 1px solid #eccfdc; border-radius: 14px; background: transparent;
           color: #5a4650; font-size: 16px; font-weight: 560; cursor: pointer; }
         .ob-back:hover { background: rgba(129,19,59,0.05); }
-        .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
-        .ob-secured strong { color: #5a4650; font-weight: 620; }
+        .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; justify-content: center; }
+        .ob-secured strong { color: #5a4650; font-family: 'PP Hatton', 'Suisse Intl', sans-serif; font-weight: 600; }
         .ob-dot { opacity: 0.5; }
+        /* #157: splash trust-line footer, pinned to the bottom of the splash. */
+        .ob-splash-footer { position: relative; z-index: 3; padding: 0 24px 20px; display: flex; justify-content: center; }
+        /* Secondary, subordinate developer CTA on the splash — a quiet text link beneath the
+           primary "Enter app" button, deliberately far lighter than the solid maroon CTA. */
+        .ob-dev-cta { display: inline-flex; align-items: center; gap: 6px; margin: -2px auto 0; color: ${BRAND};
+          font-size: 13.5px; font-weight: 550; text-decoration: none; opacity: 0.85;
+          transition: opacity .15s ease, gap .15s ease; }
+        .ob-dev-cta:hover { opacity: 1; gap: 8px; text-decoration: underline; text-underline-offset: 3px; }
+        .ob-dev-cta svg { flex: none; }
         /* cryptex hero — concentric dial rings framing the headline. max-height keeps the
            full-size mark from overflowing the fixed region on short viewports (it scales
            down with the region rather than being clipped or shrunk at its base size). */
@@ -893,6 +1016,7 @@ export default function ShieldOnboarding() {
           .ob-bp-track { width: 52px; }
           .ob-zk { margin-top: 14px; }
           .ob-zk-svg { width: 120px; height: 44px; }
+          .ob-splash-footer { padding: 0 20px 16px; }
         }
         @media (prefers-color-scheme: dark) {
           .ob-root { background: #150a0f; color: #f6ecf1; }
@@ -901,6 +1025,8 @@ export default function ShieldOnboarding() {
           .ob-body { color: #cba7b6; } .ob-body strong { color: #f6ecf1; }
           .ob-back { color: #cba7b6; border-color: #3a2530; }
           .ob-secured strong { color: #cba7b6; }
+          /* #81133B is too close to the dark maroon field to read; use the palette's pink accent. */
+          .ob-dev-cta { color: #f2b7d3; }
           .ob-tiers { border-color: #3a2530; background: rgba(255,255,255,0.03); }
           .ob-tier-row + .ob-tier-row { border-top-color: #3a2530; }
           .ob-tier-icon { background: rgba(246,236,241,0.08); }
@@ -923,6 +1049,22 @@ export default function ShieldOnboarding() {
           .ob-bp-lock { background: rgba(246,236,241,0.08); }
           .ob-zk-caption { color: #cba7b6; }
         }
+        /* The splash is the pre-app marketing screen: it must always read as the light
+           pink branded field — same look whether Privacy Mode is default-on or off, and
+           regardless of the OS colour scheme. The privacy dark background lives at z-0,
+           far below this z-100 opaque overlay, so it can't bleed through; the darkening
+           came from the splash's OWN dark-scheme styling above. Pin every splash surface
+           to its light values (these beat the dark-scheme rules on specificity, in both
+           schemes) so the splash and its light-styled nav (#94) stay consistent and
+           readable. The first-visit flow keeps its dark-scheme support (it's fully
+           covered by this overlay, never shown against the lifted nav). */
+        .ob-root.ob-splash { background: #fff6fa; color: #1c1116; }
+        .ob-root.ob-splash .ob-veil { background: linear-gradient(180deg, rgba(255,246,250,0.38), rgba(255,246,250,0.78)); }
+        .ob-root.ob-splash .ob-grain { mix-blend-mode: multiply; opacity: 0.05; }
+        .ob-root.ob-splash .ob-body { color: #5a4650; }
+        .ob-root.ob-splash .ob-body strong { color: #1c1116; }
+        .ob-root.ob-splash .ob-secured strong { color: #5a4650; }
+        .ob-root.ob-splash .ob-dev-cta { color: ${BRAND}; }
       `}</style>
     </AnimatePresence>
   )

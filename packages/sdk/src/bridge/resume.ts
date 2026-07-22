@@ -839,7 +839,7 @@ async function resumeL1ToL2(
 
   try {
     const claimResult = await executeL2Claim(
-      { walletAdapter, aztecAddress: l2Address, isPrivacyModeEnabled },
+      { walletAdapter, aztecAddress: l2Address, isPrivacyModeEnabled, aztecNode },
       {
         amount,
         claimSecret,

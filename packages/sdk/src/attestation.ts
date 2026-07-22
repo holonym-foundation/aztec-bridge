@@ -18,15 +18,20 @@ import type {
 import { AttestationMethod } from './types'
 
 /**
- * If the error is a server-side deposit-cap rejection (403 + reason
- * 'deposit_limit'), return its human message so the cascade surfaces it
- * immediately instead of falling through to the generic "both failed" error.
+ * If the error is a server-side deposit-cap rejection (403 + a cap reason),
+ * return its human message so the cascade surfaces it immediately instead of
+ * falling through to the generic "both failed" error. Covers the rolling-24h
+ * cap ('deposit_limit'), the cumulative Travel Rule threshold ('travel_rule'),
+ * and a temporary reservation hold ('pending_hold') — all carry a client-ready
+ * message the user needs verbatim.
  */
+const CAP_REJECTION_REASONS = new Set(['deposit_limit', 'travel_rule', 'pending_hold'])
+
 function depositLimitMessage(err: unknown): string | null {
   if (err instanceof BridgeApiError && err.status === 403) {
     const body = err.parsedBody
-    if (body?.reason === 'deposit_limit') {
-      return (typeof body.error === 'string' && body.error) || 'Alpha deposit limit reached.'
+    if (typeof body?.reason === 'string' && CAP_REJECTION_REASONS.has(body.reason)) {
+      return (typeof body.error === 'string' && body.error) || 'Deposit limit reached.'
     }
   }
   return null

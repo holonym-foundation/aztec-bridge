@@ -42,9 +42,27 @@ interface FuelToggleProps {
   selfAztecAddress?: string
   fuelRecipientOverride: string
   onFuelRecipientOverrideChange: (address: string) => void
+  /** Controlled detail-accordion state, so the parent can enforce mutual exclusivity with the
+   * Transaction breakdown (opening one collapses the other → the card fits with no scroll). */
+  detailOpen?: boolean
+  onDetailOpenChange?: (open: boolean) => void
+  /** Surfaces the live V4 quote (FJ output for the current fuel amount) so the breakdown can
+   * show where the reserved token goes. Null when fuel is off or the amount is invalid. */
+  onFuelQuoteChange?: (fjOutput: bigint | null) => void
 }
 
 const USD_PRESETS = [1, 5, 10]
+
+// Never silently auto-reserve more than this fraction of the bridge for gas. On a healthy
+// pool the real requirement is far below this and the cap never binds; on a mis-priced testnet
+// pool it stops the auto-fill from quietly eating half the deposit — we cap + warn + let the
+// user opt into the full (honest) amount instead.
+const MAX_AUTOFILL_FRACTION = 0.25
+
+// Motion values mirrored from the human-tech design system (docs/tokens.css):
+// --dur-normal / --ease-default for the inline detail accordion reveal.
+const DS_DUR_NORMAL = 0.28
+const DS_EASE_DEFAULT: [number, number, number, number] = [0.4, 0, 0.2, 1]
 
 /**
  * Hook that fetches a real V4 on-chain quote, debounced by 500ms.
@@ -114,19 +132,32 @@ function useV4FuelQuote(
  * sensible probe *size*; the rate that sizes the recommendation comes from the
  * on-chain quote. The live sufficiency check downstream still validates the result.
  */
+interface FuelRecommendation {
+  /** Amount to actually pre-fill — the honest amount, clamped to the sane ceiling. */
+  amount: string
+  /** Full token amount that covers the L2 claim gas at the current pool rate (uncapped). */
+  honestAmount: string
+  forType: 'public' | 'private'
+  /** True when the honest amount exceeded the sane ceiling, so `amount` is the capped value. */
+  capped: boolean
+  /** Honest amount as a percentage of the bridge amount (for the warning copy). */
+  honestPct: number
+}
+
 function useRecommendedFuelAmount(
   enabled: boolean,
   fuelType: 'public' | 'private',
   claimFeeLimit: bigint | undefined,
+  existingFj: number,
   tokenAddress: string,
   tokenDecimals: number,
   tokenSymbol: string,
   bridgeNum: number,
   prices: Record<string, number> | null | undefined,
-): { amount: string; forType: 'public' | 'private' } | null {
+): FuelRecommendation | null {
   // Tagged with the fuel type it was computed for, so a stale (previous-mode) value is
   // never applied to the current mode during a public<->private switch.
-  const [recommended, setRecommended] = useState<{ amount: string; forType: 'public' | 'private' } | null>(null)
+  const [recommended, setRecommended] = useState<FuelRecommendation | null>(null)
 
   useEffect(() => {
     // Clear any stale recommendation immediately so consumers never act on a value
@@ -136,7 +167,12 @@ function useRecommendedFuelAmount(
     let cancelled = false
     const timeout = setTimeout(async () => {
       try {
-        const requiredFj = Number(claimFeeLimit) / 1e18
+        const needFj = Number(claimFeeLimit) / 1e18
+        // Existing FJ already covers the claim → recommend nothing (no top-up required).
+        if (existingFj >= needFj) return
+        // PUBLIC: only the shortfall needs bridging (existing + claimed pay together).
+        // PRIVATE: the fresh bridge self-funds its landing claim, so size to the whole claim.
+        const requiredFj = fuelType === 'public' ? needFj - existingFj : needFj
         const fjUsd = getFeeJuicePriceUsd(prices)
         const tokenUsd = getTokenPriceUsd(tokenSymbol, prices)
         // Order-of-magnitude probe size (not the rate; the rate is measured on-chain).
@@ -150,18 +186,33 @@ function useRecommendedFuelAmount(
         const fjPerToken = Number(best.expectedOutput) / 1e18 / probeToken
         if (fjPerToken <= 0) return
         const BUFFER = 1.3 // headroom for price impact between probe and final size + swap slippage
-        // Fill the amount actually needed to cover gas; do NOT clamp to the bridge amount.
-        // If gas needs more fuel than the bridge amount, the fill exceeds it and the existing
-        // "Gas amount must be less than bridge amount" validation prompts the user to bridge more.
+        // Honest amount that actually covers gas at the measured pool rate. On a healthy pool this
+        // is tiny; on a mis-priced testnet pool it can be a huge fraction of the bridge — which is
+        // why we never blindly pre-fill it (see the cap below).
         const recToken = (requiredFj * BUFFER) / fjPerToken
-        // Round the pre-fill UP to a token-aware precision (~$0.01 granularity), so it's a
+        // Round the honest amount UP to a token-aware precision (~$0.01 granularity), so it's a
         // clean number without ever dipping below the computed (buffered) amount. Cheap
         // tokens like USDC get 2 dp; high-value tokens (WBTC) keep more so it's not coarse.
         const centsDecimals = tokenUsd > 0 ? Math.ceil(Math.log10(tokenUsd) + 2) : 2
         const displayDecimals = Math.min(Math.max(centsDecimals, 2), tokenDecimals)
         const factor = 10 ** displayDecimals
-        const rounded = Math.ceil(recToken * factor) / factor
-        if (rounded > 0 && !cancelled) setRecommended({ amount: String(rounded), forType: fuelType })
+        const honestRounded = Math.ceil(recToken * factor) / factor
+        // Sane ceiling: the auto-fill never silently exceeds MAX_AUTOFILL_FRACTION of the bridge.
+        // When the honest requirement is above the ceiling the pool rate is unusable — we pre-fill
+        // the capped amount and the UI warns + offers a one-tap opt-in to the full honest amount.
+        const ceiling = bridgeNum * MAX_AUTOFILL_FRACTION
+        const capped = honestRounded > ceiling
+        const autoFill = capped ? Math.max(Math.floor(ceiling * factor) / factor, 0) : honestRounded
+        const honestPct = bridgeNum > 0 ? (honestRounded / bridgeNum) * 100 : 0
+        if (honestRounded > 0 && !cancelled) {
+          setRecommended({
+            amount: String(autoFill),
+            honestAmount: String(honestRounded),
+            forType: fuelType,
+            capped,
+            honestPct,
+          })
+        }
       } catch {
         if (!cancelled) setRecommended(null)
       }
@@ -170,7 +221,7 @@ function useRecommendedFuelAmount(
       cancelled = true
       clearTimeout(timeout)
     }
-  }, [enabled, fuelType, claimFeeLimit, tokenAddress, tokenDecimals, tokenSymbol, bridgeNum, prices])
+  }, [enabled, fuelType, claimFeeLimit, existingFj, tokenAddress, tokenDecimals, tokenSymbol, bridgeNum, prices])
 
   return recommended
 }
@@ -262,6 +313,9 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
   selfAztecAddress = '',
   fuelRecipientOverride,
   onFuelRecipientOverrideChange,
+  detailOpen: detailOpenProp,
+  onDetailOpenChange,
+  onFuelQuoteChange,
 }) => {
   const bridgeNum = Number(bridgeAmount) || 0
   const fuelNum = Number(fuelAmount) || 0
@@ -273,7 +327,15 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
   // The enable switch and the detail accordion are independent: fuel top-up defaults ON
   // (business logic), but its editing UI (public/private, amount, send-to) stays collapsed
   // until the user asks for it — this is what keeps the card in-viewport by default.
-  const [detailOpen, setDetailOpen] = useState(false)
+  // Controlled when the parent passes detailOpen/onDetailOpenChange (used to enforce mutual
+  // exclusivity with the Transaction breakdown), otherwise falls back to local state.
+  const [detailOpenInternal, setDetailOpenInternal] = useState(false)
+  const detailOpen = detailOpenProp ?? detailOpenInternal
+  const setDetailOpen = (next: boolean | ((open: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(detailOpen) : next
+    if (onDetailOpenChange) onDetailOpenChange(value)
+    else setDetailOpenInternal(value)
+  }
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   // Worst-case FeeJuice the final L2 claim will cost, surfaced up front so the
@@ -287,6 +349,13 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
   const activeFjBalance = usePrivateFj ? privateFeeJuiceBalance : feeJuiceBalance
   const activeFjLoading = usePrivateFj ? privateFeeJuiceBalanceLoading : feeJuiceBalanceLoading
   const activeFjZero = activeFjBalance != null && Number(activeFjBalance) === 0
+  // Existing FeeJuice in the active mode's balance. For PUBLIC fuel this pays the L2 claim
+  // alongside freshly-claimed FJ (existing + swap pay together), so it counts toward sufficiency.
+  // For PRIVATE fuel the fresh bridge self-funds its own landing claim (BridgedFPC mint_and_pay_fee
+  // asserts the fresh amount alone covers gas, issue #47), so existing private FJ does NOT pay that
+  // claim — it only means "no top-up needed" when it already covers the claim on its own.
+  const existingActiveFj =
+    activeFjBalance != null && activeFjBalance !== '--' ? Number(activeFjBalance) : 0
 
   // Privacy mode drives fuel type: a private deposit requires private (BridgedFPC) fuel.
   // Force private while privacy is on, and default back to public when it turns off
@@ -366,21 +435,61 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
   const { prices, isLoading: pricesLoading, error: pricesError } = useTokenPrices()
 
   const { fjOutput, loading, error } = useV4FuelQuote(isValid ? fuelAmount : '', tokenAddress, tokenDecimals)
-  const { sufficient: fuelSufficient, feeLimitFj, loading: sufficiencyLoading } = useFuelSufficiency(fjOutput, fuelType)
+  // feeLimitFj/sufficiencyLoading feed the copy; the actual sufficiency decision is computed
+  // below crediting the user's EXISTING FJ (mode-aware), not from the swap output alone.
+  const { feeLimitFj, loading: sufficiencyLoading } = useFuelSufficiency(fjOutput, fuelType)
+
+  // Mode-aware sufficiency (mirrors the /fee-juice FeeJuiceTopUp fix):
+  //  - needFj: worst-case FJ the L2 claim costs.
+  //  - PUBLIC: existing public FJ + freshly-claimed swap FJ pay the claim together
+  //    → sufficient when (existingActiveFj + swapFj) >= needFj; and if existingActiveFj >= needFj
+  //      the user is fully covered and needs no top-up at all.
+  //  - PRIVATE: the fresh bridge must self-fund its landing claim → swapFj alone must clear needFj
+  //    (but existing private FJ >= needFj still means "already covered, no top-up needed").
+  const needFj = claimFeeLimit != null ? Number(claimFeeLimit) / 1e18 : null
+  const swapFj = fjOutput != null ? Number(fjOutput) / 1e18 : null
+  const alreadyCovered = needFj != null && existingActiveFj >= needFj
+  const effectiveSufficient: boolean | null = alreadyCovered
+    ? true
+    : needFj == null || swapFj == null
+      ? null
+      : usePrivateFj
+        ? swapFj >= needFj
+        : existingActiveFj + swapFj >= needFj
 
   useEffect(() => {
-    if (!fuelEnabled || !isValid) {
+    if (!fuelEnabled) {
       onSufficiencyChange?.(true)
       return
     }
-    if (!sufficiencyLoading && fuelSufficient !== null) {
-      onSufficiencyChange?.(fuelSufficient)
+    // Existing balance already covers the claim → sufficient regardless of any swap.
+    if (alreadyCovered) {
+      onSufficiencyChange?.(true)
+      return
     }
-  }, [fuelEnabled, isValid, fuelSufficient, sufficiencyLoading, onSufficiencyChange])
+    if (!isValid) {
+      onSufficiencyChange?.(true)
+      return
+    }
+    if (!sufficiencyLoading && effectiveSufficient !== null) {
+      onSufficiencyChange?.(effectiveSufficient)
+    }
+  }, [fuelEnabled, isValid, alreadyCovered, effectiveSufficient, sufficiencyLoading, onSufficiencyChange])
 
+  // Fuel is carved OUT of the bridge, so a POSITIVE top-up must be strictly less than the bridge.
+  // An empty/zero amount is valid — it just means "no carve" (e.g. top-up is optional because the
+  // user is already covered), and must never block the bridge button. Only a positive amount that
+  // meets-or-exceeds the bridge is an invalid pair.
+  const fuelAmountValid = !fuelEnabled || fuelNum <= 0 || fuelNum < bridgeNum
   useEffect(() => {
-    onFuelAmountValidChange?.(!fuelEnabled || isValid)
-  }, [fuelEnabled, isValid, onFuelAmountValidChange])
+    onFuelAmountValidChange?.(fuelAmountValid)
+  }, [fuelAmountValid, onFuelAmountValidChange])
+
+  // Surface the live FJ quote up to the parent so the Transaction breakdown can show the
+  // fee-juice destination. Null whenever fuel is off or the amount is invalid.
+  useEffect(() => {
+    onFuelQuoteChange?.(fuelEnabled && isValid ? fjOutput : null)
+  }, [fuelEnabled, isValid, fjOutput, onFuelQuoteChange])
 
   // Auto-size: when gas top-up is switched on with no amount yet, pre-fill an amount
   // sized from the real pool rate to cover the L2 claim gas. One-time per enable
@@ -389,6 +498,7 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
     fuelEnabled,
     fuelType,
     claimFeeLimit,
+    existingActiveFj,
     tokenAddress,
     tokenDecimals,
     tokenSymbol,
@@ -421,7 +531,7 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
   const detailId = 'fuel-toggle-detail'
 
   return (
-    <div className="bg-[#F5F5F5] rounded-md p-3 mt-3 overflow-hidden">
+    <div className="bg-[#F5F5F5] rounded-md p-2.5 mt-1.5 overflow-hidden">
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
@@ -465,7 +575,7 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
           />
         </button>
       </div>
-      <div className="mt-1 flex items-center justify-between text-xs text-latest-grey-500">
+      <div className="mt-0.5 flex items-center justify-between text-xs text-latest-grey-500">
         <span>
           Est. L2 txn gas{' '}
           <span className="font-semibold text-latest-black-300">
@@ -501,10 +611,64 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
       </div>
       <ReactTooltip id="fj-warning" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
 
-      {fuelEnabled && !detailOpen && (
-        <p className="text-xs text-latest-grey-500 mt-1">
-          {fuelNum > 0 ? `${fuelAmount} ${tokenSymbol} reserved for gas — tap to edit` : 'Tap to set an amount'}
-        </p>
+      {/* Already covered: the user's existing FJ meets the claim requirement, so no top-up is
+          needed. Collapsed to a single row — the calm "enough" note and the Set/Edit link share
+          one line (link right-aligned) instead of stacking, reclaiming a row in the card. */}
+      {fuelEnabled && alreadyCovered && (
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-[8px] bg-[#17235E]/[0.08] px-2.5 py-1.5">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <Icon icon="ph:check-circle-fill" width={13} height={13} className="flex-shrink-0 text-[#17235E]" />
+            <span className="truncate text-[11px] font-semibold leading-[15px] text-[#17235E]">Enough Fee Juice</span>
+          </span>
+          {!detailOpen && (
+            <button
+              type="button"
+              onClick={() => setDetailOpen(true)}
+              className="shrink-0 text-[11px] font-medium text-[#17235E] hover:underline"
+            >
+              {fuelNum > 0 ? 'Edit amount' : 'Set an amount'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Bad-rate guard: only when a top-up is ACTUALLY needed (a genuine shortfall — existing FJ
+          doesn't cover the claim) AND the testnet pool would charge more than the sane ceiling to
+          buy the shortfall. We cap the auto-reserve instead of silently spending it — and say so,
+          with a one-tap opt-in to the honest amount. Hidden entirely once the user is covered. */}
+      {fuelEnabled && !alreadyCovered && recommendedFuel?.capped && fuelNum < Number(recommendedFuel.honestAmount) && (
+        <div className="mt-2 flex items-start gap-1.5 rounded-[8px] bg-[#FDECEC] px-2.5 py-1.5">
+          <Icon icon="ph:warning-circle-fill" width={13} height={13} className="mt-0.5 flex-shrink-0 text-[#D92D20]" />
+          <div className="text-[11px] leading-[15px] text-[#737373]">
+            <span className="font-semibold text-[#D92D20]">Gas swap rate is unusually high on testnet.</span>{' '}
+            Fully covering L2 gas would cost ~{recommendedFuel.honestAmount} {tokenSymbol} (
+            {recommendedFuel.honestPct.toFixed(0)}% of your bridge). We reserved a capped{' '}
+            {fuelAmount || '0'} {tokenSymbol} — edit it below, turn gas top-up off, or:
+            <button
+              type="button"
+              onClick={() => {
+                setDetailOpen(true)
+                onAmountChange(recommendedFuel.honestAmount)
+              }}
+              className="mt-1 block font-semibold text-[#81133B] hover:underline"
+            >
+              Reserve {recommendedFuel.honestAmount} {tokenSymbol} to fully cover gas
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Standalone Set/Edit link — only when NOT already covered (the covered row above carries
+          its own inline link). Keeps the collapsed panel to a single actionable row. */}
+      {fuelEnabled && !alreadyCovered && !detailOpen && (
+        <button
+          type="button"
+          onClick={() => setDetailOpen(true)}
+          className="mt-1 flex w-full items-center gap-1 text-left text-xs font-medium text-[#17235E] transition-colors hover:underline"
+        >
+          <Icon icon="ph:sliders-horizontal-fill" width={12} height={12} className="flex-shrink-0" />
+          {fuelNum > 0 ? `${fuelAmount} ${tokenSymbol} reserved for gas. Edit amount` : 'Set an amount'}
+        </button>
       )}
 
       <AnimatePresence initial={false}>
@@ -515,13 +679,16 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: 'easeInOut' }}
+            transition={{ duration: shouldReduceMotion ? 0 : DS_DUR_NORMAL, ease: DS_EASE_DEFAULT }}
             className="overflow-hidden"
           >
             <div className="mt-3 space-y-2">
               <div className="text-xs text-latest-grey-500 space-y-0.5">
                 <div className="flex justify-between items-center h-4">
-                  <span>Public Fee Juice:</span>
+                  <span className="flex items-center gap-1">
+                    <Icon icon="ph:globe-hemisphere-west-fill" width={11} height={11} className="text-[#17235E]" />
+                    Public Fee Juice
+                  </span>
                   <span className="font-semibold">
                     {feeJuiceBalanceLoading ? (
                       <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
@@ -532,7 +699,10 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
                 </div>
                 {hasBridgedFpc && (
                   <div className="flex justify-between items-center h-4">
-                    <span>Private Fee Juice:</span>
+                    <span className="flex items-center gap-1">
+                      <Icon icon="ph:lock-key-fill" width={11} height={11} className="text-[#81133B]" />
+                      Private Fee Juice
+                    </span>
                     <span className="font-semibold">
                       {privateFeeJuiceBalanceLoading ? (
                         <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
@@ -550,6 +720,32 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
                   stay funded for your next transactions.
                 </p>
               </div>
+
+              {/* Concrete sizing guidance: tie the fuel amount to the actual L2 claim requirement. */}
+              {claimFeeFj != null && (
+                <p className="text-[11px] leading-[15px] text-latest-grey-500">
+                  Aim for at least{' '}
+                  <span className="font-semibold text-[#81133B]">≈{claimFeeFj} FJ</span> to cover the L2 claim — the
+                  amount below is auto-sized to reach it.
+                </p>
+              )}
+
+              {/* Privacy mode pays the claim from private (BridgedFPC) fuel; a public claim would deanonymize. */}
+              {isPrivacyModeEnabled && (
+                <div className="flex items-start gap-1.5 rounded-[8px] bg-[#F9EEF3] px-2.5 py-1.5">
+                  <Icon icon="ph:lock-key-fill" width={13} height={13} className="mt-0.5 flex-shrink-0 text-[#81133B]" />
+                  <p className="text-[11px] leading-[15px] text-[#737373]">
+                    <span className="font-semibold text-[#81133B]">Private Fee Juice enforced.</span> Privacy mode pays L2
+                    gas from private fee juice so your claim stays anonymous.
+                  </p>
+                </div>
+              )}
+              {isPrivacyModeEnabled && fuelType === 'public' && (
+                <p className="text-[11px] font-medium text-[#D92D20]">
+                  Public fee juice reveals your claim — use Private to stay anonymous.
+                </p>
+              )}
+
               {pricesError && <p className="text-xs text-amber-600">Live prices unavailable — using fallback prices</p>}
 
               <div className="flex items-center gap-1.5 max-w-full">
@@ -598,7 +794,7 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
                     {formatFjAmount(fjOutput)} Fee
                     Juice
                   </p>
-                  {!sufficiencyLoading && fuelSufficient === false && (
+                  {!sufficiencyLoading && effectiveSufficient === false && (
                     <p className="text-red font-medium mt-1">
                       Not enough gas: ~{formatFjAmount(fjOutput)} FJ from swap but ~{feeLimitFj} FJ needed for L2 claim.
                       {fuelNum >= bridgeNum * 0.9

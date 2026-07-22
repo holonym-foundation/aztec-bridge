@@ -9,6 +9,7 @@ import {
   enforceAddressBinding,
   evaluateDepositLimit,
   evaluateTravelRuleThreshold,
+  getReservedDepositUsd,
   usdToTokenBaseUnits,
 } from '@/lib/address-binding'
 import { screenAddress, SanctionsScreeningUnavailableError } from '@/lib/sanctions'
@@ -71,8 +72,16 @@ export async function GET(request: NextRequest) {
     // Fetch Gitcoin Passport score
     const { score, passing } = await fetchPassportScore(l1Address)
 
+    // Outstanding reservation holds count against both caps below, exactly as the
+    // signing route charges them — so the UI pre-blocks a deposit the signing route
+    // would reject on a hold, instead of enabling the button and dead-ending there.
+    const reservedUsd = await getReservedDepositUsd(authResult.user.id)
+    const reservedRounded = Math.round(reservedUsd * 100) / 100
+
     // Cumulative per-human Travel Rule threshold: once lifetime volume reaches it,
-    // the passport tier is no longer eligible — the user must upgrade to POCH.
+    // the passport tier is no longer eligible — the user must upgrade to POCH. This
+    // uses settled volume only (travelRule.exceeded), so a temporary hold does NOT
+    // route the user to Clean Hands; it only shrinks the remaining budget below.
     const travelRule = await evaluateTravelRuleThreshold({ userId: authResult.user.id })
     if (travelRule.enabled && travelRule.exceeded) {
       return NextResponse.json({
@@ -86,7 +95,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Reflect the Alpha per-day (rolling 24h) cap: the displayed per-tx max is the lesser
-    // of the global Passport max and the user's remaining deposit budget.
+    // of the global Passport max and the user's remaining settled deposit budget. The hold
+    // is NOT folded into the per-tx max (it's transient) — it only zeroes the remaining
+    // budget so the button disables with a hold-specific label.
     let maxAmount = getPassportMaxAmount()
     const limit = await evaluateDepositLimit({ userId: authResult.user.id })
     if (limit.enabled) {
@@ -94,15 +105,19 @@ export async function GET(request: NextRequest) {
       if (remainingBaseUnits < maxAmount) maxAmount = remainingBaseUnits
     }
 
+    const depositRemainingUsd = limit.enabled ? Math.max(0, limit.remainingUsd - reservedUsd) : undefined
+    const travelRuleRemainingUsd = travelRule.enabled ? Math.max(0, travelRule.remainingUsd - reservedUsd) : undefined
+
     return NextResponse.json({
       eligible: passing,
       score,
       threshold: getPassportScoreThreshold(),
       maxAmount: maxAmount.toString(),
-      ...(limit.enabled
-        ? { depositLimitReached: limit.remainingUsd <= 0, remainingUsd: limit.remainingUsd }
+      ...(depositRemainingUsd != null
+        ? { depositLimitReached: depositRemainingUsd <= 0, remainingUsd: depositRemainingUsd }
         : {}),
-      ...(travelRule.enabled ? { travelRuleRemainingUsd: travelRule.remainingUsd } : {}),
+      ...(travelRuleRemainingUsd != null ? { travelRuleRemainingUsd } : {}),
+      ...(reservedRounded > 0 ? { reservedUsd: reservedRounded } : {}),
       reason: passing
         ? undefined
         : `Human Passport score too low (${score}/${getPassportScoreThreshold()} required)`,

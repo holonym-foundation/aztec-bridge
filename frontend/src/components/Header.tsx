@@ -12,10 +12,20 @@ import { usePathname } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { silkUrl } from '@/config/l1.config'
-import { L1_CHAIN_ID } from '@/config'
+import { L1_CHAIN_ID, POCH_MINT_URL } from '@/config'
 import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
-import { useAttestationCheck } from '@/hooks/useAttestationCheck'
+import { useOnboardingStore } from '@/stores/useOnboardingStore'
+import { useL1Humanity } from '@/hooks/useL1Humanity'
+import {
+  useBindingStatus,
+  useSessionLinkedL2,
+  describeConflict,
+  conflictMessage,
+  disclosedLinkedL2,
+  accountLabel,
+  shortAddr,
+} from '@/hooks/useBindingStatus'
 
 /** Delay before auto-starting Aztec wallet discovery after WaaP connects. */
 const AZTEC_AUTO_CONNECT_DELAY_MS = 2000
@@ -36,6 +46,12 @@ if (typeof window !== 'undefined') {
     'ph:list',
     'ph:x',
     'ph:book-open',
+    'ph:gas-pump',
+    'ph:link-simple',
+    'ph:check',
+    'ph:warning-circle',
+    'ph:info',
+    'ph:hand-soap',
   ])
 }
 
@@ -47,18 +63,102 @@ if (typeof window !== 'undefined') {
  * system component ships CSS modules, so the look is ported, not the code.
  */
 const GLASS_PILL =
-  'backdrop-blur-md bg-white/85 border border-[#E5E5E5]/80 shadow-[0_6px_18px_-6px_rgba(15,15,15,0.18),0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200'
+  'backdrop-blur-md bg-white/[0.85] border border-[#E5E5E5]/80 shadow-[0_6px_18px_-6px_rgba(15,15,15,0.18),0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200'
 const GLASS_PILL_HOVER =
   'hover:bg-white hover:shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
 const GLASS_PILL_ACTIVE = 'bg-white shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
 
-// Humanity Score is now wired to the real proof-of-personhood result via
-// useAttestationCheck (POCH first, Passport fallback — see HumanityPointsChip
-// below). Points still has no live source in this app (no points API, hook,
-// or store exists today) — kept as a stubbed placeholder exposed as an
-// optional Header prop so a future pass can wire it without touching the nav
-// layout below.
+/**
+ * Dark-mode counterparts of the glass pill, used when Privacy Mode is on and
+ * the page drops to the deep-maroon background (see ClientLayout's
+ * `showPrivacyBackground` overlay, rgba(31,8,22,0.66)). Same frosted-glass
+ * material — translucent + blurred + bordered — just re-tuned so it reads as
+ * "dark glass" instead of a light pill floating on a dark field: a faint
+ * white wash instead of near-opaque white, and shadows built from black
+ * instead of the light pill's soft warm-grey.
+ */
+const GLASS_PILL_DARK =
+  'backdrop-blur-md bg-white/[0.07] border border-white/[0.14] shadow-[0_6px_18px_-6px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.35)] transition-all duration-200'
+const GLASS_PILL_DARK_HOVER =
+  'hover:bg-white/[0.12] hover:border-white/[0.22] hover:shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.35)]'
+const GLASS_PILL_DARK_ACTIVE = 'bg-white/[0.14] border-white/[0.22] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.35)]'
+
+/** Merges the base/hover/active glass-pill classes for the given theme in one call. */
+function glassPill(isDark: boolean, active = false): string {
+  if (isDark) return `${GLASS_PILL_DARK} ${GLASS_PILL_DARK_HOVER} ${active ? GLASS_PILL_DARK_ACTIVE : ''}`
+  return `${GLASS_PILL} ${GLASS_PILL_HOVER} ${active ? GLASS_PILL_ACTIVE : ''}`
+}
+
+/** Nav/body text — navy on light, near-white on the dark privacy background. */
+function navText(isDark: boolean): string {
+  return isDark ? 'text-white/[0.90]' : 'text-[#17235E]'
+}
+// NOTE: every white/black-alpha class in this file below uses the bracket
+// form (e.g. `text-white/[0.60]`), never the bare `text-white/60` shorthand.
+// tailwind.config.js overrides the `opacity` theme scale to a sparse set
+// ({0,20,40,60,80,100}) for the standalone `opacity-*` utility, and that
+// same scale gates the color-alpha shorthand — any `/<n>` not in that set
+// silently compiles to *no rule at all*, so the element falls back to an
+// inherited color (black text, opaque backgrounds) instead of erroring.
+// Bracket values bypass the scale entirely and always compile.
+
+/**
+ * Muted icon/caret/label tone (was text-gray-400). Still legibly readable
+ * against the dark-maroon surface — white/60, not a washed-out low-contrast
+ * grey — reserved for secondary labels, not decorative/disabled affordances.
+ */
+function mutedIconText(isDark: boolean): string {
+  return isDark ? 'text-white/[0.60]' : 'text-gray-400'
+}
+/** Secondary muted tone (was text-gray-500). */
+function subtleText(isDark: boolean): string {
+  return isDark ? 'text-white/[0.65]' : 'text-gray-500'
+}
+/**
+ * Shield-pink accent used for the "verified" state. On dark, #81133B sits too
+ * close in hue/value to the deep-maroon background to read as an accent, so
+ * this swaps to pink-40 (#FA8FC4) — already part of this app's own palette
+ * (it's one of the MeshGradient stops in ClientLayout) — for contrast.
+ */
+function accentPink(isDark: boolean): string {
+  return isDark ? 'text-[#FA8FC4]' : 'text-[#81133B]'
+}
+/** Row hover tint inside the flat (borderless) wallet-cluster rows. */
+function hoverTint(isDark: boolean): string {
+  return isDark ? 'hover:bg-white/[0.10]' : 'hover:bg-black/[0.04]'
+}
+/** Row active/open tint, same rows as hoverTint. */
+function activeTint(isDark: boolean): string {
+  return isDark ? 'bg-white/[0.14]' : 'bg-black/[0.05]'
+}
+/** Opaque-ish dropdown/panel surface — deliberately more solid than the nav pills so menu text stays legible over whatever's behind it. */
+function panelSurface(isDark: boolean): string {
+  return isDark
+    ? 'bg-[#2A0E1C]/[0.95] backdrop-blur-md border border-white/[0.12]'
+    : 'bg-white/[0.95] backdrop-blur-md border border-[#E5E5E5]/80'
+}
+/** Hairline divider/border inside panels (was border-[#E5E5E5]). */
+function panelDivider(isDark: boolean): string {
+  return isDark ? 'border-white/[0.12]' : 'border-[#E5E5E5]'
+}
+/** Menu-row hover (was hover:bg-latest-grey-300). */
+function menuItemHover(isDark: boolean): string {
+  return isDark ? 'hover:bg-white/[0.10]' : 'hover:bg-latest-grey-300'
+}
+
+// Humanity Score is wired to the real L1-only proof-of-personhood result via
+// useL1Humanity (POCH first, Passport fallback — see HumanityPointsChip below).
+// TODO: Points still has NO live per-user source in this app (no points API,
+// hook, or store exists today). This stub must be replaced by a real fetch from
+// the points backend (the passport/Covenant HUMN Points service) threaded
+// through the `points` prop. Until then the chip shows this placeholder — never
+// a fabricated per-action breakdown.
 const PLACEHOLDER_POINTS = 1240
+
+// Same copy the BridgeHeader guard uses — keep them identical so the warning
+// reads the same whether it fires from the bridge header or the top nav.
+const TRANSFER_LEAVE_CONFIRM =
+  "Leave now? Your in-progress transfer's recovery data could be lost — export a backup first."
 
 /**
  * Canonical "verified / proof-of-personhood" glyph, ported from the
@@ -100,10 +200,20 @@ type WalletDisplayProps = {
   networkIcon?: string
   balance?: string
   onDisconnect?: () => void
-  availableAccounts?: Array<{ alias: string; address: string }>
-  onSelectAccount?: (account: { alias: string; address: string }) => void
+  availableAccounts?: Array<{ alias: string; address: string; index?: number }>
+  onSelectAccount?: (account: { alias: string; address: string; index?: number }) => void
   walletType: WalletType
   loginMethod?: string | null
+  /**
+   * L2 account the SERVER has disclosed as the pair for the connected EVM wallet
+   * (from the authoritative conflict/bound response — never localStorage). When
+   * an account in the Switch Account list matches it, that row is marked "Linked
+   * to your EVM wallet 0x…" so the user can pick it. Undefined when nothing is
+   * disclosed yet — the list shows no "linked" badge rather than guessing.
+   */
+  linkedAccountAddress?: string
+  /** Connected EVM address, used only to label the linked row ("…EVM wallet 0x…"). */
+  linkedEvmAddress?: string
   /**
    * True when this row lives inside the merged wallet-cluster pill (see
    * walletCluster in Header) — drops its own rounded/border/shadow/blur so
@@ -112,7 +222,26 @@ type WalletDisplayProps = {
    * independently-rounded pill on top of it.
    */
   flat?: boolean
+  /**
+   * Which outer corners this flat row owns, matching the cluster's own
+   * rounded-[20px] shape (top row rounds its top corners, bottom row its
+   * bottom corners). Without this the row's hover/active background is a
+   * plain rectangle whose square corner pokes past the cluster's curve —
+   * a flush-edge mismatch at the pill's outer corner (issue #72).
+   */
+  roundedEdge?: 'top' | 'bottom'
+  /** True when Privacy Mode is on and the page is on the dark background. */
+  isDark?: boolean
+  /**
+   * Hard-lock the fund-losing actions in this row's dropdown (Disconnect +
+   * Switch Account) while a transfer is in progress (issue #136). Copy Address /
+   * Open Wallet stay enabled — they can't orphan the transfer.
+   */
+  actionsLocked?: boolean
 }
+
+/** Shown on the locked Disconnect / Switch-Account rows during a transfer. */
+const TRANSFER_LOCK_HINT = 'Locked during transfer to protect your funds.'
 
 function truncateAddr(addr: string): string {
   if (addr.length <= 13) return addr
@@ -136,7 +265,12 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
   onSelectAccount,
   walletType,
   loginMethod,
+  linkedAccountAddress,
+  linkedEvmAddress,
   flat,
+  roundedEdge,
+  isDark = false,
+  actionsLocked = false,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -195,10 +329,10 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
         type="button"
         className={
           flat
-            ? `flex items-center gap-1.5 pr-2 pl-2.5 py-1 h-8 w-full cursor-pointer transition-colors duration-200 ${
-                showDropdown ? 'bg-black/[0.05]' : 'hover:bg-black/[0.04]'
-              }`
-            : `flex items-center gap-1.5 pr-2 pl-1 py-1 h-8 w-full rounded-full ${GLASS_PILL} ${GLASS_PILL_HOVER} ${showDropdown ? GLASS_PILL_ACTIVE : ''} cursor-pointer`
+            ? `flex items-center gap-1.5 sm:gap-2 pr-3.5 sm:pr-4 pl-2.5 py-1 h-8 w-full cursor-pointer transition-colors duration-200 ${
+                roundedEdge === 'top' ? 'rounded-t-[20px]' : roundedEdge === 'bottom' ? 'rounded-b-[20px]' : ''
+              } ${showDropdown ? activeTint(isDark) : hoverTint(isDark)}`
+            : `flex items-center gap-1.5 pr-2 pl-1 py-1 h-8 w-full rounded-full ${glassPill(isDark, showDropdown)} cursor-pointer`
         }
         onClick={handleClick}
         aria-haspopup="true"
@@ -208,24 +342,30 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
           <Image src={walletIcon} alt="" width={20} height={20} />
         </span>
         {networkIcon && <Image src={networkIcon} alt="" width={14} height={14} className="flex-shrink-0" />}
-        <span className="flex flex-col items-start leading-tight min-w-0">
-          <span className="text-xs font-medium text-[#17235E] truncate max-w-[48px] sm:max-w-[88px]" title={address || ''}>
+        {/* min-w-0 lets this block shrink/truncate instead of pushing the
+            caret out — the caret gets its own guaranteed room via the
+            row's pr-4 + gap, not by squeezing against the text (see #72
+            follow-up: caret was crowded against the address/balance). */}
+        <span className="flex flex-col items-start leading-tight min-w-0 flex-1">
+          <span className={`text-xs font-medium ${navText(isDark)} truncate max-w-full`} title={address || ''}>
             {displayName || (address ? truncateAddr(address) : '')}
           </span>
-          {balance && walletType === WalletType.WAAP && <span className="text-[9px] text-gray-500 leading-none">{balance} ETH</span>}
+          {balance && walletType === WalletType.WAAP && (
+            <span className={`text-[9px] ${subtleText(isDark)} leading-none truncate max-w-full`}>{balance} ETH</span>
+          )}
         </span>
         <Icon
           icon="ph:caret-down"
-          width={11}
-          height={11}
-          className={`ml-auto flex-shrink-0 text-gray-400 transition-transform duration-150 ${showDropdown ? 'rotate-180' : ''}`}
+          width={12}
+          height={12}
+          className={`ml-auto flex-shrink-0 ${mutedIconText(isDark)} transition-transform duration-150 ${showDropdown ? 'rotate-180' : ''}`}
         />
       </button>
 
       {showDropdown && (
-        <div className="absolute right-0 mt-2 shadow-lg z-50 min-w-[190px] py-2 rounded-[16px] border border-[#E5E5E5]/80 bg-white/95 backdrop-blur-md">
+        <div className={`absolute right-0 mt-2 shadow-lg z-50 min-w-[190px] py-2 rounded-[16px] ${panelSurface(isDark)} ${navText(isDark)}`}>
           <div
-            className="flex items-center gap-2 px-4 py-2 hover:bg-latest-grey-300 cursor-pointer relative transition-colors duration-150"
+            className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer relative transition-colors duration-150`}
             onClick={handleCopyAddress}
           >
             <Icon icon="ph:copy" width={20} height={20} />
@@ -234,7 +374,7 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
 
           {loginMethod === LOGIN_METHODS.WAAP && (
             <div
-              className="flex items-center gap-2 px-4 py-2 hover:bg-latest-grey-300 cursor-pointer relative transition-colors duration-150"
+              className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer relative transition-colors duration-150`}
               onClick={handleOpenWallet}
             >
               <Icon icon="majesticons:open" width={20} height={20} />
@@ -244,35 +384,103 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
 
           {availableAccounts && availableAccounts.length > 1 && onSelectAccount && (
             <>
-              <div className="border-t border-[#E5E5E5] my-1" />
+              <div className={`border-t ${panelDivider(isDark)} my-1`} />
               <div className="px-4 py-1">
-                <span className="text-xs text-gray-400 font-medium">Switch Account</span>
+                <span className={`text-xs ${mutedIconText(isDark)} font-medium`}>Switch Account</span>
               </div>
-              {availableAccounts
-                .filter((acc) => acc.address !== address)
-                .map((acc) => (
-                  <div
-                    key={acc.address}
-                    className="flex items-center gap-2 px-4 py-2 hover:bg-latest-grey-300 cursor-pointer transition-colors duration-150"
-                    onClick={() => {
-                      onSelectAccount(acc)
-                      setShowDropdown(false)
-                    }}
-                  >
-                    <Icon icon="ph:wallet" width={18} height={18} className="text-gray-500" />
-                    <div className="flex flex-col">
-                      <span className="text-sm">{acc.alias || truncateAddr(acc.address)}</span>
-                      {acc.alias && <span className="text-xs text-gray-400">{truncateAddr(acc.address)}</span>}
+              {/* #136: switching the Aztec account mid-transfer would re-point
+                  the flow at a different L2 recipient and orphan the in-flight
+                  claim, so the switch rows are hard-disabled (not merely
+                  confirm-gated) until the transfer settles. */}
+              {actionsLocked && (
+                <p className={`px-4 pb-1 text-[10px] leading-snug ${subtleText(isDark)}`}>{TRANSFER_LOCK_HINT}</p>
+              )}
+              {/* Current account indicator — the dropdown intentionally hides the
+                  active account from the switch list (you can't switch to what
+                  you're already on), so this non-interactive row keeps it visible
+                  and labelled "Current" so users aren't confused that one account
+                  appears to be "missing". Never rendered as a switchable row, so
+                  there's no duplicate. */}
+              {(() => {
+                const current = availableAccounts.find((a) => a.address === address)
+                const currentLabel = displayName || (current ? accountLabel(current) : address ? truncateAddr(address) : '')
+                return (
+                  <div className="flex items-center gap-2 px-4 py-2 cursor-default">
+                    <Icon icon="ph:check" width={18} height={18} className={accentPink(isDark)} />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm truncate">{currentLabel}</span>
+                      <span className={`text-xs ${mutedIconText(isDark)}`}>
+                        {address ? truncateAddr(address) : ''} · Current
+                      </span>
                     </div>
                   </div>
-                ))}
-              <div className="border-t border-[#E5E5E5] my-1" />
+                )
+              })()}
+              {availableAccounts
+                .filter((acc) => acc.address !== address)
+                .map((acc, i) => {
+                  const isLinked =
+                    !!linkedAccountAddress && acc.address.toLowerCase() === linkedAccountAddress.toLowerCase()
+                  return (
+                    <div
+                      key={acc.address}
+                      className={`flex items-center gap-2 px-4 py-2 transition-colors duration-150 ${
+                        actionsLocked ? 'opacity-50 cursor-not-allowed' : `${menuItemHover(isDark)} cursor-pointer`
+                      }`}
+                      aria-disabled={actionsLocked}
+                      title={actionsLocked ? TRANSFER_LOCK_HINT : undefined}
+                      onClick={() => {
+                        if (actionsLocked) return
+                        onSelectAccount(acc)
+                        setShowDropdown(false)
+                      }}
+                    >
+                      <Icon icon="ph:wallet" width={18} height={18} className={subtleText(isDark)} />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm truncate">{accountLabel(acc, i)}</span>
+                        <span className={`text-xs ${mutedIconText(isDark)}`}>{truncateAddr(acc.address)}</span>
+                      </div>
+                      {isLinked && (
+                        <span
+                          className={`ml-auto flex items-center gap-1 text-[10px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
+                          title={
+                            linkedEvmAddress
+                              ? `Linked to your EVM wallet ${shortAddr(linkedEvmAddress)}`
+                              : 'Linked to your EVM wallet'
+                          }
+                        >
+                          <Icon icon="ph:link-simple" width={14} height={14} className="flex-shrink-0" />
+                          {linkedEvmAddress ? `Linked ${shortAddr(linkedEvmAddress)}` : 'Linked'}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              <div className={`border-t ${panelDivider(isDark)} my-1`} />
             </>
           )}
 
+          {/* #136: disconnecting mid-transfer tears down the wallet session the
+              live /progress view depends on, orphaning the transfer's recovery
+              data — so this is hard-disabled during an active transfer rather
+              than confirm-gated. */}
           <div
-            className="flex items-center gap-2 px-4 py-2 hover:bg-latest-grey-300 cursor-pointer text-red-500 transition-colors duration-150"
-            onClick={handleDisconnect}
+            className={`flex items-center gap-2 px-4 py-2 transition-colors duration-150 ${
+              actionsLocked ? 'opacity-50 cursor-not-allowed' : `${menuItemHover(isDark)} cursor-pointer`
+            } ${
+              // NOTE: `text-red-500` never resolved here — this app's tailwind.config.js
+              // replaces (not extends) the default palette, which drops the red-500/
+              // gray-300/400/500 numbered scales, so `text-red-500` silently compiles to
+              // no rule and this row inherits its color from the dropdown panel instead
+              // (harmless in light mode — that inherited navy still reads fine — but
+              // would've inherited near-white in dark mode with no "danger" cue left).
+              // Pre-existing bug; left as-is for light so that mode stays byte-identical,
+              // fixed only for dark where an unstyled Disconnect loses its meaning.
+              isDark ? 'text-[#FF6B6B]' : 'text-red-500'
+            }`}
+            aria-disabled={actionsLocked}
+            title={actionsLocked ? TRANSFER_LOCK_HINT : undefined}
+            onClick={actionsLocked ? undefined : handleDisconnect}
           >
             <Icon icon="ph:sign-out" width={20} height={20} />
             <span>Disconnect</span>
@@ -291,6 +499,10 @@ interface WalletConnectPillProps {
   title?: string
   /** See WalletDisplayProps.flat — same "flat row inside the merged cluster pill" treatment. */
   flat?: boolean
+  /** See WalletDisplayProps.roundedEdge. */
+  roundedEdge?: 'top' | 'bottom'
+  /** True when Privacy Mode is on and the page is on the dark background. */
+  isDark?: boolean
 }
 
 /**
@@ -299,7 +511,16 @@ interface WalletConnectPillProps {
  * in Header below). Compact — same footprint as the connected WalletDisplay
  * pill so the cluster doesn't jump in width when a chain connects/disconnects.
  */
-const WalletConnectPill: React.FC<WalletConnectPillProps> = ({ icon, label, onClick, disabled, title, flat }) => (
+const WalletConnectPill: React.FC<WalletConnectPillProps> = ({
+  icon,
+  label,
+  onClick,
+  disabled,
+  title,
+  flat,
+  roundedEdge,
+  isDark = false,
+}) => (
   <button
     type="button"
     onClick={onClick}
@@ -307,18 +528,18 @@ const WalletConnectPill: React.FC<WalletConnectPillProps> = ({ icon, label, onCl
     title={title}
     className={
       flat
-        ? `flex items-center gap-1.5 pr-2.5 pl-2.5 py-1 h-8 w-full transition-colors duration-200 ${
-            disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/[0.04] cursor-pointer'
-          }`
-        : `flex items-center gap-1.5 pr-2.5 pl-1 py-1 h-8 w-full rounded-full ${GLASS_PILL} ${
-            disabled ? 'opacity-50 cursor-not-allowed' : `${GLASS_PILL_HOVER} cursor-pointer`
+        ? `flex items-center gap-1.5 sm:gap-2 pr-2.5 sm:pr-3.5 pl-2.5 py-1 h-8 w-full transition-colors duration-200 ${
+            roundedEdge === 'top' ? 'rounded-t-[20px]' : roundedEdge === 'bottom' ? 'rounded-b-[20px]' : ''
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : `${hoverTint(isDark)} cursor-pointer`}`
+        : `flex items-center gap-1.5 pr-2.5 pl-1 py-1 h-8 w-full rounded-full ${isDark ? GLASS_PILL_DARK : GLASS_PILL} ${
+            disabled ? 'opacity-50 cursor-not-allowed' : `${isDark ? GLASS_PILL_DARK_HOVER : GLASS_PILL_HOVER} cursor-pointer`
           }`
     }
   >
     <span className="flex w-6 h-6 items-center justify-center rounded-full bg-latest-grey-300 flex-shrink-0">
       <Image src={icon} alt="" width={15} height={15} />
     </span>
-    <span className="text-xs font-medium text-[#17235E] truncate">{label}</span>
+    <span className={`text-xs font-medium ${navText(isDark)} truncate`}>{label}</span>
   </button>
 )
 
@@ -330,46 +551,63 @@ const WalletConnectPill: React.FC<WalletConnectPillProps> = ({ icon, label, onCl
  * first leg connects, the cluster switches to the stacked per-chain pills
  * (see walletCluster in Header).
  */
-const ConnectWalletPill: React.FC<{ onClick: () => void; connecting?: boolean }> = ({ onClick, connecting }) => (
+const ConnectWalletPill: React.FC<{ onClick: () => void; connecting?: boolean; isDark?: boolean }> = ({
+  onClick,
+  connecting,
+  isDark = false,
+}) => (
   <button
     type="button"
     onClick={onClick}
     disabled={connecting}
     title={connecting ? 'Connecting…' : 'Connect Wallet'}
     aria-label={connecting ? 'Connecting wallet' : 'Connect wallet'}
-    className={`flex items-center justify-center gap-2 h-9 sm:h-10 w-9 sm:w-auto px-0 sm:px-4 rounded-full ${GLASS_PILL} flex-shrink-0 ${
-      connecting ? 'opacity-60 cursor-not-allowed' : `${GLASS_PILL_HOVER} cursor-pointer`
+    className={`flex items-center justify-center gap-2 h-9 sm:h-10 w-9 sm:w-auto px-0 sm:px-4 rounded-full ${isDark ? GLASS_PILL_DARK : GLASS_PILL} flex-shrink-0 ${
+      connecting ? 'opacity-60 cursor-not-allowed' : `${isDark ? GLASS_PILL_DARK_HOVER : GLASS_PILL_HOVER} cursor-pointer`
     }`}
   >
-    <Icon icon="ph:wallet-fill" width={16} height={16} className="text-[#81133B] flex-shrink-0" />
+    <Icon icon="ph:wallet-fill" width={16} height={16} className={`${accentPink(isDark)} flex-shrink-0`} />
     {/* Text collapses first on narrow widths — icon-only affordance below
         `sm`, same collapse pattern as the Privacy Mode label — so this
         pill can never push the hamburger toggle out past the nav edge. */}
-    <span className="hidden sm:inline text-xs sm:text-sm font-medium text-[#17235E] whitespace-nowrap">
+    <span className={`hidden sm:inline text-xs sm:text-sm font-medium ${navText(isDark)} whitespace-nowrap`}>
       {connecting ? 'Connecting…' : 'Connect Wallet'}
     </span>
   </button>
 )
 
 interface HumanityPointsChipProps {
-  /** Real proof-of-personhood result from useAttestationCheck — 'poch' | 'passport' | null. */
+  /** L1-only proof-of-personhood result from useL1Humanity — 'poch' | 'passport' | null. */
   method: 'poch' | 'passport' | null
   passportScore?: number
   passportThreshold?: number
   /** True while the attestation query is in flight (or hasn't resolved yet). */
   isFetching: boolean
   points: number
+  /** True when Privacy Mode is on and the page is on the dark background. */
+  isDark?: boolean
+  /**
+   * Copy shown in the expanded panel when NOT verified. Varies by connection
+   * state (see Header): prompt to connect the EVM wallet when nothing is
+   * connected, or the eligibility reason once a wallet is connected.
+   */
+  unverifiedHint?: string
 }
 
 /**
- * Collapsible Humanity Score + Points indicator. Collapsed = compact chip
- * (score · points); click/tap expands a small panel with the score bar and
- * points detail. Closes on click-outside or Escape.
+ * Compact Humanity Score + Points indicator (#227). The chip itself shows the
+ * live values (score stacked above points), right-justified so they sit flush
+ * against the wallet-cluster divider. The breakdown (score bar, "what is this?"
+ * explanation, Proof of Clean Hands detail, and the HUMN Points readout) is an
+ * info readout, so it lives in a HOVER tooltip (react-tooltip, same pattern as
+ * the network + humanity-info tooltips) rather than a click-to-open panel. No
+ * caret. The tooltip is `clickable`, so tap-to-open also works on touch.
  *
- * Humanity side reflects the real proof-of-personhood result from
- * useAttestationCheck (see Header below):
- *  - method === 'passport' → real numeric passportScore (with the
- *    passportScore/passportThreshold ratio detailed in the panel).
+ * Humanity side reflects the L1-only proof-of-personhood result from
+ * useL1Humanity (see Header below) — it is independent of the L1↔L2 binding and
+ * never shows a binding-conflict message:
+ *  - method === 'passport' → the real cumulative numeric passportScore (shown as
+ *    a bare number, not a fraction).
  *  - method === 'poch' → Proof of Clean Hands has no numeric score, so this
  *    shows a "Verified" state instead of a fabricated number.
  *  - no data yet / still loading / method === null / wallets not connected →
@@ -381,25 +619,9 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
   passportThreshold,
   isFetching,
   points,
+  isDark = false,
+  unverifiedHint = 'Connect your Ethereum wallet to verify personhood.',
 }) => {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [])
-
   const isPassport = method === 'passport' && typeof passportScore === 'number'
   const isPoch = method === 'poch'
   const isVerified = isPassport || isPoch
@@ -410,64 +632,150 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
       ? 100
       : 0
 
+  const scoreDetail = isPassport
+    ? String(passportScore)
+    : isPoch
+      ? 'Verified'
+      : isFetching
+        ? 'Checking…'
+        : 'Not verified'
+
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative">
+      {/* Vertical chip (#111/#227): humanity score stacked ABOVE points. The
+          content is right-justified (items-end + a trimmed right inset) so the
+          values sit flush against the wallet-cluster divider to its right,
+          instead of floating with a gap. No caret — this is an info readout, so
+          the breakdown moved into the hover tooltip below (anchored via
+          data-tooltip-id). */}
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="true"
-        aria-expanded={open}
-        className={`flex items-center gap-1.5 h-9 px-3 rounded-full ${GLASS_PILL} ${GLASS_PILL_HOVER} ${open ? GLASS_PILL_ACTIVE : ''} cursor-pointer`}
+        data-tooltip-id="humanity-points-tooltip"
+        aria-label="Humanity score and HUMN Points. Hover for details"
+        className={`flex items-center justify-end h-14 sm:h-16 pl-2.5 sm:pl-3 pr-1 rounded-[18px] transition-colors duration-200 ${hoverTint(isDark)} cursor-pointer`}
       >
-        <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? 'text-[#81133B]' : 'text-gray-300'}`} />
-        <span className={`text-xs font-semibold ${isVerified ? 'text-[#81133B]' : 'text-gray-400'}`}>{scoreLabel}</span>
-        <span className="w-px h-3.5 bg-[#E5E5E5]" aria-hidden="true" />
-        <HumanPointsIcon className="w-3.5 h-3.5 text-[#17235E]" />
-        <span className="text-xs font-semibold text-[#17235E]">{points.toLocaleString()}</span>
-        <Icon
-          icon="ph:caret-down"
-          width={11}
-          height={11}
-          className={`text-gray-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
-        />
+        <div className="flex flex-col items-end justify-center gap-1.5">
+          {/* Humanity row. The green pulsing glow (ported DS chip--glow) is a
+              halo around this badge — applied ONLY in the verified/green state,
+              mirroring the DS which only glows the green verified chip. The
+              wrapper is a tight rounded container so the box-shadow reads as a
+              circular halo around the bare icon. */}
+          <span className="flex items-center gap-1.5">
+            <span className={`inline-flex items-center justify-center rounded-full ${isVerified ? 'humanity-glow' : ''}`}>
+              <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? accentPink(isDark) : isDark ? 'text-white/[0.25]' : 'text-gray-300'}`} />
+            </span>
+            <span className={`text-xs font-semibold leading-none ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
+          </span>
+          {/* Points row — HUMN Points glyph with slow continuous rotation (ported DS chip--spin-icon). */}
+          <span className="flex items-center gap-1.5">
+            <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
+            <span className={`text-xs font-semibold leading-none ${navText(isDark)}`}>{points.toLocaleString()}</span>
+          </span>
+        </div>
       </button>
 
-      {open && (
-        <div className="absolute right-0 mt-2 z-50 w-[220px] rounded-2xl border border-[#E5E5E5]/80 bg-white/95 backdrop-blur-md shadow-lg p-4 flex flex-col gap-3">
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-medium text-gray-500">Humanity</span>
-              <span className={`text-sm font-semibold ${isVerified ? 'text-[#81133B]' : 'text-gray-400'}`}>
-                {isPassport
-                  ? `${passportScore}${passportThreshold ? `/${passportThreshold}` : ''}`
-                  : isPoch
-                    ? 'Verified'
-                    : isFetching
-                      ? 'Checking…'
-                      : 'Not verified'}
-              </span>
-            </div>
-            <div className="w-full h-1.5 rounded-full bg-[#F5E1EA] overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-[width] duration-300 ${isVerified ? 'bg-[#81133B]' : 'bg-gray-300'}`}
-                style={{ width: `${scorePct}%` }}
-              />
-            </div>
-            {isPoch && (
-              <p className="text-[11px] text-gray-400 mt-1.5">Verified via Proof of Clean Hands — no numeric score needed.</p>
-            )}
-            {!isVerified && (
-              <p className="text-[11px] text-gray-400 mt-1.5">
-                {isFetching ? 'Checking eligibility…' : 'Connect both wallets to verify personhood.'}
+      {/* Hover tooltip carrying the full breakdown (#227). Same react-tooltip
+          used for the network + humanity-info tooltips. `clickable` keeps the
+          links reachable and doubles as tap-to-open on touch. The interior is a
+          dark bubble (react-tooltip's default surface), so its text is styled
+          light in both themes rather than via the page's theme helpers. */}
+      <ReactTooltip
+        id="humanity-points-tooltip"
+        place="bottom"
+        clickable
+        className="z-[100] max-w-[248px]"
+        style={{ padding: '12px', borderRadius: '16px' }}
+        render={() => (
+          <div className="flex flex-col gap-3 text-left">
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-1.5">
+                <span className="text-xs font-medium text-white/[0.70]">Humanity</span>
+                {/* Cumulative score, NOT a fraction, so no "/threshold" denominator (#112/#113). */}
+                <span className={`text-sm font-semibold ${isVerified ? 'text-[#FA8FC4]' : 'text-white/[0.60]'}`}>
+                  {scoreDetail}
+                </span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-white/[0.15] overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-300 ${isVerified ? 'bg-[#FA8FC4]' : 'bg-white/[0.30]'}`}
+                  style={{ width: `${scorePct}%` }}
+                />
+              </div>
+              <p className="text-[11px] leading-snug text-white/[0.75] mt-2">
+                A cumulative proof-of-personhood score. Higher means stronger proof you&apos;re a real, unique human. From{' '}
+                <a
+                  href={POCH_MINT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 align-middle underline font-medium"
+                >
+                  <Icon icon="ph:hand-soap" width={13} height={13} className="text-[#FA8FC4]" />
+                  Proof of Clean Hands
+                </a>{' '}
+                and{' '}
+                <a
+                  href="https://app.passport.xyz"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 align-middle underline font-medium"
+                >
+                  <Icon icon="ph:identification-card" width={13} height={13} className="text-[#FA8FC4]" />
+                  Human Passport
+                </a>
+                .
               </p>
-            )}
+              {isPoch && (
+                <div className="mt-2">
+                  {/* Proof of Clean Hands badge (#127/#128). The L1 humanity
+                      result only tells us POCH is satisfied (method === 'poch');
+                      it carries NO mint date or expiry, so this shows the PoCH
+                      mark + an explanation, never fabricated dates.
+                      TODO(poch-meta): surface actual mint/expiry by fetching the
+                      Clean-Hands SBT / attestation metadata (a new data path,
+                      not exposed by the current eligibility route). */}
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icon icon="ph:hand-soap" width={15} height={15} className="text-[#FA8FC4]" />
+                    <span className="text-[11px] font-medium text-[#FA8FC4]">Proof of Clean Hands</span>
+                  </span>
+                  <p className="text-[11px] leading-snug text-white/[0.75] mt-1">
+                    A privacy-preserving proof you&apos;re a real, sanctions-screened human. No numeric score needed. Mint date and expiry aren&apos;t available in this view yet.{' '}
+                    <a
+                      href={POCH_MINT_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline font-medium"
+                    >
+                      Manage
+                    </a>
+                  </p>
+                </div>
+              )}
+              {!isVerified && (
+                <p className="text-[11px] leading-snug text-white/[0.70] mt-1.5">
+                  {isFetching ? 'Checking eligibility…' : unverifiedHint}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.15]">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-white/[0.70]">
+                  <HumanPointsIcon className="w-3.5 h-3.5" />
+                  HUMN Points
+                </span>
+                <span className="text-sm font-semibold text-white/[0.90]">{points.toLocaleString()}</span>
+              </div>
+              {/* TODO: `points` is still the PLACEHOLDER_POINTS stub. Shield has no
+                  per-user points source yet. The real value must be fetched from the
+                  points backend (the passport/Covenant HUMN Points service) and
+                  threaded through the `points` prop. Do NOT fabricate a per-action
+                  breakdown here, show only the real single balance once it's wired. */}
+              <p className="text-[11px] leading-snug text-white/[0.75]">
+                HUMN Points reward real, verified humans, not bots, across human.tech.
+              </p>
+            </div>
           </div>
-          <div className="flex items-center justify-between pt-1 border-t border-[#E5E5E5]">
-            <span className="text-xs font-medium text-gray-500 pt-1">Points</span>
-            <span className="text-sm font-semibold text-[#17235E] pt-1">{points.toLocaleString()}</span>
-          </div>
-        </div>
-      )}
+        )}
+      />
     </div>
   )
 }
@@ -479,13 +787,6 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINTS }) => {
-  // Real proof-of-personhood result (POCH first, Passport fallback). Called
-  // unconditionally per Rules of Hooks — the hook self-gates via its own
-  // `enabled` (both wallets connected + address + auth token present), so
-  // before that it just sits at isFetching/no-data and the chip renders its
-  // neutral state.
-  const { data: attestation, isFetching: isAttestationFetching } = useAttestationCheck()
-
   const {
     waapAddress,
     isWaapConnected,
@@ -503,7 +804,87 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     switchAztecAccount,
   } = useWalletStore()
 
-  const { isPrivacyModeEnabled, setPrivacyModeEnabled } = useBridgeStore()
+  // Humanity is an L1-ONLY property of the EVM wallet (issue #122) — it has
+  // NOTHING to do with the L1↔L2 binding. Sourced purely from useL1Humanity so
+  // the Humanity chip can never surface a binding-conflict message; binding
+  // problems live only in the wallet-cluster notice/toast below. Self-gates on
+  // `waapAddress`, so it's a no-op until the EVM wallet connects.
+  const { data: l1Humanity, isFetching: isL1HumanityFetching } = useL1Humanity(waapAddress || undefined)
+
+  // Authoritative binding for the connected pair (needs both wallets + JWT).
+  const { data: bindingStatus } = useBindingStatus()
+
+  const humanitySource = {
+    method: l1Humanity?.method ?? null,
+    passportScore: l1Humanity?.passportScore,
+    passportThreshold: l1Humanity?.passportThreshold,
+    isFetching: isL1HumanityFetching,
+    reason: l1Humanity?.reason,
+  }
+
+  const unverifiedHint = !isWaapConnected
+    ? 'Connect your Ethereum wallet to verify personhood.'
+    : humanitySource.reason
+      ? humanitySource.reason
+      : 'This wallet has not verified its humanity yet.'
+
+  // ─── Pairing / binding conflict (issues #98, #97, #100, #120, #124) ──
+  // SERVER TRUTH ONLY. On a server-side conflict, describeConflict names the
+  // exact stored counterpart from the CURRENT pair's response (privacy-safe).
+  // When the connected pair matches the stored binding the status is 'bound',
+  // describeConflict returns null, and every notice/toast below clears — the
+  // conflict UI is derived entirely from this live status, so it can't go stale.
+  const conflict = describeConflict(bindingStatus?.binding, waapAddress, aztecAddress)
+
+  // The Aztec account the SERVER says this EVM wallet is bound to (disclosed on
+  // an evm-linked-elsewhere conflict). Live off the CURRENT response — used for
+  // the inline conflict notice so it clears the instant the pair matches.
+  const serverLinkedL2 = disclosedLinkedL2(conflict)
+
+  // Persistent (session) view of the linked Aztec account for the connected EVM
+  // wallet — remembered from any earlier server disclosure this session (bound
+  // or conflict), so the "Linked" badge on the Switch Account list survives a
+  // dropdown reopen even after the transient conflict response has cleared. In
+  // memory only (never localStorage); null until something has been disclosed.
+  const sessionLinkedL2 = useSessionLinkedL2(waapAddress)
+
+  // Is that server-disclosed linked account one of the Azguard accounts the user
+  // already has connected? Used only to tune the inline notice copy.
+  const linkedAccountConnected =
+    !!serverLinkedL2 && availableAccounts.some((a) => a.address.toLowerCase() === serverLinkedL2.toLowerCase())
+
+  const walletNotice = !conflict
+    ? null
+    : serverLinkedL2 && !linkedAccountConnected
+      ? `Your EVM wallet is linked to Aztec account ${shortAddr(serverLinkedL2)} — select/connect that account to continue.`
+      : conflictMessage(conflict)
+
+  const { isPrivacyModeEnabled, setPrivacyModeEnabled, getProgressSteps } = useBridgeStore()
+
+  // In-progress transfer detection — same derivation BridgeHeader uses: at
+  // least one active step, not all completed, and not errored. While true, the
+  // wallet Disconnect + Switch Account are HARD-DISABLED (issue #136 — they'd
+  // orphan the live transfer's recovery data), and the brand-link-to-home still
+  // confirms before tearing down the /progress view. Idle, completed and errored
+  // flows navigate/disconnect freely.
+  const progressSteps = getProgressSteps()
+  const isTransferInProgress =
+    progressSteps.some((s) => s.status === 'active') &&
+    !progressSteps.every((s) => s.status === 'completed') &&
+    !progressSteps.some((s) => s.status === 'error')
+
+  const { splashActive, requestShowSplash } = useOnboardingStore()
+
+  // Privacy Mode swaps the page to the deep-maroon background (see
+  // ClientLayout's `showPrivacyBackground`) — the nav's light glass-pill
+  // material reads poorly there, so every pill/text/hover style below is
+  // gated on this same flag to switch to its dark-mode counterpart.
+  //
+  // Exception: while the onboarding splash is up, the nav is lifted ABOVE that
+  // overlay onto the splash's LIGHT paper field (the dark background is hidden
+  // behind the splash). Rendering the dark nav there is white-on-light-pink and
+  // unreadable, so stay light-styled until the splash dismisses (#94).
+  const isDark = isPrivacyModeEnabled && !splashActive
   const { openModal: openHowItWorks } = useExplainerStore()
   const notify = useToast()
 
@@ -515,7 +896,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   const { data: l1TokenBalances = [] } = useL1TokenBalances()
 
   const sepoliaNativeTokens = l1TokenBalances.find(
-    (token) => token.type === 'native' && token.network?.chainId === L1_CHAIN_ID,
+    (t) => t.type === 'native' && t.network?.chainId === L1_CHAIN_ID,
   )
   const l1NativeBalance = sepoliaNativeTokens?.balance_formatted?.toString()
 
@@ -526,6 +907,14 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // No forced auto-switch (reverted #120): selecting a "wrong" Aztec account is
+  // allowed and never silently overridden — the app must never change the user's
+  // chosen account for them. Instead the linked account is MARKED in the switch
+  // list (see linkedAccountAddress below) and the primary action button is
+  // guarded up-front in page.tsx when the connected pair is a conflict, so a
+  // guaranteed-to-fail bridge can't be started. The conflict is surfaced inline
+  // under the wallet cluster (walletNotice) — no toast.
 
   // Auto-connect to Aztec when WaaP wallet is connected
   useEffect(() => {
@@ -612,17 +1001,22 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   }
 
   const privacyToggle = (
+    // Flat segment, not a pill (#185). Carries no glass-pill fill/shadow/blur of
+    // its own so it doesn't read as a pill stacked on the main nav pill. The
+    // toggle switch itself supplies the interactive affordance, and a hairline on
+    // the wrapper (see below) divides it from the centered nav links.
     <div
-      className={`flex px-[3px] py-[3px] pl-[8px] items-center gap-[6px] sm:gap-[8px] h-9 sm:h-10 rounded-full ${GLASS_PILL} ${GLASS_PILL_HOVER} privacy-mode-toggle relative flex-shrink-0`}
+      className={`flex items-center gap-[6px] sm:gap-[8px] h-9 sm:h-10 privacy-mode-toggle relative flex-shrink-0`}
       data-tooltip-id="privacy-mode-tooltip"
       data-tooltip-content={isPrivacyModeEnabled ? 'Private transactions enabled' : 'Enable private transactions'}
     >
-      <Image src="/assets/svg/human.aztec.svg" alt="Aztec" width={24} height={24} />
-      <span className="hidden sm:inline text-[#0A0A0A] text-[13px] font-[450] leading-[20px] font-sans whitespace-nowrap">
+      <span
+        className={`hidden sm:inline ${isDark ? 'text-white/[0.90]' : 'text-[#0A0A0A]'} text-[13px] font-[450] leading-[20px] font-sans whitespace-nowrap`}
+      >
         Privacy Mode
       </span>
       <button
-        className={`flex w-[36px] h-[22px] sm:w-[40px] sm:h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none relative z-10 flex-shrink-0 ${
+        className={`flex w-[36px] h-[22px] sm:w-[40px] sm:h-[24px] py-[3px] px-1 items-center rounded-full transition-all duration-200 border-0 focus:outline-none relative z-10 flex-shrink-0 ${
           isPrivacyModeEnabled ? 'bg-[#3B3B3B] justify-end pl-[17px] sm:pl-[19px]' : 'bg-[#D4D4D4] justify-start pr-[17px] sm:pr-[19px]'
         }`}
         onClick={() => {
@@ -642,7 +1036,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         tabIndex={0}
         style={{ border: 'none' }}
       >
-        <span className="flex w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] p-[1px] justify-center items-center flex-shrink-0 rounded-[6px] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.25)] transition-transform duration-200">
+        <span className="flex w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] p-[1px] justify-center items-center flex-shrink-0 rounded-full bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.25)] transition-transform duration-200">
           <Image src="/assets/svg/shield.svg" alt="Shield" width={12} height={12} />
         </span>
       </button>
@@ -655,18 +1049,20 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   // state + dropdown without ever showing two oversized "Connect" pills at
   // once (that was overflowing the nav — see PR feedback).
   const walletCluster = !isWaapConnected && !isAztecConnected ? (
-    <ConnectWalletPill onClick={handleConnectWallet} connecting={isL1Connecting} />
+    <ConnectWalletPill onClick={handleConnectWallet} connecting={isL1Connecting} isDark={isDark} />
   ) : (
-    // Merged wallet cluster — ONE rounded glass-pill container (the
-    // GLASS_PILL material lives here, once) holding the ETH row and Aztec
-    // row flush against each other, separated only by a 1px divider
-    // (`divide-y`). Each row renders `flat` (see WalletDisplay/
-    // WalletConnectPill above) so it has no independent rounded
-    // border/shadow/blur of its own — previously each row carried its own
-    // full GLASS_PILL treatment, which read as two stacked pills rather
-    // than one unified control.
+    // Merged wallet cluster — a single FLAT segment, not a pill. It holds the
+    // ETH row and the Aztec row flush against each other, split by one hairline
+    // divider (below). Deliberately NOT a glass pill: a raised pill here read as
+    // a second pill sitting ON TOP of the nav's own pill ("pill on pill"), so it
+    // carries no fill/shadow/blur and is instead segmented off with a single
+    // vertical hairline on its left edge. Each row renders `flat` (plain
+    // rectangular rows, no rounded/border/shadow of their own) so the two
+    // addresses read as one clean flush segment.
     <div
-      className={`flex flex-col w-[96px] sm:w-[156px] flex-shrink-0 rounded-[20px] divide-y divide-[#E5E5E5]/70 ${GLASS_PILL} ${GLASS_PILL_HOVER}`}
+      className={`flex flex-col w-[150px] sm:w-[252px] flex-shrink-0 pl-2 sm:pl-3 border-l ${
+        isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
+      }`}
     >
       {isWaapConnected ? (
         <WalletDisplay
@@ -679,6 +1075,8 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           walletType={WalletType.WAAP}
           loginMethod={loginMethod}
           flat
+          isDark={isDark}
+          actionsLocked={isTransferInProgress}
         />
       ) : (
         <WalletConnectPill
@@ -688,8 +1086,20 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           disabled={isL1Connecting}
           title="Connect Ethereum (L1) wallet"
           flat
+          isDark={isDark}
         />
       )}
+
+      {/* Single flush divider (#108/#109). Runs edge-to-edge across the full
+          width of the wallet segment — a plain full-bleed hairline separating
+          the EVM row from the Aztec row. A subtle dark hairline on the light
+          glass / a faint white hairline on the dark privacy surface, so it
+          reads as one crisp border in either theme without becoming a bright
+          bar. */}
+      <div
+        className={`h-px w-full flex-shrink-0 ${isDark ? 'bg-white/[0.12]' : 'bg-black/[0.08]'}`}
+        aria-hidden="true"
+      />
 
       {isAztecConnected ? (
         <WalletDisplay
@@ -700,17 +1110,22 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           onDisconnect={disconnectAztecWallet}
           availableAccounts={availableAccounts}
           onSelectAccount={switchAztecAccount}
+          linkedAccountAddress={sessionLinkedL2 || undefined}
+          linkedEvmAddress={waapAddress || undefined}
           walletType={WalletType.AZTEC}
           flat
+          isDark={isDark}
+          actionsLocked={isTransferInProgress}
         />
       ) : (
         <WalletConnectPill
           icon="/assets/svg/aztec-wallet-logo.svg"
-          label={isL2Connecting ? '…' : 'Connect'}
+          label={isL2Connecting ? '…' : 'Connect Aztec Wallet'}
           onClick={isWaapConnected ? handleConnectAztecOnly : handleConnectWallet}
           disabled={isL2Connecting}
           title="Connect Aztec (L2) wallet"
           flat
+          isDark={isDark}
         />
       )}
     </div>
@@ -719,7 +1134,11 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   const secondaryNav = (
     <>
       {credentials && (
-        <div className="text-sm font-medium cursor-pointer hover:text-latest-grey-800 transition-colors duration-200 whitespace-nowrap">
+        <div
+          className={`text-sm font-medium cursor-pointer transition-colors duration-200 whitespace-nowrap ${navText(isDark)} ${
+            isDark ? 'hover:text-white' : 'hover:text-latest-grey-800'
+          }`}
+        >
           {credentials}
         </div>
       )}
@@ -728,34 +1147,68 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           openHowItWorks()
           setMobileMenuOpen(false)
         }}
-        className="flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full text-[#17235E] hover:bg-black/[0.04] transition-colors duration-200 whitespace-nowrap"
+        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
       >
-        <Icon icon="ph:question" width={16} height={16} className="text-[#737373]" />
+        <Icon icon="ph:question" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
         How it works
       </button>
       <Link
         href="/docs"
         onClick={() => setMobileMenuOpen(false)}
-        className="flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full text-[#17235E] hover:bg-black/[0.04] transition-colors duration-200 whitespace-nowrap"
+        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
       >
-        <Icon icon="ph:book-open" width={16} height={16} className="text-[#737373]" />
+        <Icon icon="ph:book-open" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
         Docs
       </Link>
-      <DeploymentSelector />
+      {/* Direct, always-available entry to the Fee Juice screen — previously only
+          reachable by failing a claim (#146). Same pattern/tone as the sibling
+          links; shared by the desktop nav and the mobile panel so the label stays
+          visible in both. whitespace-nowrap keeps it from wrapping the nav row. */}
+      <Link
+        href="/fee-juice"
+        onClick={() => setMobileMenuOpen(false)}
+        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+      >
+        <Icon icon="ph:gas-pump" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
+        Fee Juice
+      </Link>
     </>
   )
 
   return (
     <header className="w-full px-3 sm:px-4 pt-3 flex items-stretch gap-2 sm:gap-3 relative" style={{ containerType: 'inline-size' }}>
-      {/* Brand pill — Shield lockup, ported from the SiteTopBar brand-pill slot.
-          No fixed height: `items-stretch` on the header row matches it to the
-          main pill's natural (content-driven) height, whatever that is. */}
-      <Link
-        href="/"
-        className={`flex-shrink-0 flex items-center justify-center min-h-12 sm:min-h-14 px-3 sm:px-5 rounded-full ${GLASS_PILL} ${GLASS_PILL_HOVER}`}
+      {/* Brand pill — Shield lockup (ported from the SiteTopBar brand-pill slot)
+          with the version + network selector stacked directly UNDER it (#113).
+          One glass pill holds a column: the home-link logo on top, the
+          DeploymentSelector beneath. The logo image keeps its exact 100×27
+          dimensions so the brand mark's size/proportions are unchanged — the
+          pill just gains a thin second line. The selector is a bare control
+          here (no pill material of its own) so it reads as part of the brand
+          pill, not a second stacked pill. No fixed height: `items-stretch` on
+          the header row matches this column to the main pill's content-driven
+          height. */}
+      <div
+        className={`relative z-40 flex-shrink-0 flex flex-col items-center justify-center gap-1.5 min-h-11 sm:min-h-12 px-3 sm:px-5 py-2 rounded-[26px] ${glassPill(isDark)}`}
       >
-        <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={100} height={27} />
-      </Link>
+        <Link
+          href="/"
+          onClick={(e) => {
+            // Preserve the state-loss guard: while a transfer is in progress,
+            // returning to the splash tears down the live /progress view, so
+            // confirm first and bail if the user cancels.
+            if (isTransferInProgress && !window.confirm(TRANSFER_LEAVE_CONFIRM)) {
+              e.preventDefault()
+              return
+            }
+            // Not just route home — re-show the onboarding splash (#103).
+            requestShowSplash()
+          }}
+          className="flex items-center justify-center hover:opacity-80 transition-opacity duration-200"
+        >
+          <Image src="/assets/svg/shield-lockup-maroon.svg" alt="Shield" width={100} height={27} />
+        </Link>
+        <DeploymentSelector />
+      </div>
 
       {/* Main pill — secondary nav (left) + always-on cluster (right), ported
           from the SiteTopBar main-pill / bar-right structure. Height is
@@ -764,28 +1217,75 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           overflowing it — a fixed height here was clipping/spilling the
           2-pill stack outside the rounded pill shape. */}
       <div
-        className={`flex-1 min-w-0 flex items-center justify-between gap-2 min-h-12 sm:min-h-14 py-1.5 sm:py-2 px-2 sm:px-3 rounded-full ${GLASS_PILL} ${GLASS_PILL_HOVER}`}
+        // Asymmetric horizontal inset (#211): Privacy Mode is pinned to the far
+        // left of this pill, and a symmetric px-2/px-3 left it crowding the pill's
+        // left border. The left inset is widened (pl-4 sm:pl-5) so the label sits
+        // clear of the edge; the right inset (pr-2 sm:pr-3) is unchanged so the
+        // wallet cluster's spacing and the no-scroll budget stay as they were.
+        className={`flex-1 min-w-0 flex items-center justify-between gap-2 min-h-11 sm:min-h-12 py-1 sm:py-1.5 pl-4 pr-2 sm:pl-5 sm:pr-3 rounded-full ${glassPill(isDark)}`}
       >
-        <nav className="hidden lg:flex items-center gap-1 min-w-0" aria-label="Secondary">
+        {/* Left: Privacy Mode pinned to the far left of the middle section (#159).
+            Flat segment now (#185). A flush hairline on its right edge divides it
+            from the centered nav links at lg+ (where those links are present),
+            mirroring the wallet cluster's border-l hairline instead of stacking a
+            pill. Below lg the border collapses to 0 width so no hairline floats in
+            the empty gap. */}
+        <div
+          className={`flex items-center flex-shrink-0 lg:border-r lg:pr-3 ${
+            isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
+          }`}
+        >
+          {privacyToggle}
+        </div>
+
+        {/* Center: the remaining nav links, centered in the bar (#159). flex-1
+            fills the gap between the Privacy toggle and the right cluster while
+            justify-center pins the links to the middle. Hidden below lg, where
+            they move into the mobile panel. */}
+        <nav className="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0" aria-label="Secondary">
           {secondaryNav}
         </nav>
 
-        {/* Right cluster: humanity/points chip collapses first on narrow
-            widths, Privacy Mode + the wallet cluster never collapse. */}
-        <div className="flex items-center gap-1.5 sm:gap-3 ml-auto min-w-0">
+        {/* Right: humanity/points chip, then the wallet cluster and mobile
+            toggle (chip sits flush beside the wallet/account stack, #111). The
+            chip collapses first on narrow widths; the wallet cluster never
+            collapses. */}
+        <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0 min-w-0">
           <div className="hidden sm:block flex-shrink-0">
             <HumanityPointsChip
-              method={attestation?.method ?? null}
-              passportScore={attestation?.passportScore}
-              passportThreshold={attestation?.passportThreshold}
-              isFetching={isAttestationFetching}
+              method={humanitySource.method}
+              passportScore={humanitySource.passportScore}
+              passportThreshold={humanitySource.passportThreshold}
+              isFetching={humanitySource.isFetching}
               points={points}
+              isDark={isDark}
+              unverifiedHint={unverifiedHint}
             />
           </div>
 
-          {privacyToggle}
-
-          {walletCluster}
+          {/* Wallet cluster + an actionable binding notice anchored beneath it.
+              A server conflict (or the device-local pre-warn) is surfaced here
+              inline — naming the exact counterpart account — instead of being
+              buried in the tutorial (issue #98). */}
+          <div className="relative flex-shrink-0">
+            {walletCluster}
+            {walletNotice && (
+              <div
+                role="alert"
+                className={`absolute right-0 top-full mt-2 z-50 w-[240px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-3 flex items-start gap-2 border-l-2 ${
+                  conflict ? 'border-l-[#E3357E]' : 'border-l-[#FA8FC4]'
+                }`}
+              >
+                <Icon
+                  icon="ph:warning-circle"
+                  width={16}
+                  height={16}
+                  className={`mt-[1px] flex-shrink-0 ${accentPink(isDark)}`}
+                />
+                <p className={`text-[11px] leading-snug ${navText(isDark)}`}>{walletNotice}</p>
+              </div>
+            )}
+          </div>
 
           {/* Secondary-nav toggle — only needed below lg, where "How it
               works" / version selector move out of the main row. Privacy
@@ -793,21 +1293,19 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
               width, so they never end up hidden behind this button. */}
           <button
             onClick={toggleMobileMenu}
-            className="lg:hidden flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full hover:bg-black/[0.04] transition-colors duration-200"
+            className={`lg:hidden flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full ${hoverTint(isDark)} transition-colors duration-200`}
             aria-label="Toggle menu"
             aria-expanded={mobileMenuOpen}
           >
-            <Icon icon={mobileMenuOpen ? 'ph:x' : 'ph:list'} width={20} height={20} className="text-[#17235E]" />
+            <Icon icon={mobileMenuOpen ? 'ph:x' : 'ph:list'} width={20} height={20} className={navText(isDark)} />
           </button>
         </div>
       </div>
 
-      {/* Secondary-nav panel (credentials / How it works / version selector) */}
+      {/* Secondary-nav panel (credentials / How it works / Docs) — the version
+          + network selector lives under the Shield brand pill now (#113), not here. */}
       {mobileMenuOpen && (
-        <div
-          ref={mobileMenuRef}
-          className="lg:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 bg-white/95 backdrop-blur-md border border-[#E5E5E5]/80 rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2"
-        >
+        <div ref={mobileMenuRef} className={`lg:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}>
           {secondaryNav}
         </div>
       )}

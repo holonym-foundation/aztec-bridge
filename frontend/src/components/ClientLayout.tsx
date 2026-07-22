@@ -5,6 +5,9 @@ import BannerAztecTestnet from '@/components/BannerAztecTestnet'
 import Footer from '@/components/Footer'
 import Header from '@/components/Header'
 import ShieldOnboarding from '@/components/ShieldOnboarding'
+import BridgeStepsRail from '@/components/BridgeStepsRail'
+import ActivityDrawer from '@/components/ActivityDrawer'
+import NotificationsDrawer from '@/components/NotificationsDrawer'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { motion } from 'framer-motion'
@@ -22,11 +25,26 @@ export default function ClientLayout({
   const isDocs = pathname?.startsWith('/docs') ?? false
   // Docs is a neutral reading view — keep the light background even when privacy mode is on.
   const showPrivacyBackground = isPrivacyModeEnabled && !isDocs
-  // Only the bridge page (root route) enforces the no-scroll viewport budget. Other routes
-  // (docs, activity, progress) scroll normally, so the footer keeps its default position there.
-  const isBridgeRoute = pathname === '/'
+  // The bridge page (root route) and the transaction-progress screen both enforce the
+  // no-scroll viewport budget (card capped at 90vh-5rem with internal scroll; footer nested
+  // up into the card region's bottom padding). Other routes (docs, activity) scroll normally,
+  // so the footer keeps its default position there.
+  const isNoScrollRoute = pathname === '/' || pathname === '/progress'
+  // The Tutorial + Activity drawers live here (not in any page) so they persist
+  // across the app's main screens instead of disappearing on navigation. Shown on
+  // the bridge, progress and activity flows; hidden on docs/complete/claim-fuel
+  // where they'd be noise. The centered card owns no part of this — the dock is a
+  // fixed, self-contained overlay, so card centering and the no-scroll budget are
+  // untouched.
+  const showDrawers =
+    pathname === '/' ||
+    (pathname?.startsWith('/progress') ?? false) ||
+    (pathname?.startsWith('/activity') ?? false)
   return (
-    <div className="relative min-h-screen flex flex-col w-full min-w-0 overflow-x-hidden" style={{ minHeight: '100vh', minWidth: 0 }}>
+    <div
+      className={`relative flex flex-col w-full min-w-0 overflow-x-hidden ${isNoScrollRoute ? 'h-screen overflow-y-hidden' : 'min-h-screen'}`}
+      style={isNoScrollRoute ? { height: '100vh', minWidth: 0 } : { minHeight: '100vh', minWidth: 0 }}
+    >
       {/* Onboarding is skipped on docs so the guides render without connecting a wallet. */}
       {!isDocs && <ShieldOnboarding />}
       {/* Background: clean near-white surface on docs, pink paper-shader field elsewhere. */}
@@ -41,6 +59,11 @@ export default function ClientLayout({
         />
         <motion.div
           className="absolute inset-0"
+          // initial={false} renders the background at its target on mount (no
+          // enter animation) so when Privacy Mode is the default the dark field
+          // is applied synchronously on first paint instead of animating up
+          // from light — the toggle transition on later changes is unaffected (#94).
+          initial={false}
           animate={{
             background: showPrivacyBackground
               ? 'rgba(31,8,22,0.66)'
@@ -75,13 +98,28 @@ export default function ClientLayout({
       {/* Main content */}
       <div className="relative z-20 flex flex-col flex-grow min-h-0">
         <div className='flex-grow'>{children}</div>
-        {/* No-scroll budget: the bridge page's RootStyle region has a fixed 90vh floor
-            with empty vertical padding below the centered card. Nest the (short, single-row)
-            footer up into that padding so nav + card region + footer stay within 100vh and
-            the page never scrolls. Footer content is unchanged; scoped to the bridge route so
-            longer scrolling pages keep the footer in its normal flow position. */}
-        <Footer className={isBridgeRoute ? '-mt-8' : ''} />
+        {/* On the no-scroll routes the outer container is pinned to exactly 100vh and clips
+            overflow, so the footer sits flush at the bottom edge — the flex-grow content
+            region above absorbs the slack. A negative top-margin here would instead lift the
+            footer off the bottom and expose a dead strip beneath it. */}
+        <Footer />
       </div>
+      {/* Persistent binder dock: the drawer tabs stacked on the RIGHT edge,
+          vertically centered. Fixed + pointer-events-none so it never adds page
+          width/scroll and clicks pass through the gaps; each drawer re-enables its
+          own pointer events. Tutorial sits above Activity above Messages; each
+          opens its panel leftward as an absolutely-positioned overlay, so hovering
+          one never reflows (splits apart) the others (#114). Desktop/tablet only
+          (md+): the centered 360px card leaves no gutter on phones, so the tab
+          would sit over the card edge — on mobile the same Tutorial/Activity live
+          in the Header nav. */}
+      {showDrawers && (
+        <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
+          <BridgeStepsRail />
+          <ActivityDrawer />
+          <NotificationsDrawer />
+        </div>
+      )}
       <HowItWorksModal />
     </div>
   )

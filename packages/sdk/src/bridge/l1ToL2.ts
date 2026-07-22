@@ -480,6 +480,30 @@ export async function executeL2Claim(
   }
 }
 
+// A flat gas ceiling forces MetaMask to reserve `gasLimit × gasPrice` of ETH up
+// front for its pre-flight balance check, regardless of what the tx actually
+// burns — a 16M ceiling demanded ~0.03 ETH free balance and blocked users who
+// held enough for the real cost. Estimate against the node and buffer instead;
+// only fall back to a fixed (but far lower) ceiling if estimation reverts.
+async function estimateL1BridgeGas(
+  publicClient: ReturnType<typeof createL1PublicClient>,
+  tx: { from: string; to: string; data: string },
+  fallbackGas: bigint,
+): Promise<string> {
+  try {
+    const est = await publicClient.estimateGas({
+      account: tx.from as `0x${string}`,
+      to: tx.to as `0x${string}`,
+      data: tx.data as `0x${string}`,
+    })
+    // 1.5× buffer: multi-hop V4 swaps vary run-to-run and estimateGas can undershoot.
+    const buffered = (est * 3n) / 2n
+    return `0x${buffered.toString(16)}`
+  } catch {
+    return `0x${fallbackGas.toString(16)}`
+  }
+}
+
 // ─── Main L1→L2 Bridge Orchestrator ─────────────────────────────────
 
 /**
@@ -850,9 +874,11 @@ export async function bridgeL1ToL2(
       }
     }
 
-    // Check and approve allowance for Permit2 (one-time per token).
-    // All deposits go through SwapBridgeRouter with Permit2 — approve the
-    // canonical Permit2 contract with max uint256 (one-time).
+    // Check and approve allowance for Permit2. All deposits go through
+    // SwapBridgeRouter with Permit2 — approve the canonical Permit2 contract for
+    // exactly this deposit's amount rather than max uint256, so a leaked/abused
+    // Permit2 allowance can't drain more than the current bridge. Consumed each
+    // deposit, so a fresh approval is sent whenever the remaining allowance is short.
     const spender = PERMIT2_ADDRESS
     const totalApprovalNeeded = amount
 
@@ -867,7 +893,7 @@ export async function bridgeL1ToL2(
       const approveData = encodeFunctionData({
         abi: TestERC20Abi,
         functionName: 'approve',
-        args: [spender as `0x${string}`, BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')],
+        args: [spender as `0x${string}`, totalApprovalNeeded],
       })
 
       const approveTxHash = await sendTransaction({
@@ -991,13 +1017,16 @@ export async function bridgeL1ToL2(
         ],
       })
 
-      txHash = await sendTransaction({
+      const fuelTx = {
         from: l1Address,
         to: config.swapBridgeRouterAddress,
         data: bridgeData,
-        // 16M — bridgeWithFuel is complex (Permit2 + V4 swap + 2 portal deposits).
-        // Wallet estimation is unreliable for multi-hop swaps with state writes.
-        gas: '0xF42400',
+      }
+      txHash = await sendTransaction({
+        ...fuelTx,
+        // bridgeWithFuel is heavy (Permit2 + V4 swap + 2 portal deposits); 5M is
+        // the fallback ceiling only if node estimation reverts.
+        gas: await estimateL1BridgeGas(publicClient, fuelTx, 5_000_000n),
       })
     } else {
       // ── Standard path: call SwapBridgeRouter.bridge via Permit2 ──
@@ -1044,13 +1073,16 @@ export async function bridgeL1ToL2(
         ],
       })
 
-      txHash = await sendTransaction({
+      const bridgeTx = {
         from: l1Address,
         to: config.swapBridgeRouterAddress,
         data: bridgeData,
-        // 16M — bridge tx can be complex with Permit2 + portal deposit.
-        // Main sets this override on both bridge and bridgeWithFuel.
-        gas: '0xF42400',
+      }
+      txHash = await sendTransaction({
+        ...bridgeTx,
+        // Plain Permit2 bridge + single portal deposit; 1M is the fallback
+        // ceiling only if node estimation reverts.
+        gas: await estimateL1BridgeGas(publicClient, bridgeTx, 1_000_000n),
       })
     }
 

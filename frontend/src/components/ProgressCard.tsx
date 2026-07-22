@@ -730,7 +730,7 @@ export default function ProgressCard({
               View in Activity
             </button>
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/?app=1')}
               title="Back to main screen"
               aria-label="Back to main screen"
               className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"
@@ -758,7 +758,7 @@ export default function ProgressCard({
               {fuelErrorDetected ? 'Top up Fee Juice' : resuming ? 'Resuming…' : resumeLabel}
             </button>
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/?app=1')}
               title="Back to main screen"
               aria-label="Back to main screen"
               className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"
@@ -807,7 +807,7 @@ export default function ProgressCard({
           state carries its own back button, so it's excluded here. */}
       {showBackButton && !isAlreadyCompleted && !(hasError && direction) && (
         <div className="flex flex-row items-center justify-center mt-2 mb-4">
-          <TextButton className="" onClick={() => router.push('/')}>
+          <TextButton className="" onClick={() => router.push('/?app=1')}>
             Back to Main Screen
           </TextButton>
         </div>

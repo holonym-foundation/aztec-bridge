@@ -10,6 +10,7 @@ import { buildSwapCandidates, getBestRoute } from '@/utils/fuelPricing'
 import { BRIDGED_FPC_ADDRESS, L1_RPC_URL } from '@/config'
 import { useTokenPrices } from '@/utils/coinGeckoPrice'
 import { useClaimFeeEstimate } from '@/hooks/useL2Operations'
+import { pushNotification, useNotificationsStore } from '@/stores/useNotificationsStore'
 
 interface FuelToggleProps {
   fuelEnabled: boolean
@@ -528,6 +529,67 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
   // Check which USD preset is currently selected (if any)
   const activePreset = USD_PRESETS.find((usd) => fuelAmount === usdToTokenAmount(usd, tokenSymbol, prices))
 
+  // High-priority bad-rate alert (#4): the testnet pool would charge more than the sane
+  // ceiling to cover the shortfall, so we capped the auto-reserve. The card carries only a
+  // compact chip; the full explanation + one-tap "reserve the honest amount" action lives in
+  // Messages as a keyed, persistent warning. Dismiss it the moment the condition clears (user
+  // covered, edited past the honest amount, or turned gas off) so a stale alert never lingers.
+  const badRate =
+    fuelEnabled && !alreadyCovered && !!recommendedFuel?.capped && fuelNum < Number(recommendedFuel.honestAmount)
+  useEffect(() => {
+    const dismissBadRate = () => {
+      const existing = useNotificationsStore.getState().notifications.find((n) => n.key === 'fuel-bad-rate')
+      if (existing) useNotificationsStore.getState().dismiss(existing.id)
+    }
+    if (!badRate || !recommendedFuel) {
+      dismissBadRate()
+      return
+    }
+    const honest = recommendedFuel.honestAmount
+    const reserved = fuelAmount || '0'
+    pushNotification({
+      type: 'warning',
+      title: 'Gas rate high on testnet',
+      message:
+        `Fully covering L2 gas would cost about ${honest} ${tokenSymbol} ` +
+        `(${recommendedFuel.honestPct.toFixed(0)}% of your bridge). We reserved a capped ` +
+        `${reserved} ${tokenSymbol} instead. Edit the amount, turn gas top-up off, or reserve the ` +
+        `full amount to fully cover gas.`,
+      key: 'fuel-bad-rate',
+      action: {
+        label: `Reserve ${honest} ${tokenSymbol} to fully cover gas`,
+        onClick: () => {
+          setDetailOpen(true)
+          onAmountChange(honest)
+        },
+      },
+    })
+    // setDetailOpen is stable enough for this transient handler; excluding it keeps the effect
+    // keyed on the alert's data, not on the accordion state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [badRate, recommendedFuel, fuelAmount, tokenSymbol, onAmountChange])
+
+  // Transient heads-up (#5): public fuel while privacy mode is on would deanonymize the claim.
+  // Fire once per entry into that state as an auto-dismissing reminder (privacy mode force-flips
+  // fuel back to private, so this is a brief window, not a persistent error).
+  const publicRevealFiredRef = useRef(false)
+  useEffect(() => {
+    const shouldWarn = fuelEnabled && isPrivacyModeEnabled && fuelType === 'public'
+    if (!shouldWarn) {
+      publicRevealFiredRef.current = false
+      return
+    }
+    if (publicRevealFiredRef.current) return
+    publicRevealFiredRef.current = true
+    pushNotification({
+      type: 'warning',
+      title: 'Public fee juice reveals your claim',
+      message: 'Use Private fee juice to keep your claim anonymous.',
+      key: 'fuel-public-reveal',
+      autoDismissMs: 6000,
+    })
+  }, [fuelEnabled, isPrivacyModeEnabled, fuelType])
+
   const detailId = 'fuel-toggle-detail'
 
   return (
@@ -610,6 +672,7 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
         </span>
       </div>
       <ReactTooltip id="fj-warning" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
+      <ReactTooltip id="fuel-info" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
 
       {/* Already covered: the user's existing FJ meets the claim requirement, so no top-up is
           needed. Collapsed to a single row — the calm "enough" note and the Set/Edit link share
@@ -636,25 +699,25 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
           doesn't cover the claim) AND the testnet pool would charge more than the sane ceiling to
           buy the shortfall. We cap the auto-reserve instead of silently spending it — and say so,
           with a one-tap opt-in to the honest amount. Hidden entirely once the user is covered. */}
-      {fuelEnabled && !alreadyCovered && recommendedFuel?.capped && fuelNum < Number(recommendedFuel.honestAmount) && (
-        <div className="mt-2 flex items-start gap-1.5 rounded-[8px] bg-[#FDECEC] px-2.5 py-1.5">
-          <Icon icon="ph:warning-circle-fill" width={13} height={13} className="mt-0.5 flex-shrink-0 text-[#D92D20]" />
-          <div className="text-[11px] leading-[15px] text-[#737373]">
-            <span className="font-semibold text-[#D92D20]">Gas swap rate is unusually high on testnet.</span>{' '}
-            Fully covering L2 gas would cost ~{recommendedFuel.honestAmount} {tokenSymbol} (
-            {recommendedFuel.honestPct.toFixed(0)}% of your bridge). We reserved a capped{' '}
-            {fuelAmount || '0'} {tokenSymbol} — edit it below, turn gas top-up off, or:
-            <button
-              type="button"
-              onClick={() => {
-                setDetailOpen(true)
-                onAmountChange(recommendedFuel.honestAmount)
-              }}
-              className="mt-1 block font-semibold text-[#81133B] hover:underline"
-            >
-              Reserve {recommendedFuel.honestAmount} {tokenSymbol} to fully cover gas
-            </button>
-          </div>
+      {badRate && (
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-[8px] bg-[#FDECEC] px-2.5 py-1.5">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <Icon icon="ph:warning-circle-fill" width={13} height={13} className="flex-shrink-0 text-[#D92D20]" />
+            <span className="truncate text-[11px] leading-[15px]">
+              <span className="font-semibold text-[#D92D20]">Gas rate high on testnet</span>
+              <span className="text-[#737373]">
+                {' · '}
+                {fuelAmount || '0'} {tokenSymbol} reserved
+              </span>
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setDetailOpen(true)}
+            className="shrink-0 text-[11px] font-medium text-[#81133B] hover:underline"
+          >
+            Details
+          </button>
         </div>
       )}
 
@@ -688,6 +751,14 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
                   <span className="flex items-center gap-1">
                     <Icon icon="ph:globe-hemisphere-west-fill" width={11} height={11} className="text-[#17235E]" />
                     Public Fee Juice
+                    <Icon
+                      icon="ph:info"
+                      width={11}
+                      height={11}
+                      className="cursor-help text-latest-grey-500"
+                      data-tooltip-id="fuel-info"
+                      data-tooltip-content="Fee Juice is gas on Aztec. Add a bit extra so you stay funded for your next transactions."
+                    />
                   </span>
                   <span className="font-semibold">
                     {feeJuiceBalanceLoading ? (
@@ -699,7 +770,15 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
                 </div>
                 {hasBridgedFpc && (
                   <div className="flex justify-between items-center h-4">
-                    <span className="flex items-center gap-1">
+                    <span
+                      className="flex items-center gap-1 cursor-help"
+                      data-tooltip-id="fuel-info"
+                      data-tooltip-content={
+                        isPrivacyModeEnabled
+                          ? 'Private Fee Juice enforced. Privacy mode pays L2 gas from private fee juice so your claim stays anonymous.'
+                          : 'Private Fee Juice pays L2 gas from the BridgedFPC so your claim stays anonymous.'
+                      }
+                    >
                       <Icon icon="ph:lock-key-fill" width={11} height={11} className="text-[#81133B]" />
                       Private Fee Juice
                     </span>
@@ -713,39 +792,6 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
                   </div>
                 )}
               </div>
-              <div className="flex items-start gap-1.5 rounded-[8px] bg-[#E5EFFF] px-2.5 py-1.5">
-                <Icon icon="ph:lightning-fill" width={13} height={13} className="mt-0.5 flex-shrink-0 text-[#17235E]" />
-                <p className="text-[11px] leading-[15px] text-[#737373]">
-                  <span className="font-semibold text-[#0A0A0A]">Fee Juice is gas on Aztec.</span> Add a bit extra so you
-                  stay funded for your next transactions.
-                </p>
-              </div>
-
-              {/* Concrete sizing guidance: tie the fuel amount to the actual L2 claim requirement. */}
-              {claimFeeFj != null && (
-                <p className="text-[11px] leading-[15px] text-latest-grey-500">
-                  Aim for at least{' '}
-                  <span className="font-semibold text-[#81133B]">≈{claimFeeFj} FJ</span> to cover the L2 claim — the
-                  amount below is auto-sized to reach it.
-                </p>
-              )}
-
-              {/* Privacy mode pays the claim from private (BridgedFPC) fuel; a public claim would deanonymize. */}
-              {isPrivacyModeEnabled && (
-                <div className="flex items-start gap-1.5 rounded-[8px] bg-[#F9EEF3] px-2.5 py-1.5">
-                  <Icon icon="ph:lock-key-fill" width={13} height={13} className="mt-0.5 flex-shrink-0 text-[#81133B]" />
-                  <p className="text-[11px] leading-[15px] text-[#737373]">
-                    <span className="font-semibold text-[#81133B]">Private Fee Juice enforced.</span> Privacy mode pays L2
-                    gas from private fee juice so your claim stays anonymous.
-                  </p>
-                </div>
-              )}
-              {isPrivacyModeEnabled && fuelType === 'public' && (
-                <p className="text-[11px] font-medium text-[#D92D20]">
-                  Public fee juice reveals your claim — use Private to stay anonymous.
-                </p>
-              )}
-
               {pricesError && <p className="text-xs text-amber-600">Live prices unavailable — using fallback prices</p>}
 
               <div className="flex items-center gap-1.5 max-w-full">

@@ -14,9 +14,9 @@ import { useL1TopUpFeeJuice } from '@/hooks/useL1Operations'
 import { useWalletStore } from '@/stores/walletStore'
 
 interface WithdrawFuelPanelProps {
-  /** Public L2 Fee Juice balance (what pays the L2 burn gas). */
+  /** Public L2 Fee Juice balance — pays the L2 burn gas in non-privacy mode. */
   feeJuiceBalance?: string
-  /** BridgedFPC balance — shown for context when privacy mode is on. */
+  /** BridgedFPC balance — pays the L2 burn gas (via pay_fee) in privacy mode. */
   privateFeeJuiceBalance?: string
   feeJuiceBalanceLoading?: boolean
   privateFeeJuiceBalanceLoading?: boolean
@@ -171,16 +171,22 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
   // claim stay anonymous — same enforcement as the deposit-fuel path.
   const fuelType: 'public' | 'private' = isPrivacyModeEnabled && hasBridgedFpc ? 'private' : 'public'
 
+  // The balance that actually pays the L2 burn gas: the BridgedFPC balance in
+  // privacy mode (spent via pay_fee), else the public FeeJuice balance (native).
+  const usingPrivateFuel = fuelType === 'private'
+  const applicableBalance = usingPrivateFuel ? privateFeeJuiceBalance : feeJuiceBalance
+  const applicableLoading = usingPrivateFuel ? privateFeeJuiceBalanceLoading : feeJuiceBalanceLoading
+
   // The L2 claim fee for the top-up itself is paid via the fuel type in use.
   const { data: claimFeeLimit, isLoading: claimFeeLoading } = useClaimFeeEstimate(fuelType)
   const claimFeeFj = claimFeeLimit != null ? formatFjAmount(claimFeeLimit, 2) : null
 
-  const fjLoading = feeJuiceBalanceLoading
-  const fjZero = feeJuiceBalance != null && Number(feeJuiceBalance) === 0
+  const fjLoading = applicableLoading
+  const fjZero = applicableBalance != null && Number(applicableBalance) === 0
   const underfunded =
-    feeJuiceBalance != null &&
+    applicableBalance != null &&
     claimFeeLimit != null &&
-    Number(feeJuiceBalance) < Number(claimFeeLimit) / 1e18
+    Number(applicableBalance) < Number(claimFeeLimit) / 1e18
 
   // Auto-expand once when the burn would be underfunded — the withdraw analog of
   // the deposit-side one-time auto-enable latch. Reset when funding recovers so a
@@ -299,7 +305,7 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
             <span className="inline-block h-2.5 w-10 bg-neutral-300 rounded animate-pulse" />
           ) : (
             <span className={`font-semibold ${underfunded || fjZero ? 'text-[#D92D20]' : ''}`}>
-              {feeJuiceBalance ?? '--'} FJ
+              {applicableBalance ?? '--'} FJ
             </span>
           )}
         </span>
@@ -323,14 +329,14 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
             className="overflow-hidden"
           >
             <div className="mt-3 space-y-2">
-              {hasBridgedFpc && isPrivacyModeEnabled && (
+              {usingPrivateFuel && (
                 <div className="flex justify-between items-center h-4 text-xs text-latest-grey-500">
-                  <span>Private Fee Juice:</span>
+                  <span>Public Fee Juice:</span>
                   <span className="font-semibold">
-                    {privateFeeJuiceBalanceLoading ? (
+                    {feeJuiceBalanceLoading ? (
                       <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
                     ) : (
-                      (privateFeeJuiceBalance ?? '--')
+                      (feeJuiceBalance ?? '--')
                     )}
                   </span>
                 </div>
@@ -347,7 +353,7 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
                   <p className="text-[11px] leading-[15px] text-[#737373]">
                     <span className="font-semibold text-[#D92D20]">Not enough Fee Juice.</span> This withdrawal burns on
                     Aztec and needs <span className="font-semibold">≈{claimFeeFj} FJ</span> for L2 gas, but you have{' '}
-                    <span className="font-semibold">{feeJuiceBalance ?? '--'} FJ</span>.
+                    <span className="font-semibold">{applicableBalance ?? '--'} FJ</span>.
                   </p>
                 </div>
               ) : (

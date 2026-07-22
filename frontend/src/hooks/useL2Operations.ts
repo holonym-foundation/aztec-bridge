@@ -169,9 +169,11 @@ export const useL2PrivateFeeJuiceBalance = () => {
 
       const userAddress = AztecAddress.fromStringUnsafe(aztecAddress)
 
-      // read the user's BridgedFPC balance (what they can spend on private
-      // fuel via the FPC) — NOT FEE_JUICE.balance_of_private (the user's own
-      // private FeeJuice notes), which is a different number.
+      // Read the user's BridgedFPC balance — the FPC's private note-based ledger
+      // of what they can spend on private fuel. FeeJuice itself has NO private
+      // balance on Aztec (the canonical contract only exposes balance_of_public);
+      // privacy comes from the FPC pooling FJ publicly and privatizing the
+      // per-user accounting. This is a different number from FEE_JUICE.balance_of_public.
       const [privateBalanceResult] = await walletAdapter.simulateViews([
         {
           contract: BRIDGED_FPC_ADDRESS,

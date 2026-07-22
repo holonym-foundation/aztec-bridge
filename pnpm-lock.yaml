@@ -14,7 +14,7 @@ importers:
 
   frontend:
     dependencies:
-      '@alejoamiras/aztec-fee-payment':
+      '@alejoamiras/private-fee-juice':
         specifier: 5.0.1
         version: 5.0.1(@aztec/aztec.js@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(@aztec/protocol-contracts@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(@aztec/stdlib@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
       '@aztec-foundation/aztec-standards':
@@ -267,7 +267,7 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@alejoamiras/aztec-fee-payment':
+      '@alejoamiras/private-fee-juice':
         specifier: 5.0.1
         version: 5.0.1(@aztec/aztec.js@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(@aztec/protocol-contracts@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(@aztec/stdlib@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
       '@aztec-foundation/aztec-standards':
@@ -342,10 +342,9 @@ packages:
   '@adraffy/ens-normalize@1.11.1':
     resolution: {integrity: sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ==}
 
-  '@alejoamiras/aztec-fee-payment@5.0.1':
-    resolution: {integrity: sha512-jSChEwN6nDRFohFrO87y0xOUE4NQ9a1fcGUd47R1jL8OFKoVz/1RorwELeifsLi5+f1F6ws0RkW5R/lsYXfnqQ==}
+  '@alejoamiras/private-fee-juice@5.0.1':
+    resolution: {integrity: sha512-3a7pDk1yeWS/xTghcqvYcg8IexJLto08PsesG6wS9aHwB6iZD0lIvhaW6ADp9CIYLurViGhq/AIa9IKaKRKOzQ==}
     engines: {node: '>=22.0.0'}
-    deprecated: Renamed to @alejoamiras/private-fee-juice (functionally equivalent to aztec-fee-payment@5.0.1-revision.1) — migrate package + import specifiers.
     peerDependencies:
       '@aztec/aztec.js': 5.0.1
       '@aztec/protocol-contracts': 5.0.1
@@ -7691,7 +7690,7 @@ snapshots:
 
   '@adraffy/ens-normalize@1.11.1': {}
 
-  '@alejoamiras/aztec-fee-payment@5.0.1(@aztec/aztec.js@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(@aztec/protocol-contracts@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(@aztec/stdlib@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))':
+  '@alejoamiras/private-fee-juice@5.0.1(@aztec/aztec.js@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(@aztec/protocol-contracts@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(@aztec/stdlib@5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))':
     dependencies:
       '@aztec/aztec.js': 5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
       '@aztec/protocol-contracts': 5.0.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)

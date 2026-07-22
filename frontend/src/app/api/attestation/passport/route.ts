@@ -4,9 +4,7 @@ import { PassportAttestationSchema } from '@/lib/validation'
 import {
   enforceAddressBinding,
   getNextNonce,
-  evaluateDepositLimit,
-  evaluateTravelRuleThreshold,
-  usdToTokenBaseUnits,
+  reservePassportBudget,
 } from '@/lib/address-binding'
 import {
   fetchPassportScore,
@@ -93,71 +91,87 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3b. Cumulative per-human Travel Rule threshold (L1→L2 only). Once lifetime
-    // volume reaches the threshold, the light passport tier is refused — the user
-    // must hold a POCH (Clean Hands) attestation to continue. POCH is exempt.
-    if (data.direction === 'L1_TO_L2') {
-      const tr = await evaluateTravelRuleThreshold({
-        userId: authResult.user.id,
-        amount: data.amount,
-        tokenSymbol: data.tokenSymbol,
-        tokenDecimals: data.tokenDecimals,
-      })
-      if (tr.enabled && tr.exceeded) {
-        return NextResponse.json(
-          {
-            error: `You've reached the $${tr.thresholdUsd.toFixed(0)} verification threshold. Verify with Clean Hands to bridge more.`,
-            reason: 'travel_rule',
-          },
-          { status: 403 },
-        )
-      }
-    }
-
-    // 3c. Alpha per-day (rolling 24h) deposit cap (L1→L2 only). Unlike POCH, the
-    // Passport maxAmount is enforced on-chain, so we both refuse when over budget
-    // AND cap the signed maxAmount to the remaining budget for cryptographic enforcement.
-    let maxAmount = getPassportMaxAmount()
-    if (data.direction === 'L1_TO_L2') {
-      const limit = await evaluateDepositLimit({
-        userId: authResult.user.id,
-        amount: data.amount,
-        tokenSymbol: data.tokenSymbol,
-        tokenDecimals: data.tokenDecimals,
-      })
-      if (limit.enabled) {
-        if (limit.overLimit || limit.remainingUsd <= 0) {
-          return NextResponse.json(
-            {
-              error: `Alpha deposit limit reached ($${limit.limitUsd.toFixed(0)} per user / day). You have $${limit.confirmedUsd.toFixed(2)} of $${limit.limitUsd.toFixed(2)} used in the last 24h.`,
-              reason: 'deposit_limit',
-            },
-            { status: 403 },
-          )
-        }
-        const remainingBaseUnits = usdToTokenBaseUnits(
-          limit.remainingUsd,
-          data.tokenSymbol ?? 'USDC',
-          data.tokenDecimals ?? 6,
-        )
-        if (remainingBaseUnits < maxAmount) maxAmount = remainingBaseUnits
-      }
-    }
+    // A passport attestation is a deposit authorization unless the request is an
+    // explicit withdrawal. `direction` is client-controlled, so it may gate policy
+    // but must never be trusted to relax it: a missing or spoofed direction is
+    // treated as a deposit, so the cumulative caps can't be skipped by omitting the
+    // field, and the L1 signature — the only artifact a TokenPortal deposit
+    // consumes — is issued for deposits only, so a withdrawal request can never
+    // hand back a deposit authorization.
+    const isDeposit = data.direction !== 'L2_TO_L1'
 
     // 4. Issue signed attestation (L1 ECDSA + L2 Schnorr)
     const nonce = getNextNonce()
 
-    // Default deadline: 1 hour from now
-    const deadlineSeconds = data.deadline ? BigInt(data.deadline) : BigInt(Math.floor(Date.now() / 1000) + 3600)
+    // Bound the deadline server-side: never further out than the default hour,
+    // regardless of client input, so an attestation can't be signed far in the
+    // future and banked. This deadline is also the reservation's TTL below.
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    const maxDeadline = nowSeconds + 3600
+    const deadlineSeconds = BigInt(data.deadline ? Math.min(data.deadline, maxDeadline) : maxDeadline)
 
-    const l1Signature = await signPassportAttestation({
-      userAddress: l1Address,
-      maxAmount,
-      nonce,
-      deadline: deadlineSeconds,
-      // Zod schema now requires portalAddress; no `?? ''` wildcard fallback.
-      portalAddress: data.portalAddress,
-    })
+    let maxAmount = getPassportMaxAmount()
+
+    // Cap the signed ceiling to the amount the client will actually deposit. The
+    // portal accepts any deposit <= maxAmount, so signing the full per-tx ceiling
+    // reserves the user's whole budget for a smaller deposit and blocks their next
+    // one until the reservation's TTL (~1h). Sizing the signature to the requested
+    // amount lets the reservation retire against the confirmed deposit instead. The
+    // value is client-supplied, so it can only tighten the ceiling here — the
+    // budget-derived cap below still applies, and the portal rejects any deposit
+    // above the signed amount.
+    if (isDeposit && data.amount) {
+      const requested = BigInt(data.amount)
+      if (requested > 0n && requested < maxAmount) maxAmount = requested
+    }
+
+    // Deposit caps (cumulative Travel Rule threshold + Alpha rolling-24h cap).
+    // Evaluated AND reserved atomically under a per-user lock, so concurrent requests
+    // can't each pass a stale budget check and each get a full-budget signature
+    // (TOCTOU). `amount` is optional, so the binding enforcement is capping the signed
+    // maxAmount to the remaining budget — not the requested-amount comparison alone.
+    if (isDeposit) {
+      const reservation = await reservePassportBudget({
+        userId: authResult.user.id,
+        nonce,
+        expiresAt: new Date(Number(deadlineSeconds) * 1000),
+        perTxMaxAmount: maxAmount,
+        tokenSymbol: data.tokenSymbol ?? 'USDC',
+        tokenDecimals: data.tokenDecimals ?? 6,
+      })
+      if (!reservation.ok) {
+        if (reservation.reason === 'travel_rule') {
+          return NextResponse.json(
+            {
+              error: `You've reached the $${reservation.thresholdUsd.toFixed(0)} verification threshold. Verify with Clean Hands to bridge more.`,
+              reason: 'travel_rule',
+            },
+            { status: 403 },
+          )
+        }
+        return NextResponse.json(
+          {
+            error: `Alpha deposit limit reached ($${reservation.limitUsd.toFixed(0)} per user / day). You have $${reservation.confirmedUsd.toFixed(2)} of $${reservation.limitUsd.toFixed(2)} used in the last 24h.`,
+            reason: 'deposit_limit',
+          },
+          { status: 403 },
+        )
+      }
+      maxAmount = reservation.maxAmount
+    }
+
+    // Only a deposit needs the L1 (portal) attestation; a withdrawal is verified by
+    // the L2 Schnorr signature below. Issuing an L1 signature for a withdrawal would
+    // be a deposit authorization that skipped the caps above.
+    const l1Signature = isDeposit
+      ? await signPassportAttestation({
+          userAddress: l1Address,
+          maxAmount,
+          nonce,
+          deadline: deadlineSeconds,
+          portalAddress: data.portalAddress,
+        })
+      : null
 
     // L2 Schnorr signature (only if bridgeAddress provided)
     let l2Signature: number[] | null = null

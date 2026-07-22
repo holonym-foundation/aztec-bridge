@@ -791,7 +791,9 @@ export interface AttestationDepositMeta {
 
 /** POCH attestation response from POST /api/attestation/poch */
 export interface PochAttestationData {
-  l1Signature: string
+  // null for a withdrawal request — the L1 (deposit) signature is issued for
+  // deposits only, so a withdrawal attestation can't be used to authorize a deposit.
+  l1Signature: string | null
   l2Signature: number[]
   nonce: number
   circuitId: string
@@ -800,7 +802,9 @@ export interface PochAttestationData {
 
 /** Passport attestation response from POST /api/attestation/passport */
 export interface PassportAttestationData {
-  l1Signature: string
+  // null for a withdrawal request — the L1 (deposit) signature is issued for
+  // deposits only, so a withdrawal attestation can't be used to authorize a deposit.
+  l1Signature: string | null
   l2Signature: number[] | null
   nonce: number
   maxAmount: string

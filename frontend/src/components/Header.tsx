@@ -661,15 +661,15 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
               wrapper is a tight rounded container so the box-shadow reads as a
               circular halo around the bare icon. */}
           <span className="flex items-center gap-1.5">
+            <span className={`text-xs font-semibold leading-none ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
             <span className={`inline-flex items-center justify-center rounded-full ${isVerified ? 'humanity-glow' : ''}`}>
               <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? accentPink(isDark) : isDark ? 'text-white/[0.25]' : 'text-gray-300'}`} />
             </span>
-            <span className={`text-xs font-semibold leading-none ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
           </span>
-          {/* Points row — HUMN Points glyph with slow continuous rotation (ported DS chip--spin-icon). */}
+          {/* Points row — HUMN Points glyph with slow continuous rotation (ported DS chip--spin-icon). Icon trails the value (#248) so both glyphs sit against the wallet divider. */}
           <span className="flex items-center gap-1.5">
-            <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
             <span className={`text-xs font-semibold leading-none ${navText(isDark)}`}>{points.toLocaleString()}</span>
+            <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
           </span>
         </div>
       </button>
@@ -1059,8 +1059,13 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     // vertical hairline on its left edge. Each row renders `flat` (plain
     // rectangular rows, no rounded/border/shadow of their own) so the two
     // addresses read as one clean flush segment.
+    //
+    // Width steps up in stages rather than jumping straight from 150px to the
+    // full 252px (#242). The address text was over-truncating at in-between
+    // widths where there was clearly more room to give it, so each stage adds
+    // back a little before the next one lands.
     <div
-      className={`flex flex-col w-[150px] sm:w-[252px] flex-shrink-0 pl-2 sm:pl-3 border-l ${
+      className={`flex flex-col w-[150px] sm:w-[200px] md:w-[220px] min-[900px]:w-[236px] lg:w-[252px] flex-shrink-0 pl-2 sm:pl-3 border-l ${
         isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
       }`}
     >
@@ -1147,7 +1152,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           openHowItWorks()
           setMobileMenuOpen(false)
         }}
-        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+        className={`flex items-center gap-1.5 px-2 lg:px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
       >
         <Icon icon="ph:question" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
         How it works
@@ -1155,7 +1160,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       <Link
         href="/docs"
         onClick={() => setMobileMenuOpen(false)}
-        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+        className={`flex items-center gap-1.5 px-2 lg:px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
       >
         <Icon icon="ph:book-open" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
         Docs
@@ -1167,7 +1172,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       <Link
         href="/fee-juice"
         onClick={() => setMobileMenuOpen(false)}
-        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+        className={`flex items-center gap-1.5 px-2 lg:px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
       >
         <Icon icon="ph:gas-pump" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
         Fee Juice
@@ -1226,12 +1231,14 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       >
         {/* Left: Privacy Mode pinned to the far left of the middle section (#159).
             Flat segment now (#185). A flush hairline on its right edge divides it
-            from the centered nav links at lg+ (where those links are present),
-            mirroring the wallet cluster's border-l hairline instead of stacking a
-            pill. Below lg the border collapses to 0 width so no hairline floats in
-            the empty gap. */}
+            from the centered nav links once those links are present, mirroring
+            the wallet cluster's border-l hairline instead of stacking a pill.
+            Below that width the border collapses to 0 width so no hairline
+            floats in the empty gap. Threshold matches the nav breakpoint below
+            (#242) rather than `lg`, so the divider and the links it separates
+            appear together. */}
         <div
-          className={`flex items-center flex-shrink-0 lg:border-r lg:pr-3 ${
+          className={`flex items-center flex-shrink-0 min-[900px]:border-r min-[900px]:pr-3 ${
             isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
           }`}
         >
@@ -1240,9 +1247,14 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
 
         {/* Center: the remaining nav links, centered in the bar (#159). flex-1
             fills the gap between the Privacy toggle and the right cluster while
-            justify-center pins the links to the middle. Hidden below lg, where
-            they move into the mobile panel. */}
-        <nav className="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0" aria-label="Secondary">
+            justify-center pins the links to the middle. The nav switches on at
+            a custom 900px step instead of waiting for `lg` (1024px). The old
+            `lg` cutoff left a dead gap in the pill with the hamburger already
+            showing despite the room (#242). Tighter gap/padding here than at
+            `lg` buys back the space the earlier switch costs; `lg` still widens
+            back out to the original spacing once there's room to spare. Below
+            900px the links move into the mobile panel instead. */}
+        <nav className="hidden min-[900px]:flex items-center justify-center gap-0.5 lg:gap-1 flex-1 min-w-0" aria-label="Secondary">
           {secondaryNav}
         </nav>
 
@@ -1287,13 +1299,14 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
             )}
           </div>
 
-          {/* Secondary-nav toggle — only needed below lg, where "How it
-              works" / version selector move out of the main row. Privacy
-              Mode and the wallet pills above stay in the main row at every
-              width, so they never end up hidden behind this button. */}
+          {/* Secondary-nav toggle — only needed below the nav's 900px
+              breakpoint (see above, #242), where "How it works" / version
+              selector move out of the main row. Privacy Mode and the wallet
+              pills above stay in the main row at every width, so they never
+              end up hidden behind this button. */}
           <button
             onClick={toggleMobileMenu}
-            className={`lg:hidden flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full ${hoverTint(isDark)} transition-colors duration-200`}
+            className={`min-[900px]:hidden flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full ${hoverTint(isDark)} transition-colors duration-200`}
             aria-label="Toggle menu"
             aria-expanded={mobileMenuOpen}
           >
@@ -1305,7 +1318,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       {/* Secondary-nav panel (credentials / How it works / Docs) — the version
           + network selector lives under the Shield brand pill now (#113), not here. */}
       {mobileMenuOpen && (
-        <div ref={mobileMenuRef} className={`lg:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}>
+        <div ref={mobileMenuRef} className={`min-[900px]:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}>
           {secondaryNav}
         </div>
       )}

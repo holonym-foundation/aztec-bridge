@@ -210,8 +210,8 @@ const sections: DocsSection[] = [
         <P>Toggle between modes with the icon in the header. Your choice is remembered between visits.</P>
         <UL>
           <li>
-            <strong>Private mode.</strong> Transactions are masked and untraceable. Your balance and history live as
-            private notes in your Aztec wallet — invisible on-chain. Gas funding (fuel) is routed through the Bridged
+            <strong>Private mode.</strong> Your balance and history on Aztec are held as private notes in your wallet,
+            rather than as a public balance on the Aztec explorer. Gas funding (fuel) is routed through the Bridged
             Fee Payment Contract.
           </li>
           <li>

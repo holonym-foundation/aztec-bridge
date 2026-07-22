@@ -16,7 +16,7 @@ Last updated: 2026-07-22
 - Bridge direction: Ethereum L1 to/from Aztec L2 (deposit and re-screened withdrawal).
 - Identity gate: every transfer requires a Proof of Clean Hands (full KYC, unlimited bridging) or Human Passport (humanity score 20+, up to 1,000 USDC per transaction) attestation, plus per-transfer sanctions screening.
 - Sanctions screening: 23 international sources via sanctions.io, applied at entry and exit; the flow fails closed if the provider is unreachable.
-- Privacy: private mode keeps balances and history private; on-chain identity verification uses zero-knowledge proofs.
+- Privacy: no personal data is stored at rest; identity verification uses zero-knowledge proofs. Funds are held shielded on Aztec (recorded as note hashes); the L1 bridge legs (deposit and withdrawal) are public on Ethereum.
 - Custody: non-custodial. Collateral is locked in the open-source TokenPortal contract; no operator holds bridged tokens during transit.
 - Fees: 0.5% bridge fee, plus L1 gas; L2 gas is paid in FeeJuice, auto-converted from a portion of the deposit.
 - SDK: `@human.tech/clean.sdk` — https://www.npmjs.com/package/@human.tech/clean.sdk

@@ -167,6 +167,31 @@
   font-display: swap;
 }
 
+/* PP Hatton — human.tech brand display font (headings, display, brand moments). */
+@font-face {
+  font-family: 'PP Hatton';
+  src: url('/assets/fonts/PPHATTON-REGULAR.TTF') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'PP Hatton';
+  src: url('/assets/fonts/PPHATTON-MEDIUM.TTF') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'PP Hatton';
+  src: url('/assets/fonts/PPHATTON-SEMIBOLD.OTF') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 body {
   font-family: 'Suisse Intl', sans-serif;
 }

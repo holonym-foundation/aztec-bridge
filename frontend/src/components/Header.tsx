@@ -1005,7 +1005,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         Privacy Mode
       </span>
       <button
-        className={`flex w-[36px] h-[22px] sm:w-[40px] sm:h-[24px] py-[3px] px-1 items-center rounded-[8px] transition-all duration-200 border-0 focus:outline-none relative z-10 flex-shrink-0 ${
+        className={`flex w-[36px] h-[22px] sm:w-[40px] sm:h-[24px] py-[3px] px-1 items-center rounded-full transition-all duration-200 border-0 focus:outline-none relative z-10 flex-shrink-0 ${
           isPrivacyModeEnabled ? 'bg-[#3B3B3B] justify-end pl-[17px] sm:pl-[19px]' : 'bg-[#D4D4D4] justify-start pr-[17px] sm:pr-[19px]'
         }`}
         onClick={() => {
@@ -1025,7 +1025,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         tabIndex={0}
         style={{ border: 'none' }}
       >
-        <span className="flex w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] p-[1px] justify-center items-center flex-shrink-0 rounded-[6px] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.25)] transition-transform duration-200">
+        <span className="flex w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] p-[1px] justify-center items-center flex-shrink-0 rounded-full bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.25)] transition-transform duration-200">
           <Image src="/assets/svg/shield.svg" alt="Shield" width={12} height={12} />
         </span>
       </button>

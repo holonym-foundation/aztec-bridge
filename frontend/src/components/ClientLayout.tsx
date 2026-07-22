@@ -41,7 +41,10 @@ export default function ClientLayout({
     (pathname?.startsWith('/progress') ?? false) ||
     (pathname?.startsWith('/activity') ?? false)
   return (
-    <div className="relative min-h-screen flex flex-col w-full min-w-0 overflow-x-hidden" style={{ minHeight: '100vh', minWidth: 0 }}>
+    <div
+      className={`relative flex flex-col w-full min-w-0 overflow-x-hidden ${isNoScrollRoute ? 'h-screen overflow-y-hidden' : 'min-h-screen'}`}
+      style={isNoScrollRoute ? { height: '100vh', minWidth: 0 } : { minHeight: '100vh', minWidth: 0 }}
+    >
       {/* Onboarding is skipped on docs so the guides render without connecting a wallet. */}
       {!isDocs && <ShieldOnboarding />}
       {/* Background: clean near-white surface on docs, pink paper-shader field elsewhere. */}
@@ -95,12 +98,11 @@ export default function ClientLayout({
       {/* Main content */}
       <div className="relative z-20 flex flex-col flex-grow min-h-0">
         <div className='flex-grow'>{children}</div>
-        {/* No-scroll budget: the bridge page's RootStyle region has a fixed 90vh floor
-            with empty vertical padding below the centered card. Nest the (short, single-row)
-            footer up into that padding so nav + card region + footer stay within 100vh and
-            the page never scrolls. Footer content is unchanged; scoped to the bridge route so
-            longer scrolling pages keep the footer in its normal flow position. */}
-        <Footer className={isNoScrollRoute ? '-mt-8' : ''} />
+        {/* On the no-scroll routes the outer container is pinned to exactly 100vh and clips
+            overflow, so the footer sits flush at the bottom edge — the flex-grow content
+            region above absorbs the slack. A negative top-margin here would instead lift the
+            footer off the bottom and expose a dead strip beneath it. */}
+        <Footer />
       </div>
       {/* Persistent binder dock: the drawer tabs stacked on the RIGHT edge,
           vertically centered. Fixed + pointer-events-none so it never adds page

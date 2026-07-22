@@ -30,9 +30,15 @@ export default function ResumePage() {
     l2TxUrl,
     recoveryClaimData,
     recoveryWithdrawalData,
+    isPrivacyModeEnabled,
   } = useBridgeStore()
 
   const isL2ToL1Recovery = !!recoveryWithdrawalData
+
+  // The badge/mismatch warning must reflect the OPERATION being resumed, not the live toggle —
+  // the whole point is to catch "resuming a public claim while Privacy Mode is on". Read the mode
+  // off the recovery payload the operation was created with.
+  const operationIsPrivate = recoveryClaimData?.isPrivacyModeEnabled ?? recoveryWithdrawalData?.isPrivacyModeEnabled
 
   // Refetch balances on success
   const { aztecAddress } = useWalletStore()
@@ -159,25 +165,33 @@ export default function ResumePage() {
   const toNetwork = isL2ToL1Recovery ? (L1_NETWORKS[0]?.title ?? 'Ethereum') : (L2_NETWORKS[0]?.title ?? 'Aztec')
 
   return (
-    <RootStyle className=''>
-      <div className='px-5 pt-5'>
-        <div className='flex items-center gap-4'>
-          <BridgeHeader />
+    // Same no-scroll shell as /progress: cap the card to the 90vh budget and let the card body
+    // scroll inside itself if it ever can't fit, so the page never scrolls and nothing clips.
+    <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
+      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden">
+        <div className="px-5 pt-5">
+          <div className="flex items-center gap-4">
+            <BridgeHeader />
+          </div>
         </div>
 
-        <ProgressCard
-          steps={steps}
-          progressStep={progressStep}
-          hasError={hasError}
-          l1TxUrl={l1TxUrl}
-          l2TxUrl={l2TxUrl}
-          estimatedTimeSeconds={15 * 60}
-          amountDisplay={amountDisplay}
-          fromNetwork={fromNetwork}
-          toNetwork={toNetwork}
-          direction={isL2ToL1Recovery ? 'L2_TO_L1' : 'L1_TO_L2'}
-          errorMessage={errorMessage}
-        />
+        <div className="px-5 pb-5 min-h-0 flex-1 overflow-y-auto">
+          <ProgressCard
+            steps={steps}
+            progressStep={progressStep}
+            hasError={hasError}
+            l1TxUrl={l1TxUrl}
+            l2TxUrl={l2TxUrl}
+            estimatedTimeSeconds={15 * 60}
+            amountDisplay={amountDisplay}
+            fromNetwork={fromNetwork}
+            toNetwork={toNetwork}
+            direction={isL2ToL1Recovery ? 'L2_TO_L1' : 'L1_TO_L2'}
+            errorMessage={errorMessage}
+            isPrivate={operationIsPrivate}
+            currentPrivacyMode={isPrivacyModeEnabled}
+          />
+        </div>
       </div>
     </RootStyle>
   )

@@ -37,6 +37,12 @@ export interface ProgressCardProps {
   /** Raw failure text (mutation error message), when the page can surface it. Used to
       classify a Fee-Juice/gas shortfall so recovery routes to the top-up flow. */
   errorMessage?: string | null
+  /** Privacy mode of THIS operation (derived from the operation/recovery data, NOT the live
+      toggle). Drives the PUBLIC/PRIVATE badge so the user always knows which mode is running. */
+  isPrivate?: boolean
+  /** The live Privacy Mode toggle. Compared against `isPrivate` to warn when the operation the
+      user is watching/resuming was created in the opposite mode from the one now selected. */
+  currentPrivacyMode?: boolean
 }
 
 // A stuck L2 claim that can't pay its gas out of the bridged Fee Juice surfaces as a
@@ -66,7 +72,18 @@ function isFuelError(message?: string | null): boolean {
 const WALLET_ERROR_NEEDLES = ['wallet did not respond', 'did not respond', 'timed out', 'timeout', 'user rejected', 'user denied']
 // The L1→L2 message was already spent — the claim actually went through on a prior attempt.
 // This is a "you're already done" signal, not a loss; point the user at their L2 balance.
-const CONSUMED_ERROR_NEEDLES = ['already consumed', 'already claimed', 'nullifier already', 'existing nullifier', 'already been consumed']
+// "No non-nullified L1 to L2 message found" (SDK #47) is the most common shape: the message
+// was already consumed by a prior successful claim, so a re-run has nothing left to claim.
+const CONSUMED_ERROR_NEEDLES = [
+  'already consumed',
+  'already claimed',
+  'nullifier already',
+  'existing nullifier',
+  'already been consumed',
+  'has already been',
+  'no non-nullified',
+  'non-nullified l1 to l2',
+]
 
 type FailureKind = 'fuel' | 'wallet' | 'consumed' | 'deposit-landed' | 'pre-deposit' | 'unknown'
 
@@ -91,8 +108,8 @@ function classifyFailure(args: { errorMessage?: string | null; isL1ToL2: boolean
   if (m && hasNeedle(m, CONSUMED_ERROR_NEEDLES)) {
     return {
       kind: 'consumed',
-      heading: 'Claim already completed',
-      message: 'This claim already went through. Check your L2 balance.',
+      heading: 'Deposit likely already completed',
+      message: 'This deposit likely already completed. Check your L2 balance.',
     }
   }
   if (m && hasNeedle(m, WALLET_ERROR_NEEDLES)) {
@@ -149,6 +166,8 @@ export default function ProgressCard({
   toNetwork,
   direction,
   errorMessage,
+  isPrivate,
+  currentPrivacyMode,
 }: ProgressCardProps) {
   const router = useRouter()
   const notify = useToast()
@@ -174,6 +193,16 @@ export default function ProgressCard({
     [errorMessage, isL1ToL2, l1TxUrl],
   )
   const fuelErrorDetected = failure.kind === 'fuel'
+  // "No non-nullified message" and friends mean the deposit's L1→L2 message was already consumed
+  // by a prior successful claim. Re-running just re-fails, so this renders as a calm "you're
+  // likely done" state (no red alert, no Resume) that points at Activity / the L2 balance.
+  const isAlreadyCompleted = hasError && failure.kind === 'consumed'
+
+  // The PUBLIC/PRIVATE badge reflects the OPERATION's mode (isPrivate), not the live toggle — a
+  // resumed public claim must still read PUBLIC even while Privacy Mode is toggled on. When the
+  // two disagree we surface a warning so the user doesn't resume in the wrong mode.
+  const modeKnown = isPrivate !== undefined
+  const privacyMismatch = modeKnown && currentPrivacyMode !== undefined && isPrivate !== currentPrivacyMode
   // Fall back to offering top-up only when the deposit already landed on L1 (l1TxUrl set)
   // — i.e. we're at/after the claim boundary where Fee Juice matters. A pre-deposit
   // failure moved no funds and needs no gas top-up.
@@ -388,6 +417,37 @@ export default function ProgressCard({
 
   const showBackButton = isAllComplete || hasError
 
+  // One compact, icon-led explorer-link row used across every state (in-progress, success,
+  // failure). Kept near the status so it never sinks to the bottom of the card where the big
+  // pills used to clip (#200) — and it stays inside the no-scroll budget.
+  const explorerLinks =
+    l1TxUrl || l2TxUrl ? (
+      <div className="mt-2 flex items-center justify-center gap-4">
+        {l1TxUrl && (
+          <a
+            href={l1TxUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-200 hover:text-blue-100"
+          >
+            View L1 Tx
+            <Icon icon="ph:arrow-square-out" width={13} height={13} />
+          </a>
+        )}
+        {l2TxUrl && (
+          <a
+            href={l2TxUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#BF1254] hover:text-[#81133B]"
+          >
+            View L2 Tx
+            <Icon icon="ph:arrow-square-out" width={13} height={13} />
+          </a>
+        )}
+      </div>
+    ) : null
+
   return (
     <div>
       {/* Warning banner — only when in progress */}
@@ -415,8 +475,24 @@ export default function ProgressCard({
             <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#047857]" />
           </button>
         )}
+        {/* PUBLIC/PRIVATE badge — pinned top-left, mirroring the export button top-right. Derived
+            from the operation's own mode, so a resumed public claim always reads PUBLIC even when
+            Privacy Mode is toggled on. Icon-led, so it costs no vertical space in the flow. */}
+        {modeKnown && (
+          <div
+            className={`absolute left-3 top-3 inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[10px] font-semibold uppercase tracking-wide ${
+              isPrivate ? 'bg-[#FDE7F3] text-[#81133B]' : 'bg-[#EEF1FB] text-[#17235E]'
+            }`}
+            title={isPrivate ? 'This transfer runs in Private mode' : 'This transfer runs in Public mode'}
+          >
+            <Icon icon={isPrivate ? 'ph:shield-check-fill' : 'ph:eye-bold'} width={12} height={12} />
+            {isPrivate ? 'Private' : 'Public'}
+          </div>
+        )}
         <div className="flex items-center justify-center">
-          {hasError ? (
+          {isAlreadyCompleted ? (
+            <Icon icon="ph:check-circle-fill" width={48} height={48} className="text-[#047857]" />
+          ) : hasError ? (
             <svg width="48" height="48" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M12.5004 8.99998V13M12.5004 17H12.5104M22.2304 18L14.2304 3.99998C14.056 3.69218 13.803 3.43617 13.4973 3.25805C13.1917 3.07993 12.8442 2.98608 12.4904 2.98608C12.1366 2.98608 11.7892 3.07993 11.4835 3.25805C11.1778 3.43617 10.9249 3.69218 10.7504 3.99998L2.75042 18C2.5741 18.3053 2.48165 18.6519 2.48243 19.0045C2.48321 19.3571 2.5772 19.7032 2.75486 20.0078C2.93253 20.3124 3.18757 20.5646 3.49411 20.7388C3.80066 20.9131 4.14783 21.0032 4.50042 21H20.5004C20.8513 20.9996 21.1959 20.9069 21.4997 20.7313C21.8035 20.5556 22.0556 20.3031 22.2309 19.9991C22.4062 19.6951 22.4985 19.3504 22.4984 18.9995C22.4983 18.6486 22.4059 18.3039 22.2304 18Z"
@@ -437,46 +513,32 @@ export default function ProgressCard({
 
         <p
           className={`text-center font-semibold text-md ${hasError ? 'mt-3' : 'mt-4'} ${
-            hasError ? 'text-[#B91C1C]' : isAllComplete ? 'text-green-600' : ''
+            isAlreadyCompleted ? 'text-[#047857]' : hasError ? 'text-[#B91C1C]' : isAllComplete ? 'text-green-600' : ''
           }`}
         >
           {heading}
         </p>
 
-        {hasError && (
-          <>
-            <p className="text-center text-12 text-latest-grey-500 mt-1 px-2">{failure.message}</p>
-            {/* Explorer links sit right under the status as small icon-links, not full-width
-                pills lower down. On a failure the L1 deposit tx is the reassuring "your funds
-                are here" anchor, so keep it close to the message. */}
-            {(l1TxUrl || l2TxUrl) && (
-              <div className="mt-2 flex items-center justify-center gap-4">
-                {l1TxUrl && (
-                  <a
-                    href={l1TxUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-200 hover:text-blue-100"
-                  >
-                    View L1 Tx
-                    <Icon icon="ph:arrow-square-out" width={13} height={13} />
-                  </a>
-                )}
-                {l2TxUrl && (
-                  <a
-                    href={l2TxUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#BF1254] hover:text-[#81133B]"
-                  >
-                    View L2 Tx
-                    <Icon icon="ph:arrow-square-out" width={13} height={13} />
-                  </a>
-                )}
-              </div>
-            )}
-          </>
+        {hasError && <p className="text-center text-12 text-latest-grey-500 mt-1 px-2">{failure.message}</p>}
+
+        {/* Privacy-mode mismatch warning — the operation on screen was created in the opposite mode
+            from the live toggle (e.g. resuming a public claim while Privacy Mode is on). Concise,
+            icon-led, only rendered on the mismatch edge case so it never eats the no-scroll budget. */}
+        {privacyMismatch && (
+          <div className="mt-2 flex items-start gap-1.5 rounded-md bg-light-yellow px-2.5 py-1.5">
+            <Icon icon="ph:warning-fill" width={13} height={13} className="mt-[1px] flex-shrink-0 text-dark-yellow" />
+            <p className="text-[11px] font-medium leading-snug text-dark-yellow">
+              {isPrivate
+                ? 'This transfer is Private, but Privacy Mode is off.'
+                : 'This transfer is Public, but Privacy Mode is on.'}
+            </p>
+          </div>
         )}
+
+        {/* Explorer links sit right under the status as small icon-links (never full-width pills
+            lower down, which clipped at the bottom of the card on some in-progress states). The L1
+            deposit tx is the reassuring "your funds are here" anchor, so keep it close to the top. */}
+        {explorerLinks}
 
         <div className={hasError ? 'mt-3' : 'mt-4'}>
           <LoadingStepsBars steps={steps} currentStep={progressStep - 1} />
@@ -563,31 +625,27 @@ export default function ProgressCard({
         </div>
       )}
 
-      {/* Transaction Links — success/in-progress only. On a failure the explorer links move
-          up next to the status message as compact icon-links (see above), so we don't repeat
-          the big pills here. */}
-      {!hasError && (
-        <div className="flex flex-row items-center justify-center mt-2 gap-4">
-          {l1TxUrl && (
-            <a
-              href={l1TxUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-14 font-semibold text-blue-200 bg-blue-300 hover:text-blue-100 mt-2 block px-4 py-2 rounded-full"
+      {/* Already-completed recovery — the deposit's L1→L2 message was already consumed, so a
+          Resume would just re-fail. Lead the user to Activity / their L2 balance instead, with a
+          real back button in the same ~80/20 split. No red, no Resume. */}
+      {isAlreadyCompleted && (
+        <div className="mt-3 mb-6 flex flex-col items-center gap-2">
+          <div className="flex w-full items-stretch gap-2">
+            <button
+              onClick={() => router.push('/activity')}
+              className="flex-[8_1_0%] rounded-lg bg-[#047857] py-[10px] font-semibold text-white transition-opacity hover:opacity-80"
             >
-              View L1 Tx ↗
-            </a>
-          )}
-          {l2TxUrl && (
-            <a
-              href={l2TxUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-14 font-semibold text-[#BF1254] bg-[#FDE7F3] hover:text-[#81133B] mt-2 block px-4 py-2 rounded-full"
+              View in Activity
+            </button>
+            <button
+              onClick={() => router.push('/')}
+              title="Back to main screen"
+              aria-label="Back to main screen"
+              className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"
             >
-              View L2 Tx ↗
-            </a>
-          )}
+              <Icon icon="ph:arrow-left-bold" width={18} height={18} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -595,7 +653,7 @@ export default function ProgressCard({
           shortfall) shares one row with a real back button in an ~80/20 split. The alternate
           recovery path and the Activity link ride underneath as light text links, so the whole
           block stays inside the no-scroll budget instead of stacking full-width pills. */}
-      {hasError && direction && (
+      {hasError && !isAlreadyCompleted && direction && (
         <div className="mt-3 mb-6 flex flex-col items-center gap-2">
           <div className="flex w-full items-stretch gap-2">
             <button
@@ -653,8 +711,9 @@ export default function ProgressCard({
       )}
 
       {/* Back to Main Screen — completion state, and the error fallback when no
-          direction is available to build the resume action above. */}
-      {showBackButton && !(hasError && direction) && (
+          direction is available to build the resume action above. The already-completed
+          state carries its own back button, so it's excluded here. */}
+      {showBackButton && !isAlreadyCompleted && !(hasError && direction) && (
         <div className="flex flex-row items-center justify-center mt-4 mb-6">
           <TextButton className="" onClick={() => router.push('/')}>
             Back to Main Screen

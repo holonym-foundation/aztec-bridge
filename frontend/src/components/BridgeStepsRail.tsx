@@ -32,7 +32,7 @@ const ACTION_SECONDARY =
 type StepStatus = 'done' | 'active' | 'upcoming'
 
 const BridgeStepsRail: React.FC = () => {
-  const { isWaapConnected, isAztecConnected, connectWaapWallet, setShowWalletModal } = useWalletStore()
+  const { isWaapConnected, isAztecConnected, connectWaapWallet, connectAztecWallet } = useWalletStore()
   const attestation = useAttestationCheck()
   const { openModal } = useExplainerStore()
   const router = useRouter()
@@ -70,11 +70,14 @@ const BridgeStepsRail: React.FC = () => {
     return () => window.removeEventListener(PEEK_EVENT, onPeek)
   }, [peekId])
 
-  // A single wallet-connect affordance for the first step: L1 first, then open
-  // the Aztec wallet picker for the second wallet.
+  // The first step needs BOTH wallets. Name the specific one still missing and
+  // drive its real connect handler (the same ones the main bridge button uses):
+  // Ethereum first when neither is connected, otherwise whichever is left.
+  const nextWallet: 'ethereum' | 'aztec' = !isWaapConnected ? 'ethereum' : 'aztec'
+  const connectLabel = nextWallet === 'aztec' ? 'Connect Aztec Wallet' : 'Connect Ethereum Wallet'
   const handleConnect = () => {
-    if (!isWaapConnected) connectWaapWallet().catch(() => {})
-    else setShowWalletModal(true)
+    if (nextWallet === 'aztec') connectAztecWallet().catch(() => {})
+    else connectWaapWallet().catch(() => {})
   }
 
   const bothConnected = isWaapConnected && isAztecConnected
@@ -117,7 +120,7 @@ const BridgeStepsRail: React.FC = () => {
       return (
         <button type="button" onClick={handleConnect} className={ACTION_PRIMARY}>
           <Icon icon="ph:wallet" width={14} height={14} />
-          Connect wallet
+          {connectLabel}
         </button>
       )
     }

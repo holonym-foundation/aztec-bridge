@@ -668,7 +668,10 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
             <div className="mt-3 space-y-2">
               <div className="text-xs text-latest-grey-500 space-y-0.5">
                 <div className="flex justify-between items-center h-4">
-                  <span>Public Fee Juice:</span>
+                  <span className="flex items-center gap-1">
+                    <Icon icon="ph:globe-hemisphere-west-fill" width={11} height={11} className="text-[#17235E]" />
+                    Public Fee Juice
+                  </span>
                   <span className="font-semibold">
                     {feeJuiceBalanceLoading ? (
                       <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
@@ -679,7 +682,10 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
                 </div>
                 {hasBridgedFpc && (
                   <div className="flex justify-between items-center h-4">
-                    <span>Private Fee Juice:</span>
+                    <span className="flex items-center gap-1">
+                      <Icon icon="ph:lock-key-fill" width={11} height={11} className="text-[#81133B]" />
+                      Private Fee Juice
+                    </span>
                     <span className="font-semibold">
                       {privateFeeJuiceBalanceLoading ? (
                         <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />

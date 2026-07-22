@@ -136,7 +136,7 @@ function FeeJuicePageInner() {
         <div className="px-5 pb-5 min-h-0 flex-1 overflow-y-auto">
           <div className="mt-2 flex items-center gap-2">
             <Icon icon="ph:gas-pump-fill" width={20} height={20} className="text-[#17235E]" />
-            <h1 className="text-16 font-semibold text-latest-black-100">Top up Fee Juice</h1>
+            <h1 className="text-16 font-semibold text-latest-black-100">Fee Juice</h1>
             <Icon
               icon="ph:info"
               width={15}
@@ -145,7 +145,6 @@ function FeeJuicePageInner() {
               data-tooltip-id="fj-purpose"
               data-tooltip-content="Fee Juice is gas on Aztec. Top up here anytime."
             />
-            <span className="ml-auto text-11 text-latest-grey-500">gas for Aztec</span>
           </div>
           <ReactTooltip id="fj-purpose" place="bottom" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
 
@@ -157,7 +156,10 @@ function FeeJuicePageInner() {
             ) : (
               <>
                 <span className="font-semibold text-latest-black-100">{feeJuiceBalance ?? '--'}</span>
-                <span className="text-latest-grey-500">public</span>
+                <span className="flex items-center gap-0.5 text-latest-grey-500">
+                  public
+                  <Icon icon="ph:globe-hemisphere-west-fill" width={11} height={11} className="text-[#17235E]" />
+                </span>
               </>
             )}
             {showPrivate && (

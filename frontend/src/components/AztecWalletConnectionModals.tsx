@@ -269,6 +269,15 @@ export function AztecWalletConnectionModals() {
           onCancel={cancelWalletConnection}
         />
       )}
+      {/* Secure-channel handshake runs between picking a wallet and the emoji
+          check. Hold a loading state here so the modal never blinks out and
+          looks like the click did nothing. */}
+      {walletConnectionPhase === 'verifying' && !verificationEmojis && (
+        <div className='absolute inset-0 bg-latest-grey-1000 z-20 rounded-lg flex flex-col items-center justify-center gap-4'>
+          <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />
+          <p className='text-latest-grey-600 text-14 font-medium'>Connecting to wallet...</p>
+        </div>
+      )}
       {walletConnectionPhase === 'requesting' && (
         <div className='absolute inset-0 bg-latest-grey-1000 z-20 rounded-lg flex flex-col items-center justify-center gap-4'>
           <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />

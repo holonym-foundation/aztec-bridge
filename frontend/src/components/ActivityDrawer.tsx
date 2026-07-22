@@ -257,7 +257,11 @@ const ActivityDrawer: React.FC = () => {
     const decimals = op.tokenDecimalsL1 ?? L1_TOKEN_METADATA.decimals
     const tokenSymbol = op.tokenSymbol ?? op.tokenSymbolL1 ?? L1_TOKEN_METADATA.symbol
     const amount = op.amountDisplayL1 ?? (op.amountL1 ? formatUnits(BigInt(op.amountL1), decimals) : '?')
-    const date = new Date(op.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    const opDate = new Date(op.createdAt)
+    const date = `${opDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${opDate.toLocaleTimeString(
+      undefined,
+      { hour: 'numeric', minute: '2-digit' },
+    )}`
     const directionLabel = op.direction === 'L1_TO_L2' ? 'L1 → L2' : 'L2 → L1'
     const meta = STATUS_META[op.status] ?? { label: op.status, className: 'bg-gray-100 text-gray-800' }
     const showResume = isResumable(op) || hasPossibleLockedFunds(op)

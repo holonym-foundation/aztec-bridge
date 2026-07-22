@@ -390,17 +390,14 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               l2Address: aztecAddress,
               userAction: DatadogUserAction.WITHDRAWAL_L2_TO_L1_BURN_SENT,
             })
-            notify(
-              'warn',
-              {
-                heading: 'Withdrawal in progress',
-                message: 'Keep this page open while your withdrawal completes.',
-              },
-              { autoClose: false, feed: false },
-            )
+            // Burn is on L2 — the "Do Not Reload" prep banner is now stale.
+            notify.dismiss('l2-to-l1-do-not-reload')
+            // Feed-only: the ProgressCard banner carries the live "keep this
+            // page open" safety text, so the message stays concise here.
             pushNotification({
               type: 'withdrawal',
               title: 'Withdrawal in progress',
+              message: 'Keep this page open while it completes.',
             })
             break
           case BridgeEventType.BURN_CONFIRMED:
@@ -413,26 +410,28 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               userAction: DatadogUserAction.WITHDRAWAL_L2_TO_L1_BURN_CONFIRMED,
             })
             setTransactionUrls(null, event.l2TxUrl)
-            // Prompt user to backup their withdrawal data (matches old flow pattern)
-            notify(
-              'warn',
-              {
-                heading: 'Withdrawal confirmed',
-                message: 'Click to export a recovery backup.',
-              },
-              {
-                autoClose: false,
+            // Burn landed on L2 — the "Do Not Reload" prep banner is now stale.
+            notify.dismiss('l2-to-l1-do-not-reload')
+            // Feed-only, with the recovery-backup export carried as an inline
+            // action so the user can still export from Messages now that no
+            // corner toast exists to click.
+            pushNotification({
+              type: 'withdrawal',
+              title: 'Withdrawal confirmed',
+              message: 'Finalizing on Ethereum. Export a recovery backup to stay safe.',
+              action: {
+                label: 'Export recovery backup',
                 onClick: () => {
                   try {
                     const pending = getPendingWithdrawals()
                     const latest = pending[pending.length - 1]
                     if (latest) exportWithdrawalData(latest)
                   } catch (e) {
-                    console.error('[L2→L1] Failed to export withdrawal data on toast click:', e)
+                    console.error('[L2→L1] Failed to export withdrawal data on action click:', e)
                   }
                 },
               },
-            )
+            })
             break
           case BridgeEventType.RECOVERY_L2_BLOCK:
             logInfo('L2→L1 recovered l2BlockNumber from receipt', {
@@ -589,63 +588,36 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               },
               event.error,
             )
-            pushNotification(
-              event.fundsAtRisk
-                ? {
-                    type: 'error',
-                    title: isBlockNotProvenHint ? 'Withdrawal blocked, try later' : "L1 withdraw didn't finish",
-                    message: isBlockNotProvenHint
-                      ? 'The network needs more time. Try again later.'
-                      : 'Your funds are safe on L2. Resume from Activity.',
-                  }
-                : {
-                    type: 'error',
-                    title: 'Withdrawal failed',
-                    message: 'No funds moved. You can retry.',
-                  },
-            )
-            // feed:false on every toast below — the semantic error push above is
-            // the single feed record for this failure; the toasts are transient.
+            // Feed-only: the classified message below is the single record for
+            // this failure. No corner toast — the peek bubble plus feed surface it.
             if (event.fundsAtRisk) {
-              notify(
-                'warn',
-                isBlockNotProvenHint
-                  ? {
-                      heading: 'Withdrawal blocked',
-                      message: 'The network needs more time. Try again later.',
-                    }
-                  : {
-                      heading: "L1 withdraw didn't finish",
-                      message: 'Your funds are safe on L2. Resume from Activity.',
-                    },
-                { autoClose: false, feed: false },
-              )
-            } else {
-              // Skip generic toast for backup failures — onError handler shows a more specific one
-              const errorMsg = errorMsgRaw
-              console.log('[L2→L1] errorMsg for toast:', JSON.stringify(errorMsg))
-              if (errorMsg.includes('Failed to backup')) break
+              pushNotification({
+                type: 'error',
+                title: isBlockNotProvenHint ? 'Withdrawal blocked, try later' : "L1 withdraw didn't finish",
+                message: isBlockNotProvenHint
+                  ? 'The network needs more time. Try again later.'
+                  : 'Your funds are safe on L2. Resume from Activity.',
+              })
+              break
+            }
 
-              if (errorMsg.includes('Contract artifact not found') || errorMsg.includes('artifact not found')) {
-                // registry URL must be testnet, not devnet (project runs on testnet).
-                notify(
-                  'error',
-                  {
-                    heading: 'Contract artifact not found',
-                    message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
-                  },
-                  { feed: false },
-                )
-              } else {
-                notify(
-                  'error',
-                  {
-                    heading: 'Withdrawal failed',
-                    message: 'No funds moved. You can retry.',
-                  },
-                  { feed: false },
-                )
-              }
+            // Backup failures get a more specific record from the onError handler.
+            if (errorMsgRaw.includes('Failed to backup')) break
+
+            // Classify so the user gets actionable copy instead of a raw revert
+            // string. registry URL must be testnet (project runs on testnet).
+            if (isArtifact) {
+              pushNotification({
+                type: 'error',
+                title: 'Contract artifact not found',
+                message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
+              })
+            } else {
+              pushNotification({
+                type: 'error',
+                title: 'Withdrawal failed',
+                message: 'No funds moved. You can retry.',
+              })
             }
             break
         }

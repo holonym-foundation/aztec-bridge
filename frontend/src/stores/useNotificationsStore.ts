@@ -18,6 +18,16 @@ export type NotificationType =
   | 'success'
   | 'warning'
 
+// An optional inline action carried by a message. Rendered as a small
+// button inside the feed row so an interactive notification (e.g. "Deposit
+// confirmed" offering a recovery-backup export) can be acted on straight from
+// Messages, now that no corner toast exists to click. Held in memory only —
+// the store isn't persisted, so the handler stays a live function.
+export interface NotificationAction {
+  label: string
+  onClick: () => void
+}
+
 export interface AppNotification {
   id: string
   // Optional stable identity. When present, a later push with the same key
@@ -29,6 +39,7 @@ export interface AppNotification {
   type: NotificationType
   title: string
   message?: string
+  action?: NotificationAction
   timestamp: number
   read: boolean
 }
@@ -54,7 +65,13 @@ interface NotificationsState {
   notifications: AppNotification[]
   unreadCount: number
   lastGenie: GenieSignal | null
-  pushNotification: (input: { type: NotificationType; title: string; message?: string; key?: string }) => void
+  pushNotification: (input: {
+    type: NotificationType
+    title: string
+    message?: string
+    key?: string
+    action?: NotificationAction
+  }) => void
   dismiss: (id: string) => void
   dismissAll: () => void
   markAllRead: () => void
@@ -69,7 +86,7 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
   unreadCount: 0,
   lastGenie: null,
 
-  pushNotification: ({ type, title, message, key }) =>
+  pushNotification: ({ type, title, message, key, action }) =>
     set((state) => {
       // Keyed upsert — refresh the existing row in place (new text/timestamp,
       // bumped to the top) and preserve its read state so a progress row the
@@ -83,6 +100,7 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
             type,
             title,
             message,
+            action,
             timestamp: Date.now(),
           }
           const rest = state.notifications.filter((_, i) => i !== idx)
@@ -108,6 +126,7 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
         type,
         title,
         message,
+        action,
         timestamp: Date.now(),
         read: false,
       }
@@ -140,4 +159,5 @@ export const pushNotification = (input: {
   title: string
   message?: string
   key?: string
+  action?: NotificationAction
 }) => useNotificationsStore.getState().pushNotification(input)

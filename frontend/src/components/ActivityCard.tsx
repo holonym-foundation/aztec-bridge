@@ -133,11 +133,10 @@ export default function ActivityCard({
   const tokenSymbol = operation.tokenSymbol ?? operation.tokenSymbolL1 ?? L1_TOKEN_METADATA.symbol
   const amount =
     operation.amountDisplayL1 ?? (operation.amountL1 ? formatUnits(BigInt(operation.amountL1), decimals) : '?')
-  const date = new Date(operation.createdAt).toLocaleDateString(undefined, {
+  const date = new Date(operation.createdAt).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
+    hour: 'numeric',
     minute: '2-digit',
   })
   const directionLabel = operation.direction === 'L1_TO_L2' ? 'L1 → L2' : 'L2 → L1'

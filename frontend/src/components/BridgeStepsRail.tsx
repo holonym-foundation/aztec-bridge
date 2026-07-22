@@ -6,6 +6,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useWalletStore } from '@/stores/walletStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
+import { useL2FeeJuiceBalance, useClaimFeeEstimate } from '@/hooks/useL2Operations'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { EXPLAINER_STEPS } from '@/components/model/HowItWorksModal'
 import { POCH_MINT_URL } from '@/config'
@@ -88,6 +89,19 @@ const BridgeStepsRail: React.FC = () => {
   const eligible = !!attestation.data?.eligible
   const verifying = bothConnected && attestation.isFetching && !attestation.data
 
+  // Step-3 fuel affordance is context-aware (#236): only nudge a Fee Juice top-up when the
+  // user is actually short. Compare existing FJ against the worst-case L2 claim gas — the same
+  // "covered" test FuelToggle/FeeJuiceTopUp use (existing balance >= estimated claim gas). The
+  // tutorial has no fuel-mode selector, so it reads the PUBLIC balance (the app default when
+  // Privacy Mode is off); the bridge form still surfaces private-mode sufficiency on its own.
+  const { data: l2FeeJuiceBalance } = useL2FeeJuiceBalance()
+  const { data: claimFeeLimit } = useClaimFeeEstimate('public')
+  const existingFj = l2FeeJuiceBalance != null && l2FeeJuiceBalance !== '--' ? Number(l2FeeJuiceBalance) : 0
+  const needFj = claimFeeLimit != null ? Number(claimFeeLimit) / 1e18 : null
+  // Covered = existing FJ meets the claim estimate. While the estimate is still loading, fall
+  // back to "holds any FJ" so an already-funded owner is never told to top up.
+  const feeJuiceCovered = needFj != null ? existingFj >= needFj : existingFj > 0
+
   // Single "you are here" pointer. We can reliably observe progress through
   // verification from global state; the deposit/claim step stays upcoming since
   // its live state lives in the bridge form.
@@ -112,6 +126,14 @@ const BridgeStepsRail: React.FC = () => {
         return 'A one-time humanity check is required before your first bridge.'
       }
       return EXPLAINER_STEPS[1].body
+    }
+    if (index === 2) {
+      // The "optionally top up so you can transact as soon as tokens land" framing only makes
+      // sense when the user has no fuel yet. Once covered, reflect that instead of nudging.
+      if (feeJuiceCovered) {
+        return 'You already have enough Fee Juice for L2 gas, so you can transact as soon as your tokens land.'
+      }
+      return EXPLAINER_STEPS[2].body
     }
     return EXPLAINER_STEPS[index].body
   }
@@ -145,6 +167,24 @@ const BridgeStepsRail: React.FC = () => {
       )
     }
     if (index === 2) {
+      // Covered: no top-up call-to-action. A calm check + a subtle "Top up more" link at most.
+      if (feeJuiceCovered) {
+        return (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#17235E]/[0.08] px-2.5 py-1.5 text-[12px] font-semibold text-[#17235E]">
+              <Icon icon="ph:check-circle-fill" width={14} height={14} className="text-[#17235E]" />
+              You have enough Fee Juice
+            </span>
+            <button
+              type="button"
+              onClick={() => router.push('/fee-juice')}
+              className="text-[12px] font-medium text-[#17235E] underline underline-offset-2 transition-opacity hover:opacity-80"
+            >
+              Top up more
+            </button>
+          </div>
+        )
+      }
       return (
         <button type="button" onClick={() => router.push('/fee-juice')} className={ACTION_PRIMARY}>
           <Icon icon="ph:gas-pump" width={14} height={14} />

@@ -309,6 +309,16 @@ const NotificationsDrawer: React.FC = () => {
               {n.message}
             </p>
           )}
+          {n.action && (
+            <button
+              type="button"
+              onClick={() => n.action?.onClick()}
+              className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-[#E5EFFF] px-2.5 py-1.5 text-[11px] font-semibold text-[#17235E] transition-colors hover:bg-[#17235E]/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#17235E]/40"
+            >
+              <Icon icon="ph:download-simple" width={12} height={12} />
+              {n.action.label}
+            </button>
+          )}
           <div className="flex items-center gap-1.5">
             {meta && (
               <span

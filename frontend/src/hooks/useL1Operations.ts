@@ -154,12 +154,12 @@ export function useL1TokenBalances() {
     } catch (error) {
       // Balance refresh is a non-critical, auto-retrying display enhancement. Never surface the
       // raw "Bridge API POST /api/alchemy/tokens-balances failed (0)" to users — keep the technical
-      // detail in the console and show a friendly, deduped, feed-suppressed note instead so a
-      // transient Alchemy hiccup doesn't read as a scary failure in the Messages feed.
+      // detail in the console and record a friendly, keyed note in the Messages feed instead. The
+      // key collapses every retry into one calm info row (no corner toast, no genie re-badging) so a
+      // transient Alchemy hiccup never reads as a scary failure.
       console.error('[l1TokenBalances] Failed to refresh balances:', axiosErrorMessage(error), error)
       notify('info', "Couldn't refresh balances, retrying", {
         toastId: 'l1-balances-refresh-failed',
-        feed: false,
       })
 
       throw error
@@ -568,17 +568,12 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             setTransactionUrls(event.l1TxUrl, null)
             // Tx is in mempool — the "Do Not Reload" prep banner is now stale.
             notify.dismiss(TOAST_ID_L1L2_DO_NOT_RELOAD)
-            notify(
-              'warn',
-              {
-                heading: 'Deposit in progress',
-                message: 'Keep this page open while your deposit completes.',
-              },
-              { autoClose: false, toastId: TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS, feed: false },
-            )
+            // Feed-only: the ProgressCard banner carries the live "keep this
+            // page open" safety text, so the message stays concise here.
             pushNotification({
               type: 'deposit',
               title: 'Deposit in progress',
+              message: 'Keep this page open while it completes.',
             })
             break
           case BridgeEventType.DEPOSIT_CONFIRMED:
@@ -597,23 +592,15 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             // toasts are now stale.
             notify.dismiss(TOAST_ID_L1L2_DO_NOT_RELOAD)
             notify.dismiss(TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS)
+            // Feed-only, with the recovery-backup export carried as an inline
+            // action so the user can still export from Messages now that no
+            // corner toast exists to click.
             pushNotification({
               type: 'deposit',
               title: 'Deposit confirmed',
-              message: 'Claiming on Aztec.',
-            })
-            // Prompt user to backup their claim secret (matches old flow)
-            notify(
-              'warn',
-              {
-                heading: 'Deposit confirmed',
-                message: 'Click to export a recovery backup.',
-              },
-              {
-                autoClose: false,
-                toastId: TOAST_ID_L1L2_DEPOSIT_CONFIRMED,
-                // feed:false — the 'deposit' push above is the feed record.
-                feed: false,
+              message: 'Claiming on Aztec. Export a recovery backup to stay safe.',
+              action: {
+                label: 'Export recovery backup',
                 onClick: () => {
                   try {
                     const claims = localStorage.getItem(STORAGE_KEYS.deposits)
@@ -624,11 +611,11 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                       if (latest) exportClaimData(latest)
                     }
                   } catch (e) {
-                    console.error('[L1→L2] Failed to export claim data on toast click:', e)
+                    console.error('[L1→L2] Failed to export claim data on action click:', e)
                   }
                 },
               },
-            )
+            })
             break
           // token registration observability.
           case BridgeEventType.TOKEN_REGISTERED:
@@ -851,76 +838,56 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               break
             }
 
-            pushNotification(
-              event.fundsAtRisk
-                ? {
-                    type: 'error',
-                    title: "L2 claim didn't finish",
-                    message: 'Your funds are safe. Resume from Activity.',
-                  }
-                : {
-                    type: 'error',
-                    title: 'Deposit failed',
-                    message: 'No funds moved. You can retry.',
-                  },
-            )
-
-            // feed:false on every toast below — the semantic error push above is
-            // the single feed record for this failure; the toasts are the
-            // transient surface only.
+            // Feed-only: the classified message below is the single record for
+            // this failure. No corner toast — the peek bubble plus feed surface it.
             if (event.fundsAtRisk) {
-              notify(
-                'warn',
-                {
-                  heading: "L2 claim didn't finish",
-                  message: 'Your funds are safe. Resume from Activity.',
-                },
-                { autoClose: false, feed: false },
-              )
+              pushNotification({
+                type: 'error',
+                title: "L2 claim didn't finish",
+                message: 'Your funds are safe. Resume from Activity.',
+              })
+              break
+            }
+
+            // Backup failures get a more specific record from the onError handler.
+            const errorMsg = event.error?.message ?? 'Unknown error'
+            if (errorMsg.includes('Failed to backup')) break
+
+            // Classify so the user gets actionable copy instead of a raw
+            // on-chain revert string.
+            const isCongestionErr =
+              errorMsg.includes('"path":["revertReason","functionErrorStack",0,"functionSelector"]') ||
+              (errorMsg.includes('invalid_type') && errorMsg.includes('functionSelector'))
+            const isReloadableErr = errorMsg.includes('0xfb8f41b2')
+            const isArtifactErr =
+              errorMsg.includes('Contract artifact not found') ||
+              errorMsg.includes('artifact not found') ||
+              (errorMsg.includes('artifact') && errorMsg.includes('not found'))
+
+            if (isCongestionErr) {
+              pushNotification({
+                type: 'error',
+                title: 'Aztec testnet is congested',
+                message: 'Your transaction was dropped. You can retry.',
+              })
+            } else if (isReloadableErr) {
+              pushNotification({
+                type: 'error',
+                title: 'Bridge failed (0xfb8f41b2)',
+                message: 'Please reload the page.',
+              })
+            } else if (isArtifactErr) {
+              pushNotification({
+                type: 'error',
+                title: 'Contract artifact not found',
+                message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
+              })
             } else {
-              // Skip generic toast for backup failures — onError handler shows a more specific one
-              const errorMsg = event.error?.message ?? 'Unknown error'
-              if (errorMsg.includes('Failed to backup')) break
-
-              // classify the error so the user gets actionable copy
-              // instead of a raw on-chain revert string.
-              const isCongestion =
-                errorMsg.includes('"path":["revertReason","functionErrorStack",0,"functionSelector"]') ||
-                (errorMsg.includes('invalid_type') && errorMsg.includes('functionSelector'))
-              const isReloadable = errorMsg.includes('0xfb8f41b2')
-              const isArtifact =
-                errorMsg.includes('Contract artifact not found') ||
-                errorMsg.includes('artifact not found') ||
-                (errorMsg.includes('artifact') && errorMsg.includes('not found'))
-
-              if (isCongestion) {
-                notify('error', 'Aztec testnet is congested. Your transaction was dropped.', {
-                  autoClose: false,
-                  feed: false,
-                })
-              } else if (isReloadable) {
-                notify('error', 'Bridge failed (0xfb8f41b2). Please reload the page.', {
-                  feed: false,
-                })
-              } else if (isArtifact) {
-                notify(
-                  'error',
-                  {
-                    heading: 'Contract artifact not found',
-                    message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
-                  },
-                  { feed: false },
-                )
-              } else {
-                notify(
-                  'error',
-                  {
-                    heading: 'Deposit failed',
-                    message: 'No funds moved. You can retry.',
-                  },
-                  { feed: false },
-                )
-              }
+              pushNotification({
+                type: 'error',
+                title: 'Deposit failed',
+                message: 'No funds moved. You can retry.',
+              })
             }
             break
           }
@@ -1168,7 +1135,6 @@ export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void)
       queryClient.invalidateQueries({ queryKey: ['l2TokenBalance', aztecAddress] })
       queryClient.invalidateQueries({ queryKey: ['l1TokenBalances', l1Address] })
       queryClient.invalidateQueries({ queryKey: ['l1TokenBalance', l1Address] })
-      notify('success', 'Fee Juice added. Finish your withdrawal now.', { feed: false })
       pushNotification({
         type: 'deposit',
         title: 'Fee Juice added',
@@ -1179,14 +1145,6 @@ export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void)
     onError: (error) => {
       notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
       const msg = extractErrorMessage(error) || 'The top-up could not be completed. Your balances are unchanged.'
-      notify(
-        'error',
-        {
-          heading: 'Fee Juice top-up failed',
-          message: msg,
-        },
-        { feed: false },
-      )
       pushNotification({ type: 'error', title: 'Fee Juice top-up failed', message: msg })
     },
   })

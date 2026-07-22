@@ -777,6 +777,7 @@ export default function Home() {
                 remainingDepositUsd={attestationData?.remainingDepositUsd}
                 travelRuleBlocked={attestationData?.travelRuleExceeded}
                 travelRuleRemainingUsd={attestationData?.travelRuleRemainingUsd}
+                reservedDepositUsd={attestationData?.reservedDepositUsd}
                 // Operation completion state
                 bridgeCompleted={bridgeCompleted}
                 // Disable if L2 node error

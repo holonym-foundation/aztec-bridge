@@ -64,6 +64,16 @@ export async function enforceAddressBinding(l1Address: string, l2Address: string
 export const DEPOSIT_CAP_WINDOW_MS = 24 * 60 * 60 * 1000
 
 /**
+ * Max attestation lifetime, in seconds. Bounds the signed deadline (so a signature
+ * can't be minted far in the future and banked) AND is the reservation's TTL — a
+ * hold frees this long after issuance if the deposit never confirms.
+ */
+export const ATTESTATION_TTL_SECONDS = 30 * 60
+
+/** ATTESTATION_TTL_SECONDS in whole minutes, for user-facing "retry in N min" copy. */
+export const ATTESTATION_TTL_MINUTES = Math.round(ATTESTATION_TTL_SECONDS / 60)
+
+/**
  * Sum a user's confirmed (funds-locked) L1→L2 deposits within the rolling
  * per-day window, in USD.
  *
@@ -118,7 +128,7 @@ export function usdToTokenBaseUnits(usd: number, tokenSymbol: string, decimals: 
  * the same attestation nonce) getConfirmedDepositUsd already counts that deposit,
  * so a reservation must not re-charge the amount now confirmed against it —
  * otherwise a user's own confirmed deposit blocks their next one until the
- * reservation's TTL (<= the attestation deadline, ~1h). Each reservation therefore
+ * reservation's TTL (<= the attestation deadline, <= 30m). Each reservation therefore
  * contributes only the portion of its signed ceiling NOT yet confirmed against it:
  * max(0, signedMax - confirmedForThisNonce). Combined with getConfirmedDepositUsd
  * the pair counts max(signedMax, confirmed) >= signedMax, so the reservation stays
@@ -165,6 +175,11 @@ export interface PassportReservationResult {
   limitUsd: number
   /** 24h confirmed usage, for the deposit_limit error message. */
   confirmedUsd: number
+  /** All-time confirmed usage, for distinguishing a hold-driven travel_rule block from a genuine one. */
+  lifetimeUsd: number
+  /** Outstanding (non-expired) reservation budget counted into this evaluation. When a block
+   *  is charged to this rather than settled deposits, it clears within the reservation TTL. */
+  reservedUsd: number
   /** The signed maxAmount to authorize (capped to the smaller remaining budget). */
   maxAmount: bigint
 }
@@ -201,12 +216,13 @@ export async function reservePassportBudget(params: {
     const reservedUsd = await getReservedDepositUsd(params.userId, tx)
     let maxAmount = params.perTxMaxAmount
     let confirmedUsd = 0
+    let lifetimeUsd = 0
 
     if (thresholdUsd > 0) {
-      const lifetimeUsd = await getConfirmedDepositUsd(params.userId, null, tx)
+      lifetimeUsd = await getConfirmedDepositUsd(params.userId, null, tx)
       const remainingUsd = Math.max(0, thresholdUsd - (lifetimeUsd + reservedUsd))
       if (remainingUsd <= 0) {
-        return { ok: false, reason: 'travel_rule', thresholdUsd, limitUsd, confirmedUsd, maxAmount: 0n }
+        return { ok: false, reason: 'travel_rule', thresholdUsd, limitUsd, confirmedUsd, lifetimeUsd, reservedUsd, maxAmount: 0n }
       }
       const remainingBaseUnits = usdToTokenBaseUnits(remainingUsd, params.tokenSymbol, params.tokenDecimals)
       if (remainingBaseUnits < maxAmount) maxAmount = remainingBaseUnits
@@ -216,7 +232,7 @@ export async function reservePassportBudget(params: {
       confirmedUsd = await getConfirmedDepositUsd(params.userId, DEPOSIT_CAP_WINDOW_MS, tx)
       const remainingUsd = Math.max(0, limitUsd - (confirmedUsd + reservedUsd))
       if (remainingUsd <= 0) {
-        return { ok: false, reason: 'deposit_limit', thresholdUsd, limitUsd, confirmedUsd, maxAmount: 0n }
+        return { ok: false, reason: 'deposit_limit', thresholdUsd, limitUsd, confirmedUsd, lifetimeUsd, reservedUsd, maxAmount: 0n }
       }
       const remainingBaseUnits = usdToTokenBaseUnits(remainingUsd, params.tokenSymbol, params.tokenDecimals)
       if (remainingBaseUnits < maxAmount) maxAmount = remainingBaseUnits
@@ -229,6 +245,8 @@ export async function reservePassportBudget(params: {
         thresholdUsd,
         limitUsd,
         confirmedUsd,
+        lifetimeUsd,
+        reservedUsd,
         maxAmount: 0n,
       }
     }
@@ -244,7 +262,7 @@ export async function reservePassportBudget(params: {
       },
     })
 
-    return { ok: true, thresholdUsd, limitUsd, confirmedUsd, maxAmount }
+    return { ok: true, thresholdUsd, limitUsd, confirmedUsd, lifetimeUsd, reservedUsd, maxAmount }
   })
 }
 

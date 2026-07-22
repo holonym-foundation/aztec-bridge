@@ -5,6 +5,8 @@ import {
   enforceAddressBinding,
   getNextNonce,
   reservePassportBudget,
+  ATTESTATION_TTL_SECONDS,
+  ATTESTATION_TTL_MINUTES,
 } from '@/lib/address-binding'
 import {
   fetchPassportScore,
@@ -103,11 +105,11 @@ export async function POST(request: NextRequest) {
     // 4. Issue signed attestation (L1 ECDSA + L2 Schnorr)
     const nonce = getNextNonce()
 
-    // Bound the deadline server-side: never further out than the default hour,
+    // Bound the deadline server-side: never further out than ATTESTATION_TTL_SECONDS,
     // regardless of client input, so an attestation can't be signed far in the
     // future and banked. This deadline is also the reservation's TTL below.
     const nowSeconds = Math.floor(Date.now() / 1000)
-    const maxDeadline = nowSeconds + 3600
+    const maxDeadline = nowSeconds + ATTESTATION_TTL_SECONDS
     const deadlineSeconds = BigInt(data.deadline ? Math.min(data.deadline, maxDeadline) : maxDeadline)
 
     let maxAmount = getPassportMaxAmount()
@@ -115,7 +117,7 @@ export async function POST(request: NextRequest) {
     // Cap the signed ceiling to the amount the client will actually deposit. The
     // portal accepts any deposit <= maxAmount, so signing the full per-tx ceiling
     // reserves the user's whole budget for a smaller deposit and blocks their next
-    // one until the reservation's TTL (~1h). Sizing the signature to the requested
+    // one until the reservation's TTL (<= 30 min). Sizing the signature to the requested
     // amount lets the reservation retire against the confirmed deposit instead. The
     // value is client-supplied, so it can only tighten the ceiling here — the
     // budget-derived cap below still applies, and the portal rejects any deposit
@@ -141,18 +143,29 @@ export async function POST(request: NextRequest) {
       })
       if (!reservation.ok) {
         if (reservation.reason === 'travel_rule') {
+          // A hold-driven block (settled lifetime is still under the threshold, but an
+          // outstanding reservation tips it over) is temporary — say so instead of telling
+          // the user to go verify with Clean Hands, which they don't need to do to bridge more.
+          const holdDriven =
+            reservation.reservedUsd > 0 && reservation.lifetimeUsd + 1e-6 < reservation.thresholdUsd
           return NextResponse.json(
             {
-              error: `You've reached the $${reservation.thresholdUsd.toFixed(0)} verification threshold. Verify with Clean Hands to bridge more.`,
-              reason: 'travel_rule',
+              error: holdDriven
+                ? `A pending deposit is holding $${reservation.reservedUsd.toFixed(2)} of your $${reservation.thresholdUsd.toFixed(0)} verification limit. It frees up once that deposit confirms, or within ${ATTESTATION_TTL_MINUTES} minutes.`
+                : `You've reached the $${reservation.thresholdUsd.toFixed(0)} verification threshold. Verify with Clean Hands to bridge more.`,
+              reason: holdDriven ? 'pending_hold' : 'travel_rule',
             },
             { status: 403 },
           )
         }
+        const holdDriven =
+          reservation.reservedUsd > 0 && reservation.confirmedUsd + 1e-6 < reservation.limitUsd
         return NextResponse.json(
           {
-            error: `Alpha deposit limit reached ($${reservation.limitUsd.toFixed(0)} per user / day). You have $${reservation.confirmedUsd.toFixed(2)} of $${reservation.limitUsd.toFixed(2)} used in the last 24h.`,
-            reason: 'deposit_limit',
+            error: holdDriven
+              ? `A pending deposit is holding $${reservation.reservedUsd.toFixed(2)} of your $${reservation.limitUsd.toFixed(0)}/day limit. It frees up once that deposit confirms, or within ${ATTESTATION_TTL_MINUTES} minutes.`
+              : `Alpha deposit limit reached ($${reservation.limitUsd.toFixed(0)} per user / day). You have $${reservation.confirmedUsd.toFixed(2)} of $${reservation.limitUsd.toFixed(2)} used in the last 24h.`,
+            reason: holdDriven ? 'pending_hold' : 'deposit_limit',
           },
           { status: 403 },
         )

@@ -726,6 +726,10 @@ export interface PassportCheckResult {
   travelRuleExceeded?: boolean
   /** Travel Rule: USD budget left before the threshold. Present only when enabled. */
   travelRuleRemainingUsd?: number
+  /** USD held by outstanding (non-expired) attestation reservations, already subtracted from the
+   *  remaining budgets above. Present only when > 0 — signals a block is a temporary hold that
+   *  frees when the pending deposit confirms or its reservation expires (<= 30 min). */
+  reservedUsd?: number
 }
 
 /**

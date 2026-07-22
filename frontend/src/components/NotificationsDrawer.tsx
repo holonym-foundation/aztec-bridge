@@ -25,13 +25,16 @@ const PANEL_WIDTH = 300
 // pager fit inside the viewport-capped panel height without clipping (#208/#229).
 const PAGE_SIZE = 3
 
-// #208/#225. One spacing scale for the Messages feed so rows and the panel
+// #208/#225/#255. One spacing scale for the Messages feed so rows and the panel
 // breathe instead of crowding. Defined once and reused. PANEL_PADDING sets the
 // panel's edge breathing room; PANEL_SECTION_GAP the space around the header and
 // pagination footer. ROW_LAYOUT sets the icon gap and vertical padding between
 // rows; ROW_STACK the consistent gap between a row's title, body, and status
-// line. Change here to retune the whole feed at once.
-const PANEL_PADDING = 'p-5'
+// line. Change here to retune the whole feed at once. Horizontal inset runs a
+// touch wider than vertical (#255): the denser rows (icon + amount/mode meta)
+// were crowding the left border, and the panel height is viewport-capped, so the
+// left/right edges get the extra room without spending scarce vertical space.
+const PANEL_PADDING = 'px-6 py-5'
 const PANEL_SECTION_GAP = 'mb-4'
 const PANEL_FOOTER_GAP = 'mt-4 pt-4'
 const ROW_LAYOUT = 'flex gap-3.5 py-4 border-b border-[#F0F0F0] last:border-b-0 last:pb-0'

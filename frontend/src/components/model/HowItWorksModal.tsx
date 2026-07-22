@@ -39,7 +39,7 @@ const HowItWorksModal: React.FC = () => {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
           onClick={closeModal}
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 px-4"
+          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 px-4 py-6"
         >
           <motion.div
             initial={{ opacity: 0, y: 24, scale: 0.98 }}

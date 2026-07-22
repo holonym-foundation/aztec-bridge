@@ -30,16 +30,6 @@ export default function ClientLayout({
   // up into the card region's bottom padding). Other routes (docs, activity) scroll normally,
   // so the footer keeps its default position there.
   const isNoScrollRoute = pathname === '/' || pathname === '/progress'
-  // The Tutorial + Activity drawers live here (not in any page) so they persist
-  // across the app's main screens instead of disappearing on navigation. Shown on
-  // the bridge, progress and activity flows; hidden on docs/complete/claim-fuel
-  // where they'd be noise. The centered card owns no part of this — the dock is a
-  // fixed, self-contained overlay, so card centering and the no-scroll budget are
-  // untouched.
-  const showDrawers =
-    pathname === '/' ||
-    (pathname?.startsWith('/progress') ?? false) ||
-    (pathname?.startsWith('/activity') ?? false)
   return (
     <div
       className={`relative flex flex-col w-full min-w-0 overflow-x-hidden ${isNoScrollRoute ? 'h-screen overflow-y-hidden' : 'min-h-screen'}`}
@@ -104,34 +94,32 @@ export default function ClientLayout({
             footer off the bottom and expose a dead strip beneath it. */}
         <Footer />
       </div>
-      {/* Persistent binder dock: the drawer tabs stacked on the RIGHT edge,
-          vertically centered. Fixed + pointer-events-none so it never adds page
-          width/scroll and clicks pass through the gaps; each drawer re-enables its
-          own pointer events. Tutorial sits above Activity above Messages; each
-          opens its panel leftward as an absolutely-positioned overlay, so hovering
-          one never reflows (splits apart) the others (#114). Desktop/tablet only
-          (md+): the centered 360px card leaves no gutter on phones, so the tab
-          would sit over the card edge — on mobile the same Tutorial/Activity live
-          in the Header nav. */}
-      {showDrawers && (
-        <>
-          <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
-            <BridgeStepsRail />
-            <ActivityDrawer />
-            <NotificationsDrawer />
-          </div>
-          {/* Below md the centered card leaves no right gutter, so the right-edge
-              binder tabs would sit off-screen (#243). Relocate them to a compact,
-              tappable dock in the bottom-LEFT corner, clear of the bottom-right
-              support chat bubble. Each tab keeps its icon + badge and opens its
-              panel as a bottom-anchored sheet. */}
-          <div className="pointer-events-none fixed bottom-4 left-4 z-40 flex items-end gap-2 md:hidden">
-            <BridgeStepsRail variant="dock" />
-            <ActivityDrawer variant="dock" />
-            <NotificationsDrawer variant="dock" />
-          </div>
-        </>
-      )}
+      {/* Persistent binder dock: app-shell chrome mounted once, so the Tutorial /
+          Activity / Messages tabs are present on EVERY route and navigation never
+          drops them (their badges stay live across routes because they read global
+          stores, not page state). The dock is fixed + pointer-events-none so it
+          never adds page width/scroll and clicks pass through the gaps; each drawer
+          re-enables its own pointer events. Tutorial sits above Activity above
+          Messages; each opens its panel leftward as an absolutely-positioned
+          overlay, so hovering one never reflows (splits apart) the others (#114).
+          Desktop/tablet only (md+): the centered 360px card leaves no gutter on
+          phones, so the tab would sit over the card edge — the mobile dock below
+          takes over there. */}
+      <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
+        <BridgeStepsRail />
+        <ActivityDrawer />
+        <NotificationsDrawer />
+      </div>
+      {/* Below md the centered card leaves no right gutter, so the right-edge
+          binder tabs would sit off-screen (#243). Relocate them to a compact,
+          tappable dock in the bottom-LEFT corner, clear of the bottom-right
+          support chat bubble. Each tab keeps its icon + badge and opens its
+          panel as a bottom-anchored sheet. */}
+      <div className="pointer-events-none fixed bottom-4 left-4 z-40 flex items-end gap-2 md:hidden">
+        <BridgeStepsRail variant="dock" />
+        <ActivityDrawer variant="dock" />
+        <NotificationsDrawer variant="dock" />
+      </div>
       <HowItWorksModal />
     </div>
   )

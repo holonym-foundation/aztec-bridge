@@ -199,8 +199,6 @@ export default function Home() {
     isAztecConnected,
     connectWaapWallet,
     connectAztecWallet,
-    disconnectWaapWallet,
-    disconnectAztecWallet,
     waapLoginMethod: loginMethod,
     waapWalletIcon: walletIcon,
     waapWalletProvider: walletProvider,
@@ -624,16 +622,7 @@ export default function Home() {
           }`}
         >
           <div className="shrink-0 px-5 pt-2 pb-1.5">
-            <BridgeHeader
-              onClick={async () => {
-                // Explicit reset only. Never blanket-clear localStorage — encrypted
-                // recovery data for pending transfers lives there.
-                if (!window.confirm('Disconnect your wallets and reset? Pending transfers stay recoverable from Activity.')) return
-                await disconnectWaapWallet()
-                await disconnectAztecWallet()
-                window.location.reload()
-              }}
-            />
+            <BridgeHeader />
           </div>
 
           {/* Scrolls internally (never the page) if an expanded accordion can't fit.

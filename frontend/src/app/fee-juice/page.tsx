@@ -6,6 +6,7 @@ import { Icon } from '@iconify/react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import RootStyle from '@/components/RootStyle'
 import BridgeHeader from '@/components/BridgeHeader'
+import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModals'
 import FeeJuiceTopUp from '@/components/FeeJuiceTopUp'
 import TextButton from '@/components/TextButton'
 import { useL2FeeJuiceBalance, useL2PrivateFeeJuiceBalance } from '@/hooks/useL2Operations'
@@ -137,6 +138,7 @@ function FeeJuicePageInner() {
 
   return (
     <RootStyle className="min-h-0 max-h-[calc(90vh-2rem)] overflow-hidden">
+      <AztecWalletConnectionModals />
       <div className="flex h-full max-h-[calc(90vh-2rem)] flex-col overflow-hidden">
         <div className="px-5 pt-5">
           <div className="flex items-center gap-4">
@@ -145,72 +147,72 @@ function FeeJuicePageInner() {
         </div>
 
         <div className="px-5 pb-5 min-h-0 flex-1 overflow-y-auto">
-          <div className="mt-2 flex items-center gap-2">
-            <Icon icon="ph:gas-pump-fill" width={20} height={20} className="text-[#17235E]" />
-            <h1 className="text-16 font-semibold text-latest-black-100">Fee Juice</h1>
-            <Icon
-              icon="ph:info"
-              width={15}
-              height={15}
-              className="cursor-help text-latest-grey-500"
-              data-tooltip-id="fj-purpose"
-              data-tooltip-content="Fee Juice is gas on Aztec. Top up here anytime."
-            />
+          {/* Title left, current Fee Juice balances compact on the right — one row. The active
+              mode's side is highlighted (bold + brand color) and the inactive side is dimmed. */}
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Icon icon="ph:gas-pump-fill" width={20} height={20} className="text-[#17235E]" />
+              <h1 className="text-16 font-semibold text-latest-black-100">Fee Juice</h1>
+              <Icon
+                icon="ph:info"
+                width={15}
+                height={15}
+                className="cursor-help text-latest-grey-500"
+                data-tooltip-id="fj-purpose"
+                data-tooltip-content="Fee Juice is gas on Aztec. Top up here anytime."
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-12">
+              {fjLoading ? (
+                <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
+              ) : (
+                <>
+                  <span className={privateActive ? 'font-medium text-latest-grey-500' : 'font-bold text-[#17235E]'}>
+                    {feeJuiceBalance ?? '--'}
+                  </span>
+                  <span
+                    className={`flex items-center gap-0.5 ${
+                      privateActive ? 'text-latest-grey-500' : 'font-semibold text-[#17235E]'
+                    }`}
+                  >
+                    public
+                    <Icon
+                      icon="ph:globe-hemisphere-west-fill"
+                      width={11}
+                      height={11}
+                      style={{ color: privateActive ? '#747474' : '#17235E' }}
+                    />
+                  </span>
+                </>
+              )}
+              {showPrivate && (
+                <>
+                  <span className="text-latest-grey-400">·</span>
+                  {privateFjLoading ? (
+                    <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
+                  ) : (
+                    <span className={privateActive ? 'font-bold text-[#81133B]' : 'font-medium text-latest-grey-500'}>
+                      {privateFeeJuiceBalance ?? '--'}
+                    </span>
+                  )}
+                  <span
+                    className={`flex items-center gap-0.5 ${
+                      privateActive ? 'font-semibold text-[#81133B]' : 'text-latest-grey-500'
+                    }`}
+                  >
+                    private
+                    <Icon
+                      icon="ph:lock-key-fill"
+                      width={11}
+                      height={11}
+                      style={{ color: privateActive ? '#81133B' : '#747474' }}
+                    />
+                  </span>
+                </>
+              )}
+            </div>
           </div>
           <ReactTooltip id="fj-purpose" place="bottom" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
-
-          {/* Current Fee Juice balances — one compact line; the active mode's side is highlighted
-              (bold + brand color) and the inactive side is dimmed. */}
-          <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-md bg-[#F5F5F5] px-3 py-2 text-12">
-            <span className="font-medium text-latest-grey-700">Fee Juice</span>
-            {fjLoading ? (
-              <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
-            ) : (
-              <>
-                <span className={privateActive ? 'font-medium text-latest-grey-500' : 'font-bold text-[#17235E]'}>
-                  {feeJuiceBalance ?? '--'}
-                </span>
-                <span
-                  className={`flex items-center gap-0.5 ${
-                    privateActive ? 'text-latest-grey-500' : 'font-semibold text-[#17235E]'
-                  }`}
-                >
-                  public
-                  <Icon
-                    icon="ph:globe-hemisphere-west-fill"
-                    width={11}
-                    height={11}
-                    style={{ color: privateActive ? '#747474' : '#17235E' }}
-                  />
-                </span>
-              </>
-            )}
-            {showPrivate && (
-              <>
-                <span className="text-latest-grey-400">·</span>
-                {privateFjLoading ? (
-                  <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
-                ) : (
-                  <span className={privateActive ? 'font-bold text-[#81133B]' : 'font-medium text-latest-grey-500'}>
-                    {privateFeeJuiceBalance ?? '--'}
-                  </span>
-                )}
-                <span
-                  className={`flex items-center gap-0.5 ${
-                    privateActive ? 'font-semibold text-[#81133B]' : 'text-latest-grey-500'
-                  }`}
-                >
-                  private
-                  <Icon
-                    icon="ph:lock-key-fill"
-                    width={11}
-                    height={11}
-                    style={{ color: privateActive ? '#81133B' : '#747474' }}
-                  />
-                </span>
-              </>
-            )}
-          </div>
 
           {/* Reusable buy + bridge Fee Juice form (auto + manual). Owns ALL top-up status
               messaging (including the interrupted-claim banner) so the screen can never show

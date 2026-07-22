@@ -9,40 +9,18 @@ import { useL1TokenBalance } from '@/hooks/useL1Operations'
 import { useL2TokenBalance } from '@/hooks/useL2Operations'
 
 interface BridgeHeaderProps {
-  onClick?: () => void
   /** Title shown in the header pill. State-dependent so the shared chrome is
    *  expressive per screen ("BRIDGE" on the bridge, "TOP UP" on /fee-juice, etc.). */
   title?: string
 }
 
-const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick, title = 'BRIDGE' }) => {
+const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
   const router = useRouter()
   const {
     getHeaderSteps,
-    getProgressSteps,
     headerStep,
     setHeaderStep
   } = useBridgeStore()
-
-  // A transfer is in progress once an operation step is active and the flow is not terminal.
-  // The reset/disconnect action (passed by consumers as `onClick`) tears down wallets and
-  // reloads, which would drop the live progress view and orphan its recovery data — so it is
-  // HARD-DISABLED mid-flight (issue #136), not merely confirm-gated. Idle/terminal flows reset
-  // freely (the consumer's own disconnect confirm still applies there).
-  const progressSteps = getProgressSteps()
-  const isTransferInProgress =
-    progressSteps.some((s) => s.status === 'active') && !progressSteps.every((s) => s.status === 'completed')
-
-  // Only consumers that pass an explicit reset handler get an interactive title.
-  // Purpose-built screens (e.g. /fee-juice) render it with no handler, so the title
-  // is a plain, non-interactive label that can NEVER trigger a wallet disconnect/reset.
-  const resettable = !!onClick
-
-  const handleResetClick = () => {
-    if (!onClick) return
-    if (isTransferInProgress) return
-    onClick()
-  }
 
   const {
     isWaapConnected,
@@ -84,13 +62,7 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ onClick, title = 'BRIDGE' }
 
       <LoadingBar steps={steps} currentStep={headerStep} />
       <div className='flex min-w-0 items-center'>
-        <p
-          className={`shrink-0 text-center text-[#0A0A0A] font-[700] text-[16px] leading-[24px] tracking-[0.32px] uppercase font-['Suisse_Intl'] ${
-            !resettable ? 'cursor-default' : isTransferInProgress ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
-          }`}
-          title={resettable && isTransferInProgress ? 'Locked during transfer to protect your funds.' : undefined}
-          aria-disabled={resettable && isTransferInProgress}
-          onClick={resettable ? handleResetClick : undefined}>
+        <p className="shrink-0 cursor-default text-center text-[#0A0A0A] font-[700] text-[16px] leading-[24px] tracking-[0.32px] uppercase font-['Suisse_Intl']">
           {title}
         </p>
         {/* Balance-refresh status. Collapses to zero width when idle (no layout

@@ -54,7 +54,9 @@ function OperationError({ message }: { message: string }) {
     <div className="mt-1 flex items-start gap-1.5">
       <p
         className={`text-xs text-red-500 flex-1 min-w-0 ${
-          expanded ? 'whitespace-pre-wrap break-words' : 'line-clamp-1 break-words'
+          expanded
+            ? 'whitespace-pre-wrap break-words max-h-20 overflow-y-auto pr-1'
+            : 'line-clamp-1 break-words'
         }`}
       >
         {message}
@@ -169,9 +171,10 @@ export default function ActivityCard({
               href={operation.l1TxUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap"
+              className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap"
             >
-              L1 Tx ↗
+              L1 Tx
+              <Icon icon="ph:arrow-square-out" width={13} height={13} />
             </a>
           )}
           {operation.l2TxUrl && (
@@ -179,31 +182,37 @@ export default function ActivityCard({
               href={operation.l2TxUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-medium text-purple-600 hover:text-purple-800 whitespace-nowrap"
+              className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:text-purple-800 whitespace-nowrap"
             >
-              L2 Tx ↗
+              L2 Tx
+              <Icon icon="ph:arrow-square-out" width={13} height={13} />
             </a>
           )}
 
           <div className="ml-auto flex items-center gap-2">
             {onShareFuelClaim && hasFuelClaimData(operation) && (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => onShareFuelClaim(operation)}
-                  disabled={!!sharingFuelClaim}
-                  className="text-xs font-semibold text-black bg-amber-100 hover:bg-amber-200 disabled:opacity-50 px-3 py-1 rounded-lg whitespace-nowrap"
-                >
-                  {sharingFuelClaim ? 'Decrypting…' : 'Share fuel claim'}
-                </button>
-                <button
-                  type="button"
-                  data-tooltip-id={fuelTipId}
-                  data-tooltip-content="Create a link that lets someone else claim this transfer's Fee Juice (Aztec gas). Useful when you funded gas for another wallet."
-                  aria-label="What is Share fuel claim?"
-                  className="text-gray-400 hover:text-[#81133B] p-0.5 rounded"
-                >
-                  <Icon icon="ph:info" width={14} height={14} />
-                </button>
+              <div className="flex items-center gap-1.5">
+                {/* Info (i) sits inside the pill, immediately after the label, so it
+                    reads as explaining "Share fuel claim" (#190). */}
+                <div className="inline-flex items-center gap-1 rounded-lg bg-amber-100 pl-3 pr-2 py-1">
+                  <button
+                    onClick={() => onShareFuelClaim(operation)}
+                    disabled={!!sharingFuelClaim}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-black transition-opacity hover:opacity-80 disabled:opacity-60 whitespace-nowrap"
+                  >
+                    <Icon icon="ph:share-network" width={13} height={13} />
+                    {sharingFuelClaim ? 'Decrypting…' : 'Share fuel claim'}
+                  </button>
+                  <button
+                    type="button"
+                    data-tooltip-id={fuelTipId}
+                    data-tooltip-content="Create a link that lets someone else claim this transfer's Fee Juice (Aztec gas). Useful when you funded gas for another wallet."
+                    aria-label="What is Share fuel claim?"
+                    className="text-amber-700/70 hover:text-[#81133B]"
+                  >
+                    <Icon icon="ph:info" width={13} height={13} />
+                  </button>
+                </div>
                 <ReactTooltip id={fuelTipId} place="top" className="z-[100]" style={{ fontSize: '11px', maxWidth: '220px' }} />
               </div>
             )}

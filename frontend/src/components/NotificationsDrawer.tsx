@@ -20,9 +20,18 @@ const PEEK_EVENT = 'shield:peek'
 type PeekSignal = { id: string; open: boolean }
 
 const PANEL_WIDTH = 300
-// Fixed page size — the panel paginates rather than scrolls, matching the app's
-// no-scroll direction.
+// Fixed page size. The panel paginates rather than scrolls, matching the app's
+// no-scroll direction. Kept at 4 so the taller, roomier rows still fit without a
+// scrollbar (#208).
 const PAGE_SIZE = 4
+
+// #208. One spacing scale for the Messages feed so rows breathe instead of
+// crowding. Defined once and reused for every row. ROW_LAYOUT sets the icon gap
+// and vertical padding between rows. ROW_STACK sets a single consistent gap
+// between a row's title, body, and status line. Change here to retune the whole
+// feed at once.
+const ROW_LAYOUT = 'flex gap-3 py-3.5 border-b border-[#F0F0F0] last:border-b-0 last:pb-0'
+const ROW_STACK = 'min-w-0 flex-1 flex flex-col gap-1.5'
 
 const ICON_FOR: Record<NotificationType, string> = {
   signature: 'ph:pen-nib',
@@ -243,12 +252,7 @@ const NotificationsDrawer: React.FC = () => {
     const state = stateById.get(n.id) ?? 'plain'
     const meta = state === 'plain' ? null : STATE_META[state]
     return (
-      <li
-        key={n.id}
-        className={`flex gap-2.5 border-b border-[#F0F0F0] py-2.5 last:border-b-0 last:pb-0 ${
-          state === 'stale' ? 'opacity-55' : ''
-        }`}
-      >
+      <li key={n.id} className={`${ROW_LAYOUT} ${state === 'stale' ? 'opacity-55' : ''}`}>
         <span
           className={`relative mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${ICON_TINT[n.type]}`}
         >
@@ -264,7 +268,7 @@ const NotificationsDrawer: React.FC = () => {
             </span>
           )}
         </span>
-        <div className="min-w-0 flex-1">
+        <div className={ROW_STACK}>
           <div className="flex items-start justify-between gap-2">
             <p className="text-[12px] font-semibold text-[#0A0A0A] break-words [overflow-wrap:anywhere]">{n.title}</p>
             <button
@@ -277,11 +281,11 @@ const NotificationsDrawer: React.FC = () => {
             </button>
           </div>
           {n.message && (
-            <p className="mt-0.5 text-[11px] leading-[16px] text-[#737373] break-words [overflow-wrap:anywhere]">
+            <p className="text-[11px] leading-[16px] text-[#737373] break-words [overflow-wrap:anywhere]">
               {n.message}
             </p>
           )}
-          <div className="mt-1 flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
             {meta && (
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.3px] ${meta.className}`}

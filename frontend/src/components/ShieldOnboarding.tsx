@@ -122,6 +122,21 @@ const SCREENS: Screen[] = [
   },
 ]
 
+// The shader colors are a JS prop, so the CSS dark-mode block can't reach them. Without
+// this the light-pink field renders in both schemes and dark mode only drops a partial
+// veil over it, landing everything in a muddy mid-tone that light text can't beat.
+function usePrefersDark() {
+  const [dark, setDark] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    setDark(mq.matches)
+    const onChange = (e: MediaQueryListEvent) => setDark(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return dark
+}
+
 /* Alphanet caution badge — sits above the hero eyebrow. Amber (not brand pink) so it
    reads as a warning, with a hover/focus tooltip so users know this is an early network
    before they bridge real value. */
@@ -184,10 +199,11 @@ function AlphanetBadge() {
 /* Paper-shader field: real @paper-design MeshGradient in Shield tones, softened by a
    translucent veil so copy stays legible, plus a fine grain for paper texture. */
 function PaperField({ still }: { still: boolean }) {
+  const dark = usePrefersDark()
   return (
     <div className="ob-field" aria-hidden="true">
       <MeshGradient
-        colors={['#fff6fa', '#fde7f3', '#fcd4ea', '#fa8fc4']}
+        colors={dark ? ['#1c0710', '#3d0e21', '#5a1327', '#81133b'] : ['#fff6fa', '#fde7f3', '#fcd4ea', '#fa8fc4']}
         speed={still ? 0 : 0.16}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
       />
@@ -1046,10 +1062,13 @@ export default function ShieldOnboarding() {
         @media (prefers-color-scheme: dark) {
           .ob-root { background: #150a0f; color: #f6ecf1; }
           .ob-grain { mix-blend-mode: screen; opacity: 0.06; }
-          .ob-veil { background: linear-gradient(180deg, rgba(21,10,15,0.34), rgba(21,10,15,0.68)); }
-          .ob-body { color: #cba7b6; } .ob-body strong { color: #f6ecf1; }
+          .ob-veil { background:
+            radial-gradient(120% 90% at 50% 46%, rgba(21,10,15,0.52), rgba(21,10,15,0) 70%),
+            linear-gradient(180deg, rgba(21,10,15,0.30), rgba(21,10,15,0.70)); }
+          .ob-body { color: #e6d0dc; } .ob-body strong { color: #f6ecf1; }
           .ob-back { color: #cba7b6; border-color: #3a2530; }
-          .ob-secured strong { color: #cba7b6; }
+          .ob-skip { color: #c9adb9; } .ob-skip:hover { color: #f0dbe6; }
+          .ob-secured { color: #b89aa6; } .ob-secured strong { color: #e6d0dc; }
           /* #81133B is too close to the dark maroon field to read; use the palette's pink accent. */
           .ob-dev-cta { color: #f2b7d3; }
           .ob-tiers { border-color: #3a2530; background: rgba(255,255,255,0.03); }

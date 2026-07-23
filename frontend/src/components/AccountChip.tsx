@@ -3,8 +3,10 @@
 import { Icon, loadIcons } from '@iconify/react'
 import Image from 'next/image'
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useWalletStore } from '@/stores/walletStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
+import { useL1Humanity } from '@/hooks/useL1Humanity'
 import { shortAddr, accountLabel } from '@/hooks/useBindingStatus'
 import { POCH_MINT_URL } from '@/config'
 import { BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD } from '@/config/env.config'
@@ -170,24 +172,41 @@ const AccountChip: React.FC<AccountChipProps> = ({
     switchAztecAccount,
   } = useWalletStore()
 
+  // Authenticated Shield attestation — carries the per-user deposit / Travel-Rule
+  // caps, but needs an authed session + Shield attestation. Without auth it is
+  // undefined, so it must NEVER be the source of the personhood face (that would
+  // contradict the nav). It is used ONLY for the cap/limit figures and to decide
+  // whether the SEPARATE "Complete verification" nudge is needed.
   const { data: attestation, isFetching: attFetching } = useAttestationCheck()
   const eligible = attestation?.eligible ?? false
-  const method = attestation?.method ?? null
-  const passportScore = attestation?.passportScore
-  const passportThreshold = attestation?.passportThreshold
   const remainingDepositUsd = attestation?.remainingDepositUsd
   const reservedDepositUsd = attestation?.reservedDepositUsd
   const travelRuleRemainingUsd = attestation?.travelRuleRemainingUsd
   const depositLimitReached = attestation?.depositLimitReached ?? false
+  // The authed attestation's own verified state (session + Shield attestation).
+  const attScorePasses =
+    typeof attestation?.passportScore === 'number' &&
+    typeof attestation?.passportThreshold === 'number' &&
+    attestation.passportScore >= attestation.passportThreshold
+  const attVerified = eligible || attScorePasses || attestation?.method === 'poch'
 
-  const scorePasses =
-    typeof passportScore === 'number' &&
-    typeof passportThreshold === 'number' &&
-    passportScore >= passportThreshold
-  const isPoch = method === 'poch'
-  // On the Passport tier = verified via Passport but not yet holding Clean Hands.
-  const onPassportTier = !isPoch && (method === 'passport' || scorePasses)
-  const isVerified = eligible || scorePasses || isPoch
+  // ── Personhood: SAME L1 humanity source the nav uses (issue #291) ──
+  // Keyed purely on the L1 address (no JWT / no L2 binding), so the score shown
+  // here is identical to the nav's humanity chip and can never disagree with it.
+  const { data: l1Humanity, isFetching: l1Fetching } = useL1Humanity(waapAddress || undefined)
+  const l1Method = l1Humanity?.method ?? null
+  const l1Score = l1Humanity?.passportScore
+  const l1Threshold = l1Humanity?.passportThreshold
+  // Mirror the nav: a score > 0 counts as a real, showable score (never a bare 0).
+  const l1HasScore = typeof l1Score === 'number' && l1Score > 0
+  const l1IsPoch = l1Method === 'poch'
+  const l1ScorePasses =
+    l1HasScore && (typeof l1Threshold === 'number' ? l1Score! >= l1Threshold : true)
+  // Verified indicator reflects the humanity result (same as the nav), NOT the
+  // authed attestation — so the seal/state can never contradict the nav.
+  const l1Verified = l1HasScore || l1IsPoch || (l1Humanity?.eligible ?? false)
+  // Has a Passport score but not yet Clean Hands.
+  const l1OnPassportTier = !l1IsPoch && l1HasScore
 
   const [open, setOpen] = useState(false)
   const [aztecSwitchOpen, setAztecSwitchOpen] = useState(false)
@@ -195,10 +214,24 @@ const AccountChip: React.FC<AccountChipProps> = ({
   // "Copied" flip is scoped to the row the user acted on, not both rows.
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  // #296: the dropdown is PORTALED to <body> so it escapes the Header's own
+  // stacking context (Header sits at z-30 in ClientLayout, the binder tabs at
+  // z-40 — a descendant of z-30 can never paint above z-40 no matter its local
+  // z-index). Portaled + fixed + z-[60], it clears the tabs. mounted gates the
+  // portal so document.body is only touched on the client.
+  const [mounted, setMounted] = useState(false)
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null)
+  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
+    // Click-outside must account for the portaled menu no longer living inside
+    // rootRef — a click inside the menu is NOT "outside".
     function onClickOutside(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (rootRef.current?.contains(t)) return
+      if (menuRef.current?.contains(t)) return
+      setOpen(false)
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false)
@@ -210,6 +243,26 @@ const AccountChip: React.FC<AccountChipProps> = ({
       document.removeEventListener('keydown', onKey)
     }
   }, [])
+
+  // Anchor the portaled dropdown just under the chip, pinned to its right edge,
+  // and keep it there through scroll/resize. Viewport-aware: never let the right
+  // gutter fall under 12px so it can't clip off-screen.
+  useEffect(() => {
+    if (!open) return
+    const update = () => {
+      const el = rootRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      setMenuPos({ top: r.bottom + 8, right: Math.max(12, window.innerWidth - r.right) })
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+  }, [open])
 
   // #275: copies the FULL address (not the truncated label), flips to a check +
   // "Copied" for ~1.5s, keeping the dropdown open so the user can copy again.
@@ -278,14 +331,10 @@ const AccountChip: React.FC<AccountChipProps> = ({
             {bothConnected && <span className="-ml-2">{AztecAvatar}</span>}
             {!isWaapConnected && isAztecConnected && AztecAvatar}
           </span>
-          {/* EVM network glyph (only meaningful in the EVM-only state). */}
-          {isWaapConnected && !bothConnected && (
-            <Image src={EVM_NETWORK_ICON} alt="" width={13} height={13} className="flex-shrink-0" />
-          )}
           <span className={`text-xs font-medium truncate ${navText(isDark)}`} title={waapAddress || ''}>
             {label}
           </span>
-          {bothConnected && isVerified && (
+          {bothConnected && l1Verified && (
             <Icon
               icon="ph:seal-check-fill"
               width={15}
@@ -328,10 +377,12 @@ const AccountChip: React.FC<AccountChipProps> = ({
         )}
       </div>
 
-      {open && (
+      {open && mounted && menuPos && createPortal(
         <div
+          ref={menuRef}
           role="menu"
-          className={`absolute right-0 mt-2 z-50 w-[290px] max-w-[calc(100vw-1.5rem)] max-h-[min(72vh,560px)] overflow-y-auto rounded-[16px] shadow-lg py-2 flex flex-col ${panelSurface(isDark)} ${navText(isDark)}`}
+          style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
+          className={`z-[60] w-[290px] max-w-[calc(100vw-1.5rem)] max-h-[min(72vh,560px)] overflow-y-auto rounded-[16px] shadow-lg py-2 flex flex-col ${panelSurface(isDark)} ${navText(isDark)}`}
         >
           {/* #282: the binding-conflict notice is a STATIC banner at the top of the
               dropdown, above the account list — so it can never float over and
@@ -391,6 +442,14 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 onSwitch={availableAccounts.length > 1 ? () => setAztecSwitchOpen((v) => !v) : undefined}
                 switchTitle="Switch Azguard account"
                 switchActive={aztecSwitchOpen}
+                // #297a: the "Linked" badge belongs on the ACTUAL server-bound
+                // account, never on the current one by default. Show it here only
+                // when the connected Aztec account IS the linked pair.
+                linked={
+                  !!linkedAccountAddress &&
+                  !!aztecAddress &&
+                  aztecAddress.toLowerCase() === linkedAccountAddress.toLowerCase()
+                }
               />
               {aztecSwitchOpen && availableAccounts.length > 1 && (
                 <div className="px-2 pb-1">
@@ -442,6 +501,40 @@ const AccountChip: React.FC<AccountChipProps> = ({
             </>
           )}
 
+          {/* #290: EVM up, Aztec NOT connected → show the Aztec row grayed/muted
+              (opacity-40 on the avatar + labels) rather than omitting it, with an
+              ACTIVE "Connect" button (full opacity) wired to the Aztec-connect
+              action so the next step is obvious. */}
+          {isWaapConnected && !isAztecConnected && (
+            <div className="flex items-center gap-2 px-4 py-1.5">
+              <span className="flex items-center gap-2 min-w-0 flex-1 opacity-40 select-none">
+                <span className="flex-shrink-0">{AztecAvatar}</span>
+                <span className="flex flex-col min-w-0 flex-1">
+                  <span className={`text-xs font-medium truncate ${navText(isDark)}`}>Aztec account</span>
+                  <span className={`text-[10px] ${subtleText(isDark)} truncate`}>Not connected</span>
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={onConnectAztec}
+                disabled={isL2Connecting}
+                title="Connect Aztec wallet"
+                className={`flex items-center gap-1 flex-shrink-0 pl-1.5 pr-2 py-1 rounded-full text-[11px] font-medium border ${
+                  isL2Connecting
+                    ? 'opacity-40 cursor-not-allowed border-transparent'
+                    : `cursor-pointer ${
+                        isDark
+                          ? 'bg-[#FA8FC4]/[0.14] border-[#FA8FC4]/[0.30] hover:bg-[#FA8FC4]/[0.22]'
+                          : 'bg-[#FA8FC4]/[0.16] border-[#81133B]/[0.25] hover:bg-[#FA8FC4]/[0.26]'
+                      }`
+                } ${accentPink(isDark)}`}
+              >
+                <Image src={AZTEC_ICON} alt="" width={13} height={13} className="flex-shrink-0" />
+                {isL2Connecting ? '…' : 'Connect'}
+              </button>
+            </div>
+          )}
+
           {/* Link a New Wallet — DISABLED variant. Non-interactive (no onClick)
               until the WAAP wallet-linking flow ships; opacity-40 (opacity-50 is a
               no-op on this repo's sparse opacity scale) + muted + cursor-not-allowed
@@ -462,42 +555,55 @@ const AccountChip: React.FC<AccountChipProps> = ({
           {/* ── Identity & proofs ── */}
           <SectionLabel isDark={isDark}>Identity &amp; proofs</SectionLabel>
 
+          {/* #291: the SCORE comes from useL1Humanity (same as the nav), so it
+              can never contradict the nav's humanity chip. A real score is shown
+              as a bare number — never a bald "Not verified" alongside one. */}
           <ProofRow
             isDark={isDark}
             icon="ph:identification-card"
             title="Passport"
             caption={`Required · ${TRAVEL_RULE_LABEL} per human`}
             status={
-              attFetching
+              l1Fetching
                 ? 'Checking…'
-                : typeof passportScore === 'number'
-                  ? `${passportScore}`
-                  : isPoch
+                : l1HasScore
+                  ? `${l1Score}`
+                  : l1IsPoch
                     ? 'Covered by Clean Hands'
                     : 'Not verified'
             }
-            good={scorePasses || isPoch}
+            good={l1ScorePasses || l1IsPoch}
           />
           <ProofRow
             isDark={isDark}
             icon="ph:hand-soap"
             title="Clean Hands SBT"
             caption={`Unlocks ${DEPOSIT_CAP_LABEL}`}
-            status={attFetching ? 'Checking…' : isPoch ? 'Verified' : 'Not held'}
-            good={isPoch}
+            status={l1Fetching ? 'Checking…' : l1IsPoch ? 'Verified' : 'Not held'}
+            good={l1IsPoch}
           />
-          {/* Contextual next step: no proof → Get verified; Passport tier →
-              Upgrade to Clean Hands; already Clean Hands → hidden. */}
-          {!isPoch && (
+          {/* Contextual next step (driven by the SAME L1 humanity result as the
+              face, so it stays consistent):
+                - real humanity but the authed Shield attestation is incomplete
+                  (no session / not attested) → a subtle "Complete verification"
+                  nudge (never a bald "Not verified" beside a real score);
+                - Passport tier, no Clean Hands → Upgrade to Clean Hands;
+                - no proof yet → Get verified;
+                - already Clean Hands → hidden. */}
+          {!l1IsPoch && (
             <a
-              href={onPassportTier ? POCH_MINT_URL : 'https://app.passport.xyz'}
+              href={l1OnPassportTier ? POCH_MINT_URL : 'https://app.passport.xyz'}
               target="_blank"
               rel="noopener noreferrer"
               className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
             >
               <Icon icon="ph:plus-circle" width={16} height={16} className={accentPink(isDark)} />
               <span className={`text-xs font-medium ${navText(isDark)}`}>
-                {onPassportTier ? 'Upgrade to Clean Hands' : 'Get verified'}
+                {l1Verified && !attVerified
+                  ? 'Complete verification'
+                  : l1OnPassportTier
+                    ? 'Upgrade to Clean Hands'
+                    : 'Get verified'}
               </span>
             </a>
           )}
@@ -518,13 +624,17 @@ const AccountChip: React.FC<AccountChipProps> = ({
               label="Deposit allowance"
               // No client-side cap TOTAL is exposed, so the used/limit ratio
               // can't be computed — show the real remaining $ and flag the bar
-              // as an estimate rather than fabricating a percentage.
+              // as an estimate rather than fabricating a percentage. #292: when
+              // the per-user cap data is unavailable (no authed session) show the
+              // configured ceiling + a verify hint, NEVER a bare "No limit".
               valueText={
                 depositLimitReached
                   ? 'Reached'
                   : typeof remainingDepositUsd === 'number'
                     ? `$${remainingDepositUsd.toLocaleString()} left`
-                    : 'No limit'
+                    : attFetching
+                      ? 'Checking…'
+                      : `Verify to see limits · ${DEPOSIT_CAP_LABEL}`
               }
               pct={depositLimitReached ? 100 : undefined}
               placeholder={!depositLimitReached && typeof remainingDepositUsd === 'number'}
@@ -546,7 +656,9 @@ const AccountChip: React.FC<AccountChipProps> = ({
               valueText={
                 typeof travelRuleRemainingUsd === 'number'
                   ? `$${travelRuleRemainingUsd.toLocaleString()} left`
-                  : 'No limit'
+                  : attFetching
+                    ? 'Checking…'
+                    : `Verify to see limits · ${TRAVEL_RULE_LABEL}`
               }
               pct={undefined}
               placeholder={typeof travelRuleRemainingUsd === 'number'}
@@ -576,7 +688,8 @@ const AccountChip: React.FC<AccountChipProps> = ({
             <Icon icon="ph:sign-out" width={18} height={18} />
             <span className="text-sm">Disconnect</span>
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
@@ -608,7 +721,9 @@ const WalletRow: React.FC<{
   onSwitch?: () => void
   switchTitle?: string
   switchActive?: boolean
-}> = ({ isDark, avatar, networkIcon, primary, secondary, fullAddress, copied, onCopy, onSwitch, switchTitle, switchActive }) => (
+  /** #297a: show a "Linked" badge — set ONLY for the server-bound account. */
+  linked?: boolean
+}> = ({ isDark, avatar, networkIcon, primary, secondary, fullAddress, copied, onCopy, onSwitch, switchTitle, switchActive, linked }) => (
   // #275: `group` lets hover/focus reveal the copy control. This is a div (not a
   // button) so the copy/switch buttons aren't nested inside a button.
   <div className="group flex items-center gap-2 px-4 py-1.5">
@@ -628,6 +743,15 @@ const WalletRow: React.FC<{
       <span className={`text-xs font-medium truncate ${navText(isDark)}`}>{primary}</span>
       <span className={`text-[10px] ${subtleText(isDark)} truncate`}>{secondary}</span>
     </span>
+    {linked && (
+      <span
+        className={`flex items-center gap-1 flex-shrink-0 text-[10px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
+        title="Linked to your EVM wallet"
+      >
+        <Icon icon="ph:link-simple" width={13} height={13} className="flex-shrink-0" />
+        Linked
+      </span>
+    )}
     {fullAddress && onCopy && (
       <button
         type="button"

@@ -1065,9 +1065,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     // widths where there was clearly more room to give it, so each stage adds
     // back a little before the next one lands.
     <div
-      className={`flex flex-col w-[150px] sm:w-[200px] md:w-[220px] min-[900px]:w-[236px] lg:w-[252px] flex-shrink-0 pl-2 sm:pl-3 border-l ${
-        isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
-      }`}
+      className="flex flex-col gap-1 w-[150px] sm:w-[200px] md:w-[220px] min-[900px]:w-[236px] lg:w-[252px] flex-shrink-0 pl-2 sm:pl-3"
     >
       {isWaapConnected ? (
         <WalletDisplay
@@ -1094,17 +1092,6 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           isDark={isDark}
         />
       )}
-
-      {/* Single flush divider (#108/#109). Runs edge-to-edge across the full
-          width of the wallet segment — a plain full-bleed hairline separating
-          the EVM row from the Aztec row. A subtle dark hairline on the light
-          glass / a faint white hairline on the dark privacy surface, so it
-          reads as one crisp border in either theme without becoming a bright
-          bar. */}
-      <div
-        className={`h-px w-full flex-shrink-0 ${isDark ? 'bg-white/[0.12]' : 'bg-black/[0.08]'}`}
-        aria-hidden="true"
-      />
 
       {isAztecConnected ? (
         <WalletDisplay
@@ -1238,9 +1225,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
             (#242) rather than `lg`, so the divider and the links it separates
             appear together. */}
         <div
-          className={`flex items-center flex-shrink-0 min-[900px]:border-r min-[900px]:pr-3 ${
-            isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
-          }`}
+          className="flex items-center flex-shrink-0 min-[900px]:pr-3"
         >
           {privacyToggle}
         </div>

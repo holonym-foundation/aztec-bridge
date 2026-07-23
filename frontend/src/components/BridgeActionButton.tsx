@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import TextButton from './TextButton'
 import StyledImage from './StyledImage'
-import { Oval } from 'react-loader-spinner'
 import { BridgeDirection } from '@/types/bridge'
 import { useToast } from '@/hooks/useToast'
 import { extractErrorMessage } from '@/utils'
@@ -10,22 +9,12 @@ import CongestionWarningModal from './model/CongestionWarningModal'
 import { useL2PendingTxCount, useNetworkHealth } from '@/hooks/useL2Operations'
 import { POCH_MINT_URL } from '@/config'
 
+// Single-loader policy (#298): progress lives in the top mini progress bar
+// (BridgeHeader's LoadingBar), so the button no longer renders its own spinner.
+// It just shows a clean text state ("Bridging Tokens…", "Verifying…") that
+// tracks the same phase without a second, competing spinner.
 function LoadingContent({ label }: { label: string }) {
-  return (
-    <div className="flex justify-center gap-2">
-      <Oval
-        height="20"
-        width="20"
-        color="#ccc"
-        visible={true}
-        ariaLabel="oval-loading"
-        secondaryColor="#ccc"
-        strokeWidth={6}
-        strokeWidthSecondary={6}
-      />
-      <span>{label}</span>
-    </div>
-  )
+  return <span>{label}</span>
 }
 
 interface BridgeActionButtonProps {
@@ -37,9 +26,12 @@ interface BridgeActionButtonProps {
 
   // Binding guard: the connected (L1, L2) pair is a CONFLICT (the EVM wallet is
   // bound to a different Aztec account, or vice-versa). Bridging would deposit
-  // into a guaranteed-failing pair, so block up-front and name the linked wallet
-  // in the label rather than letting the user start it (issues #98/#130).
+  // into a guaranteed-failing pair, so block up-front (issues #98/#130). The
+  // button just disables with a concise reason; the full switch-your-wallet
+  // notice is pushed into the Messages feed by the parent (#297b).
   bindingBlocked?: boolean
+  // Retained for compatibility; the detailed switch-wallet copy now lives in the
+  // Messages feed rather than the button label, so the button no longer reads it.
   bindingBlockedLabel?: string
 
   // Connection states
@@ -122,7 +114,6 @@ function BridgeActionButton({
   isDisabled = false,
   disabledReason,
   bindingBlocked = false,
-  bindingBlockedLabel,
   isWaapConnected,
   connectWaapWallet,
   getWalletProvider,
@@ -463,11 +454,9 @@ function BridgeActionButton({
     if (!isWaapConnected) return 'Connect Ethereum Wallet'
     if (!isAztecConnected) return 'Connect Aztec Wallet'
 
-    // Binding conflict: connected to the wrong pair — name the linked wallet so
-    // the user knows exactly which account to switch to before bridging.
-    if (bindingConflictBlocked) {
-      return bindingBlockedLabel || 'Switch to your linked wallet to continue'
-    }
+    // Binding conflict deliberately does NOT rewrite the label (#297b): the button
+    // stays a plain, disabled operation label and the concise reason renders under
+    // it, while the full switch-your-wallet notice lives in the Messages feed.
 
     // Temporary reservation hold: a signed-but-unconfirmed deposit is holding the user's
     // budget. Distinct from a permanent cap — say it clears itself so they wait, not verify.
@@ -510,11 +499,17 @@ function BridgeActionButton({
     return getOperationLabel(direction)
   }
 
+  // Binding conflict (#297b): the button is a plain disabled control; this concise
+  // reason renders under it. The full "switch to your linked pair (0x…)" notice is
+  // pushed into the Messages feed by the parent, not crammed into the button label.
+  const bindingShortReason = bindingConflictBlocked ? "Wallets don't match your linked pair" : undefined
+
   // Graceful states: when the button is disabled by an external gate whose reason isn't already
   // carried in the label (fuel / recipient / amount / auth), surface it right under the button
   // instead of leaving a silent greyed control. Suppressed while loading or on completion.
+  const effectiveDisabledReason = bindingShortReason ?? disabledReason
   const showDisabledReason =
-    !!disabledReason && (isDisabled || isButtonDisabled) && !showLoadingSpinner && !bridgeCompleted
+    !!effectiveDisabledReason && (isDisabled || isButtonDisabled) && !showLoadingSpinner && !bridgeCompleted
 
   return (
     <>
@@ -532,7 +527,9 @@ function BridgeActionButton({
           )}
         </TextButton>
         {showDisabledReason && (
-          <p className="mt-1 text-center text-[11px] leading-[15px] font-medium text-[#B54708]">{disabledReason}</p>
+          <p className="mt-1 text-center text-[11px] leading-[15px] font-medium text-[#B54708]">
+            {effectiveDisabledReason}
+          </p>
         )}
       </div>
 

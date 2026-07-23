@@ -59,8 +59,8 @@ import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModal
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { pushNotification } from '@/stores/useNotificationsStore'
-import { useBindingStatus, describeConflict, shortAddr } from '@/hooks/useBindingStatus'
+import { pushNotification, useNotificationsStore } from '@/stores/useNotificationsStore'
+import { useBindingStatus, describeConflict, shortAddr, conflictMessage } from '@/hooks/useBindingStatus'
 import { useRouter } from 'next/navigation'
 import MaintenanceOverlay from '@/components/MaintenanceOverlay'
 import FuelToggle from '@/components/FuelToggle'
@@ -231,6 +231,29 @@ export default function Home() {
       : bindingConflict.kind === 'aztec-linked-elsewhere'
         ? `Reconnect your linked EVM wallet ${shortAddr(bindingConflict.counterpart)}`
         : `Switch to your linked wallet pair ${shortAddr(bindingConflict.counterpart)}`
+
+  // #297b: keep the full binding-conflict notice OUT of the button. The button
+  // just disables with a concise reason; the detailed "switch to your linked pair
+  // (0x…)" copy lives as a PERSISTENT, keyed Messages entry (also surfaced in the
+  // header mini-bar chip). Keyed upsert = one row, no spam; dismissed by key the
+  // moment the conflict clears (e.g. the user switches to the linked account).
+  const bindingConflictActive = !!bindingConflict && isWaapConnected && isAztecConnected
+  useEffect(() => {
+    if (bindingConflictActive && bindingConflict) {
+      pushNotification({
+        type: 'warning',
+        key: 'binding-conflict',
+        title: 'Wallet mismatch',
+        message: conflictMessage(bindingConflict),
+      })
+    } else {
+      const existing = useNotificationsStore.getState().notifications.find((n) => n.key === 'binding-conflict')
+      if (existing) useNotificationsStore.getState().dismiss(existing.id)
+    }
+    // Primitive deps: bindingConflict is a fresh object each render, so key off its
+    // stable fields to avoid re-pushing (and re-dismissing) on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bindingConflictActive, bindingConflict?.kind, bindingConflict?.counterpart])
 
   // Specific reason the primary button is blocked by a deposit-side fuel/auth gate (the same
   // condition that drives BridgeActionButton's isDisabled). Surfaced under the button so a

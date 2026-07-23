@@ -356,38 +356,6 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
               <p className="text-[11px] leading-snug text-white/[0.75] mt-2">
                 Your Proof of Personhood Score. Higher means stronger proof you&apos;re a real, unique human.
               </p>
-              {/* Sources — the two proofs the score is built from. Brand marks
-                  (public/assets/svg) are painted via CSS mask so they inherit the
-                  pink accent that reads on the dark tooltip in both themes. */}
-              <p className="text-[11px] leading-snug text-white/[0.75] mt-1.5">
-                Sources:{' '}
-                <a
-                  href="https://app.passport.xyz"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 align-middle underline font-medium"
-                >
-                  <span
-                    aria-hidden
-                    className="inline-block w-[13px] h-[13px] align-middle bg-[#FA8FC4] [mask:url(/assets/svg/passport.svg)_center/contain_no-repeat] [-webkit-mask:url(/assets/svg/passport.svg)_center/contain_no-repeat]"
-                  />
-                  Human Passport
-                </a>{' '}
-                and{' '}
-                <a
-                  href={POCH_MINT_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 align-middle underline font-medium"
-                >
-                  <span
-                    aria-hidden
-                    className="inline-block w-[13px] h-[13px] align-middle bg-[#FA8FC4] [mask:url(/assets/svg/clean-hands.svg)_center/contain_no-repeat] [-webkit-mask:url(/assets/svg/clean-hands.svg)_center/contain_no-repeat]"
-                  />
-                  Proof of Clean Hands
-                </a>
-                .
-              </p>
               {/* Clean Hands: held / not-held, with a CTA when not held (#272). */}
               <div className="flex items-center justify-between gap-3 mt-2">
                 <span className="inline-flex items-center gap-1.5">

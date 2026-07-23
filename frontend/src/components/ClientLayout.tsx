@@ -5,6 +5,7 @@ import BannerAztecTestnet from '@/components/BannerAztecTestnet'
 import Footer from '@/components/Footer'
 import Header from '@/components/Header'
 import ShieldOnboarding from '@/components/ShieldOnboarding'
+import ShieldTour from '@/components/ShieldTour'
 import BridgeStepsRail from '@/components/BridgeStepsRail'
 import ActivityDrawer from '@/components/ActivityDrawer'
 import NotificationsDrawer from '@/components/NotificationsDrawer'
@@ -121,6 +122,7 @@ export default function ClientLayout({
         <NotificationsDrawer variant="dock" />
       </div>
       <HowItWorksModal />
+      <ShieldTour />
     </div>
   )
 }

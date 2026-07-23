@@ -39,6 +39,7 @@ const VerificationStep: React.FC<VerificationStepProps> = ({ onClose }) => {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 24 }}
       transition={{ ease: 'easeInOut', duration: 0.3 }}
+      data-tour-blocks
       className="absolute inset-0 z-20 flex flex-col rounded-xl bg-white"
     >
       <div className="flex items-center gap-2 px-5 pt-5 pb-4">

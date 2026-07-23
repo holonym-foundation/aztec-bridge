@@ -565,6 +565,7 @@ export default function ShieldOnboarding() {
   const isWaapConnected = useWalletStore((s) => s.isWaapConnected)
   const setSplashActive = useOnboardingStore((s) => s.setSplashActive)
   const showSplashNonce = useOnboardingStore((s) => s.showSplashNonce)
+  const startTour = useOnboardingStore((s) => s.startTour)
   // Start in 'loading': the shader shell renders immediately (covering the bridge from
   // the first paint) while we read localStorage / wallet state, then we resolve to the
   // real mode and the inner content fades in over the same, never-remounted shader.
@@ -629,14 +630,14 @@ export default function ShieldOnboarding() {
 
   // Clicking the Shield brand returns the user to the splash (#103). The brand
   // link's own in-progress-transfer guard runs first (see Header), so by the
-  // time the nonce bumps here it's already confirmed. Skip the initial mount
-  // value so this only fires on an actual request.
-  const didMountSplashRequest = useRef(false)
+  // time the nonce bumps here it's already confirmed. Compared by value rather
+  // than through a "have I mounted" flag: StrictMode runs effects twice on mount,
+  // so a flag set by the first pass reads as a real request to the second and
+  // forces the splash over the first-visit flow the effect above just resolved.
+  const seenSplashNonce = useRef(showSplashNonce)
   useEffect(() => {
-    if (!didMountSplashRequest.current) {
-      didMountSplashRequest.current = true
-      return
-    }
+    if (showSplashNonce === seenSplashNonce.current) return
+    seenSplashNonce.current = showSplashNonce
     setLeaving(false)
     setIndex(0)
     setMode('splash')
@@ -841,6 +842,12 @@ export default function ShieldOnboarding() {
             markOnboarded()
             setLeaving(false)
             setMode('hidden')
+            // Only this path runs the first-visit flow to its end, so it's the one
+            // moment the app can hand the user to the tutorial rather than drop
+            // them on the bridge holding one of the two wallets it needs. The tour
+            // ends by opening the steps panel itself, so it replaces rather than
+            // duplicates that handoff.
+            startTour()
           }}
         >
           <motion.div

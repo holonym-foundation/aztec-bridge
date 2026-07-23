@@ -8,6 +8,8 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useL2FeeJuiceBalance, useClaimFeeEstimate } from '@/hooks/useL2Operations'
 import { useExplainerStore } from '@/stores/useExplainerStore'
+import { useOnboardingStore } from '@/stores/useOnboardingStore'
+import { useBridgeOperations } from '@/hooks/useBridgeOperations'
 import { EXPLAINER_STEPS } from '@/components/model/HowItWorksModal'
 import { POCH_MINT_URL } from '@/config'
 
@@ -25,20 +27,112 @@ type PeekSignal = { id: string; open: boolean }
 // comes from config so it tracks the active network (sandbox vs production).
 const PASSPORT_BUILD_URL = 'https://app.passport.xyz'
 
-const ACTION_PRIMARY =
-  'mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#17235E]/90'
-const ACTION_SECONDARY =
-  'mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#D4D4D4] px-3 py-1.5 text-[12px] font-semibold text-[#17235E] transition-colors hover:border-[#17235E]/50'
+const PILL_PRIMARY =
+  'inline-flex items-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#17235E]/90'
+const PILL_SECONDARY =
+  'inline-flex items-center gap-1.5 rounded-lg border border-[#D4D4D4] px-3 py-1.5 text-[12px] font-semibold text-[#17235E] transition-colors hover:border-[#17235E]/50'
+const ACTION_PRIMARY = `mt-2 ${PILL_PRIMARY}`
+const ACTION_SECONDARY = `mt-2 ${PILL_SECONDARY}`
 
-type StepStatus = 'done' | 'active' | 'upcoming'
+export type StepStatus = 'done' | 'active' | 'upcoming'
+
+// Shared by the steps panel and the guided tour, so the two views of the same
+// tutorial can never disagree about which step the user is on. Every hook it
+// calls is already mounted elsewhere on the page and de-duplicated by
+// react-query, so a second consumer costs no extra request.
+export const useBridgeTutorial = () => {
+  const { isWaapConnected, isAztecConnected, connectWaapWallet, connectAztecWallet } = useWalletStore()
+  const attestation = useAttestationCheck()
+
+  // The first step needs BOTH wallets. Name the specific one still missing and
+  // drive its real connect handler (the same ones the main bridge button uses):
+  // Ethereum first when neither is connected, otherwise whichever is left.
+  const nextWallet: 'ethereum' | 'aztec' = !isWaapConnected ? 'ethereum' : 'aztec'
+  const connectLabel = nextWallet === 'aztec' ? 'Connect Aztec Wallet' : 'Connect Ethereum Wallet'
+  const handleConnect = () => {
+    if (nextWallet === 'aztec') connectAztecWallet().catch(() => {})
+    else connectWaapWallet().catch(() => {})
+  }
+
+  const bothConnected = isWaapConnected && isAztecConnected
+  const eligible = !!attestation.data?.eligible
+  const verifying = bothConnected && attestation.isFetching && !attestation.data
+  const notEligible = !!attestation.data && !attestation.data.eligible
+
+  // Step-3 fuel affordance is context-aware (#236): only nudge a Fee Juice top-up when the
+  // user is actually short. Compare existing FJ against the worst-case L2 claim gas — the same
+  // "covered" test FuelToggle/FeeJuiceTopUp use (existing balance >= estimated claim gas). The
+  // tutorial has no fuel-mode selector, so it reads the PUBLIC balance (the app default when
+  // Privacy Mode is off); the bridge form still surfaces private-mode sufficiency on its own.
+  const { data: l2FeeJuiceBalance } = useL2FeeJuiceBalance()
+  const { data: claimFeeLimit } = useClaimFeeEstimate('public')
+  const existingFj = l2FeeJuiceBalance != null && l2FeeJuiceBalance !== '--' ? Number(l2FeeJuiceBalance) : 0
+  const needFj = claimFeeLimit != null ? Number(claimFeeLimit) / 1e18 : null
+  // Covered = existing FJ meets the claim estimate. While the estimate is still loading, fall
+  // back to "holds any FJ" so an already-funded owner is never told to top up.
+  const feeJuiceCovered = needFj != null ? existingFj >= needFj : existingFj > 0
+
+  // Progress past verification is read from the user's own operations on the
+  // server, not from the bridge form. The form only holds the transfer being
+  // composed right now, so sourcing it there would reset the tutorial on every
+  // reload and show a returning user step 3 of 4 forever — the deposit/claim step
+  // could never be marked done.
+  const { data: operations } = useBridgeOperations()
+  // A failed operation moved no funds and needs no recovery, so it leaves the user
+  // back at "pick a token and amount" rather than mid-transfer.
+  const hasStartedBridge = !!operations?.some((op) => op.status !== 'failed')
+  const hasCompletedBridge = !!operations?.some((op) => op.status === 'completed')
+
+  const currentStep = !bothConnected
+    ? 0
+    : !eligible
+      ? 1
+      : !hasStartedBridge
+        ? 2
+        : hasCompletedBridge
+          ? EXPLAINER_STEPS.length
+          : 3
+
+  const statusFor = (index: number): StepStatus =>
+    index < currentStep ? 'done' : index === currentStep ? 'active' : 'upcoming'
+
+  return {
+    isWaapConnected,
+    isAztecConnected,
+    bothConnected,
+    eligible,
+    verifying,
+    notEligible,
+    feeJuiceCovered,
+    connectLabel,
+    handleConnect,
+    currentStep,
+    allStepsDone: currentStep >= EXPLAINER_STEPS.length,
+    statusFor,
+  }
+}
 
 type BridgeStepsRailProps = { variant?: 'rail' | 'dock' }
 
 const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) => {
   const isDock = variant === 'dock'
-  const { isWaapConnected, isAztecConnected, connectWaapWallet, connectAztecWallet } = useWalletStore()
-  const attestation = useAttestationCheck()
+  const {
+    isWaapConnected,
+    isAztecConnected,
+    bothConnected,
+    eligible,
+    verifying,
+    notEligible,
+    feeJuiceCovered,
+    connectLabel,
+    handleConnect,
+    currentStep,
+    allStepsDone,
+    statusFor,
+  } = useBridgeTutorial()
   const { openModal } = useExplainerStore()
+  const showStepsNonce = useOnboardingStore((s) => s.showStepsNonce)
+  const startTour = useOnboardingStore((s) => s.startTour)
   const router = useRouter()
   const prefersReducedMotion = useReducedMotion()
   const panelId = useId()
@@ -78,40 +172,21 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
     return () => window.removeEventListener(PEEK_EVENT, onPeek)
   }, [peekId])
 
-  // The first step needs BOTH wallets. Name the specific one still missing and
-  // drive its real connect handler (the same ones the main bridge button uses):
-  // Ethereum first when neither is connected, otherwise whichever is left.
-  const nextWallet: 'ethereum' | 'aztec' = !isWaapConnected ? 'ethereum' : 'aztec'
-  const connectLabel = nextWallet === 'aztec' ? 'Connect Aztec Wallet' : 'Connect Ethereum Wallet'
-  const handleConnect = () => {
-    if (nextWallet === 'aztec') connectAztecWallet().catch(() => {})
-    else connectWaapWallet().catch(() => {})
-  }
-
-  const bothConnected = isWaapConnected && isAztecConnected
-  const eligible = !!attestation.data?.eligible
-  const verifying = bothConnected && attestation.isFetching && !attestation.data
-
-  // Step-3 fuel affordance is context-aware (#236): only nudge a Fee Juice top-up when the
-  // user is actually short. Compare existing FJ against the worst-case L2 claim gas — the same
-  // "covered" test FuelToggle/FeeJuiceTopUp use (existing balance >= estimated claim gas). The
-  // tutorial has no fuel-mode selector, so it reads the PUBLIC balance (the app default when
-  // Privacy Mode is off); the bridge form still surfaces private-mode sufficiency on its own.
-  const { data: l2FeeJuiceBalance } = useL2FeeJuiceBalance()
-  const { data: claimFeeLimit } = useClaimFeeEstimate('public')
-  const existingFj = l2FeeJuiceBalance != null && l2FeeJuiceBalance !== '--' ? Number(l2FeeJuiceBalance) : 0
-  const needFj = claimFeeLimit != null ? Number(claimFeeLimit) / 1e18 : null
-  // Covered = existing FJ meets the claim estimate. While the estimate is still loading, fall
-  // back to "holds any FJ" so an already-funded owner is never told to top up.
-  const feeJuiceCovered = needFj != null ? existingFj >= needFj : existingFj > 0
-
-  // Single "you are here" pointer. We can reliably observe progress through
-  // verification from global state; the deposit/claim step stays upcoming since
-  // its live state lives in the bridge form.
-  const currentStep = !bothConnected ? 0 : !eligible ? 1 : 2
-
-  const statusFor = (index: number): StepStatus =>
-    index < currentStep ? 'done' : index === currentStep ? 'active' : 'upcoming'
+  // The splash hands first-run users straight to this panel. Keyed on the nonce's
+  // value rather than a "have I mounted" flag: StrictMode runs effects twice on
+  // mount, and a flag set by the first pass reads as a real request to the second,
+  // popping the panel open on every load.
+  const seenStepsNonce = useRef(showStepsNonce)
+  useEffect(() => {
+    if (showStepsNonce === seenStepsNonce.current) return
+    seenStepsNonce.current = showStepsNonce
+    // Both variants stay mounted and only CSS decides which is on screen. The
+    // off-screen one has to stay shut: it shares the peek channel above, and two
+    // simultaneous opens close each other, leaving the user with nothing. 768px is
+    // the `md` breakpoint the variants are gated on in ClientLayout.
+    if (window.matchMedia('(min-width: 768px)').matches === isDock) return
+    setPinned(true)
+  }, [showStepsNonce, isDock])
 
   const helperFor = (index: number): string | null => {
     if (index !== currentStep) return null
@@ -125,7 +200,7 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
       // here (e.g. "L1 address 0x… is already bound to a different L2 address").
       // Binding problems are communicated via the wallet-cluster notice/toast
       // (and later a notifications tab), not the tutorial (#118/#121).
-      if (attestation.data && !attestation.data.eligible) {
+      if (notEligible) {
         return 'A one-time humanity check is required before your first bridge.'
       }
       return EXPLAINER_STEPS[1].body
@@ -192,6 +267,14 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
         <button type="button" onClick={() => router.push('/fee-juice')} className={ACTION_PRIMARY}>
           <Icon icon="ph:gas-pump" width={14} height={14} />
           Top up Fee Juice
+        </button>
+      )
+    }
+    if (index === 3) {
+      return (
+        <button type="button" onClick={() => router.push('/activity')} className={ACTION_PRIMARY}>
+          <Icon icon="ph:list-checks" width={14} height={14} />
+          Follow in Activity
         </button>
       )
     }
@@ -281,12 +364,12 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
                   {helper}
                 </p>
               )}
-              {i === 1 && status === 'active' && (
+              {status === 'active' && (i === 1 || i === 2) && (
                 <button
                   onClick={openModal}
                   className="mt-1 block text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80 transition-opacity"
                 >
-                  Why is this needed?
+                  {i === 1 ? 'Why is this needed?' : 'What is Fee Juice?'}
                 </button>
               )}
               {actionFor(i)}
@@ -300,7 +383,9 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
   const panelBody = (onClose?: () => void) => (
     <>
       <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge in 4 steps</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">
+          {allStepsDone ? 'First bridge complete' : `Bridge in ${EXPLAINER_STEPS.length} steps`}
+        </p>
         {onClose && (
           <button
             type="button"
@@ -314,9 +399,22 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">{stepsList}</div>
       <div className="mt-1 shrink-0 border-t border-[#F0F0F0] pt-3">
+        {/* The tour bubbles point at controls this panel would sit on top of, so
+            starting one closes the panel first. */}
+        <button
+          type="button"
+          onClick={() => {
+            closeDesktop()
+            startTour()
+          }}
+          className={`w-full justify-center ${PILL_PRIMARY}`}
+        >
+          <Icon icon="ph:sparkle" width={14} height={14} />
+          {allStepsDone ? 'Replay the tour' : 'Show me around'}
+        </button>
         <button
           onClick={openModal}
-          className="flex items-center gap-1.5 text-[12px] font-medium text-[#737373] hover:text-[#0A0A0A] transition-colors"
+          className="mt-2 flex items-center gap-1.5 text-[12px] font-medium text-[#737373] hover:text-[#0A0A0A] transition-colors"
         >
           <Icon icon="ph:question" width={15} height={15} />
           See the full walkthrough
@@ -360,6 +458,7 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
         <button
           ref={handleRef}
           type="button"
+          data-tour="tutorial"
           aria-expanded={open}
           aria-controls={panelId}
           aria-label="Bridge in 4 steps"
@@ -417,6 +516,7 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
       <button
         ref={handleRef}
         type="button"
+        data-tour="tutorial"
         aria-expanded={open}
         aria-controls={panelId}
         aria-label="Bridge in 4 steps"

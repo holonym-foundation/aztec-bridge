@@ -770,7 +770,10 @@ export default function Home() {
           </div>
 
           <div className="shrink-0">
-            <div className="sticky bottom-0 rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[6px] pt-[8px] pr-[10px] pb-0 pl-[10px] w-full">
+            <div
+              data-tour="action"
+              className="sticky bottom-0 rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[6px] pt-[8px] pr-[10px] pb-0 pl-[10px] w-full"
+            >
               <BridgeActionButton
                 // Fuel gating is a DEPOSIT-only concern (fuel is carved out of the L1→L2
                 // bridge amount; withdrawals have no fuel carve). The FuelToggle that

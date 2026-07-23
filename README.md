@@ -12,7 +12,7 @@ Move assets from Ethereum to Aztec privately, with proof-of-personhood and proof
 [![Audited: Nethermind | Halborn | Hexens](https://img.shields.io/badge/Audited-Nethermind%20%7C%20Halborn%20%7C%20Hexens-brightgreen)](#audits)
 [![Live on Mainnet](https://img.shields.io/badge/Live%20on-Mainnet-success)](https://shield.human.tech)
 
-[**Launch the app**](https://shield.human.tech) &nbsp;·&nbsp; [**Product**](https://human.tech/shield) &nbsp;·&nbsp; [**Docs**](https://docs.holonym.id/for-developers/clean-hands) &nbsp;·&nbsp; [**Clean SDK on npm**](https://www.npmjs.com/package/@human.tech/clean.sdk) &nbsp;·&nbsp; [**Testnet**](https://testnet.shield.human.tech/)
+[**Launch the app**](https://shield.human.tech) &nbsp;·&nbsp; [**Product**](https://human.tech/shield) &nbsp;·&nbsp; [**Docs**](https://support.shield.human.tech) &nbsp;·&nbsp; [**Clean SDK on npm**](https://www.npmjs.com/package/@human.tech/clean.sdk) &nbsp;·&nbsp; [**Testnet**](https://testnet.shield.human.tech/)
 
 </div>
 
@@ -122,7 +122,7 @@ Shield bridges ERC-20 assets from Ethereum L1 to Aztec L2, with an optional atom
 - **L2.** Aztec Noir contracts mint, hold, and burn the bridged assets as private notes, with the compliance gate enforced on claims and exits.
 - **Clean SDK.** Orchestrates the cross-chain lifecycle, client-side encryption of recovery data, SIWE auth, and attestation.
 
-For the concepts behind Proof of Clean Hands and the zero-knowledge screening model, see the [Clean Hands developer docs](https://docs.holonym.id/for-developers/clean-hands).
+For the concepts behind Proof of Clean Hands and the zero-knowledge screening model, see the [Protocol & Cryptography docs](https://support.shield.human.tech/developers/protocol).
 
 ## Contracts
 
@@ -147,7 +147,7 @@ Findings raised during these reviews were addressed before the mainnet deploymen
 - **App:** https://shield.human.tech
 - **Testnet (no real funds):** https://testnet.shield.human.tech/
 - **Product:** https://human.tech/shield
-- **Clean Hands docs:** https://docs.holonym.id/for-developers/clean-hands
+- **Clean Hands docs:** https://support.shield.human.tech/developers/protocol
 - **Clean SDK on npm:** https://www.npmjs.com/package/@human.tech/clean.sdk
 - **Blog:** https://human.tech/blog
 - **X:** https://x.com/0xHolonym

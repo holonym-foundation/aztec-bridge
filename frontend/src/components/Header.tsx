@@ -5,25 +5,22 @@ import { useToast } from '@/hooks/useToast'
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useL1TokenBalances } from '@/hooks/useL1Operations'
-import { LOGIN_METHODS, WalletType } from '@/types/wallet'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
-import { silkUrl } from '@/config/l1.config'
 import { L1_CHAIN_ID, POCH_MINT_URL } from '@/config'
 import DeploymentSelector from '@/components/DeploymentSelector'
+import AccountChip from '@/components/AccountChip'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
 import { useL1Humanity } from '@/hooks/useL1Humanity'
 import {
   useBindingStatus,
-  useSessionLinkedL2,
   describeConflict,
   conflictMessage,
   disclosedLinkedL2,
-  accountLabel,
   shortAddr,
 } from '@/hooks/useBindingStatus'
 
@@ -127,23 +124,11 @@ function accentPink(isDark: boolean): string {
 function hoverTint(isDark: boolean): string {
   return isDark ? 'hover:bg-white/[0.10]' : 'hover:bg-black/[0.04]'
 }
-/** Row active/open tint, same rows as hoverTint. */
-function activeTint(isDark: boolean): string {
-  return isDark ? 'bg-white/[0.14]' : 'bg-black/[0.05]'
-}
 /** Opaque-ish dropdown/panel surface — deliberately more solid than the nav pills so menu text stays legible over whatever's behind it. */
 function panelSurface(isDark: boolean): string {
   return isDark
     ? 'bg-[#2A0E1C]/[0.95] backdrop-blur-md border border-white/[0.12]'
     : 'bg-white/[0.95] backdrop-blur-md border border-[#E5E5E5]/80'
-}
-/** Hairline divider/border inside panels (was border-[#E5E5E5]). */
-function panelDivider(isDark: boolean): string {
-  return isDark ? 'border-white/[0.12]' : 'border-[#E5E5E5]'
-}
-/** Menu-row hover (was hover:bg-latest-grey-300). */
-function menuItemHover(isDark: boolean): string {
-  return isDark ? 'hover:bg-white/[0.10]' : 'hover:bg-latest-grey-300'
 }
 
 // Humanity Score is wired to the real L1-only proof-of-personhood result via
@@ -190,390 +175,6 @@ const HumanPointsIcon: React.FC<{ className?: string }> = ({ className }) => (
       fill="currentColor"
     />
   </svg>
-)
-
-type WalletDisplayProps = {
-  address?: string
-  displayName?: string | null
-  isConnected: boolean
-  walletIcon: string
-  networkIcon?: string
-  balance?: string
-  onDisconnect?: () => void
-  availableAccounts?: Array<{ alias: string; address: string; index?: number }>
-  onSelectAccount?: (account: { alias: string; address: string; index?: number }) => void
-  walletType: WalletType
-  loginMethod?: string | null
-  /**
-   * L2 account the SERVER has disclosed as the pair for the connected EVM wallet
-   * (from the authoritative conflict/bound response — never localStorage). When
-   * an account in the Switch Account list matches it, that row is marked "Linked
-   * to your EVM wallet 0x…" so the user can pick it. Undefined when nothing is
-   * disclosed yet — the list shows no "linked" badge rather than guessing.
-   */
-  linkedAccountAddress?: string
-  /** Connected EVM address, used only to label the linked row ("…EVM wallet 0x…"). */
-  linkedEvmAddress?: string
-  /**
-   * True when this row lives inside the merged wallet-cluster pill (see
-   * walletCluster in Header) — drops its own rounded/border/shadow/blur so
-   * the row reads as a flat strip and the *cluster's* single outer pill
-   * supplies the glass-pill material, instead of stacking a second
-   * independently-rounded pill on top of it.
-   */
-  flat?: boolean
-  /**
-   * Which outer corners this flat row owns, matching the cluster's own
-   * rounded-[20px] shape (top row rounds its top corners, bottom row its
-   * bottom corners). Without this the row's hover/active background is a
-   * plain rectangle whose square corner pokes past the cluster's curve —
-   * a flush-edge mismatch at the pill's outer corner (issue #72).
-   */
-  roundedEdge?: 'top' | 'bottom'
-  /** True when Privacy Mode is on and the page is on the dark background. */
-  isDark?: boolean
-  /**
-   * Hard-lock the fund-losing actions in this row's dropdown (Disconnect +
-   * Switch Account) while a transfer is in progress (issue #136). Copy Address /
-   * Open Wallet stay enabled — they can't orphan the transfer.
-   */
-  actionsLocked?: boolean
-}
-
-/** Shown on the locked Disconnect / Switch-Account rows during a transfer. */
-const TRANSFER_LOCK_HINT = 'Locked during transfer to protect your funds.'
-
-function truncateAddr(addr: string): string {
-  if (addr.length <= 13) return addr
-  return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`
-}
-
-/**
- * One wallet pill in the CONNECTED state: truncated address (or alias) +
- * dropdown for copy address / open wallet / switch account / disconnect.
- * Renders null when not connected — see WalletConnectPill for that state.
- */
-const WalletDisplay: React.FC<WalletDisplayProps> = ({
-  address,
-  displayName,
-  isConnected,
-  walletIcon,
-  networkIcon,
-  balance,
-  onDisconnect,
-  availableAccounts,
-  onSelectAccount,
-  walletType,
-  loginMethod,
-  linkedAccountAddress,
-  linkedEvmAddress,
-  flat,
-  roundedEdge,
-  isDark = false,
-  actionsLocked = false,
-}) => {
-  const [showDropdown, setShowDropdown] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowDropdown(false)
-      }
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setShowDropdown(false)
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [])
-
-  const handleClick = () => {
-    setShowDropdown(!showDropdown)
-  }
-
-  const handleCopyAddress = () => {
-    if (address) {
-      navigator.clipboard.writeText(address)
-      setCopied(true)
-      setTimeout(() => {
-        setCopied(false)
-        setShowDropdown(false)
-      }, 2000)
-    }
-  }
-
-  const handleDisconnect = () => {
-    if (onDisconnect) {
-      onDisconnect()
-    }
-    setShowDropdown(false)
-  }
-
-  const handleOpenWallet = () => {
-    window.open(silkUrl, '_blank', 'noopener,noreferrer')
-    setShowDropdown(false)
-  }
-
-  if (!isConnected) return null
-
-  return (
-    <div className="relative w-full" ref={dropdownRef}>
-      <button
-        type="button"
-        className={
-          flat
-            ? `flex items-center gap-1.5 sm:gap-2 pr-3.5 sm:pr-4 pl-2.5 py-1 h-8 w-full cursor-pointer transition-colors duration-200 ${
-                roundedEdge === 'top' ? 'rounded-t-[20px]' : roundedEdge === 'bottom' ? 'rounded-b-[20px]' : ''
-              } ${showDropdown ? activeTint(isDark) : hoverTint(isDark)}`
-            : `flex items-center gap-1.5 pr-2 pl-1 py-1 h-8 w-full rounded-full ${glassPill(isDark, showDropdown)} cursor-pointer`
-        }
-        onClick={handleClick}
-        aria-haspopup="true"
-        aria-expanded={showDropdown}
-      >
-        <span className="flex w-6 h-6 p-[2px] justify-center items-center rounded-full bg-[#FDE7F3] flex-shrink-0">
-          <Image src={walletIcon} alt="" width={20} height={20} />
-        </span>
-        {networkIcon && <Image src={networkIcon} alt="" width={14} height={14} className="flex-shrink-0" />}
-        {/* min-w-0 lets this block shrink/truncate instead of pushing the
-            caret out — the caret gets its own guaranteed room via the
-            row's pr-4 + gap, not by squeezing against the text (see #72
-            follow-up: caret was crowded against the address/balance). */}
-        <span className="flex flex-col items-start leading-tight min-w-0 flex-1">
-          <span className={`text-xs font-medium ${navText(isDark)} truncate max-w-full`} title={address || ''}>
-            {displayName || (address ? truncateAddr(address) : '')}
-          </span>
-          {balance && walletType === WalletType.WAAP && (
-            <span className={`text-[9px] ${subtleText(isDark)} leading-none truncate max-w-full`}>{balance} ETH</span>
-          )}
-        </span>
-        <Icon
-          icon="ph:caret-down"
-          width={12}
-          height={12}
-          className={`ml-auto flex-shrink-0 ${mutedIconText(isDark)} transition-transform duration-150 ${showDropdown ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {showDropdown && (
-        <div className={`absolute right-0 mt-2 shadow-lg z-50 min-w-[190px] py-2 rounded-[16px] ${panelSurface(isDark)} ${navText(isDark)}`}>
-          <div
-            className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer relative transition-colors duration-150`}
-            onClick={handleCopyAddress}
-          >
-            <Icon icon="ph:copy" width={20} height={20} />
-            <span>{copied ? 'Copied!' : 'Copy Address'}</span>
-          </div>
-
-          {loginMethod === LOGIN_METHODS.WAAP && (
-            <div
-              className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer relative transition-colors duration-150`}
-              onClick={handleOpenWallet}
-            >
-              <Icon icon="majesticons:open" width={20} height={20} />
-              <span>Open Wallet</span>
-            </div>
-          )}
-
-          {availableAccounts && availableAccounts.length > 1 && onSelectAccount && (
-            <>
-              <div className={`border-t ${panelDivider(isDark)} my-1`} />
-              <div className="px-4 py-1">
-                <span className={`text-xs ${mutedIconText(isDark)} font-medium`}>Switch Account</span>
-              </div>
-              {/* #136: switching the Aztec account mid-transfer would re-point
-                  the flow at a different L2 recipient and orphan the in-flight
-                  claim, so the switch rows are hard-disabled (not merely
-                  confirm-gated) until the transfer settles. */}
-              {actionsLocked && (
-                <p className={`px-4 pb-1 text-[10px] leading-snug ${subtleText(isDark)}`}>{TRANSFER_LOCK_HINT}</p>
-              )}
-              {/* Current account indicator — the dropdown intentionally hides the
-                  active account from the switch list (you can't switch to what
-                  you're already on), so this non-interactive row keeps it visible
-                  and labelled "Current" so users aren't confused that one account
-                  appears to be "missing". Never rendered as a switchable row, so
-                  there's no duplicate. */}
-              {(() => {
-                const current = availableAccounts.find((a) => a.address === address)
-                const currentLabel = displayName || (current ? accountLabel(current) : address ? truncateAddr(address) : '')
-                return (
-                  <div className="flex items-center gap-2 px-4 py-2 cursor-default">
-                    <Icon icon="ph:check" width={18} height={18} className={accentPink(isDark)} />
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-sm truncate">{currentLabel}</span>
-                      <span className={`text-xs ${mutedIconText(isDark)}`}>
-                        {address ? truncateAddr(address) : ''} · Current
-                      </span>
-                    </div>
-                  </div>
-                )
-              })()}
-              {availableAccounts
-                .filter((acc) => acc.address !== address)
-                .map((acc, i) => {
-                  const isLinked =
-                    !!linkedAccountAddress && acc.address.toLowerCase() === linkedAccountAddress.toLowerCase()
-                  return (
-                    <div
-                      key={acc.address}
-                      className={`flex items-center gap-2 px-4 py-2 transition-colors duration-150 ${
-                        actionsLocked ? 'opacity-50 cursor-not-allowed' : `${menuItemHover(isDark)} cursor-pointer`
-                      }`}
-                      aria-disabled={actionsLocked}
-                      title={actionsLocked ? TRANSFER_LOCK_HINT : undefined}
-                      onClick={() => {
-                        if (actionsLocked) return
-                        onSelectAccount(acc)
-                        setShowDropdown(false)
-                      }}
-                    >
-                      <Icon icon="ph:wallet" width={18} height={18} className={subtleText(isDark)} />
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-sm truncate">{accountLabel(acc, i)}</span>
-                        <span className={`text-xs ${mutedIconText(isDark)}`}>{truncateAddr(acc.address)}</span>
-                      </div>
-                      {isLinked && (
-                        <span
-                          className={`ml-auto flex items-center gap-1 text-[10px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
-                          title={
-                            linkedEvmAddress
-                              ? `Linked to your EVM wallet ${shortAddr(linkedEvmAddress)}`
-                              : 'Linked to your EVM wallet'
-                          }
-                        >
-                          <Icon icon="ph:link-simple" width={14} height={14} className="flex-shrink-0" />
-                          {linkedEvmAddress ? `Linked ${shortAddr(linkedEvmAddress)}` : 'Linked'}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-              <div className={`border-t ${panelDivider(isDark)} my-1`} />
-            </>
-          )}
-
-          {/* #136: disconnecting mid-transfer tears down the wallet session the
-              live /progress view depends on, orphaning the transfer's recovery
-              data — so this is hard-disabled during an active transfer rather
-              than confirm-gated. */}
-          <div
-            className={`flex items-center gap-2 px-4 py-2 transition-colors duration-150 ${
-              actionsLocked ? 'opacity-50 cursor-not-allowed' : `${menuItemHover(isDark)} cursor-pointer`
-            } ${
-              // NOTE: `text-red-500` never resolved here — this app's tailwind.config.js
-              // replaces (not extends) the default palette, which drops the red-500/
-              // gray-300/400/500 numbered scales, so `text-red-500` silently compiles to
-              // no rule and this row inherits its color from the dropdown panel instead
-              // (harmless in light mode — that inherited navy still reads fine — but
-              // would've inherited near-white in dark mode with no "danger" cue left).
-              // Pre-existing bug; left as-is for light so that mode stays byte-identical,
-              // fixed only for dark where an unstyled Disconnect loses its meaning.
-              isDark ? 'text-[#FF6B6B]' : 'text-red-500'
-            }`}
-            aria-disabled={actionsLocked}
-            title={actionsLocked ? TRANSFER_LOCK_HINT : undefined}
-            onClick={actionsLocked ? undefined : handleDisconnect}
-          >
-            <Icon icon="ph:sign-out" width={20} height={20} />
-            <span>Disconnect</span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-interface WalletConnectPillProps {
-  icon: string
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  title?: string
-  /** See WalletDisplayProps.flat — same "flat row inside the merged cluster pill" treatment. */
-  flat?: boolean
-  /** See WalletDisplayProps.roundedEdge. */
-  roundedEdge?: 'top' | 'bottom'
-  /** True when Privacy Mode is on and the page is on the dark background. */
-  isDark?: boolean
-}
-
-/**
- * One wallet pill in the NOT-CONNECTED state, used inside the merged
- * cluster once the *other* chain has already connected (see walletCluster
- * in Header below). Compact — same footprint as the connected WalletDisplay
- * pill so the cluster doesn't jump in width when a chain connects/disconnects.
- */
-const WalletConnectPill: React.FC<WalletConnectPillProps> = ({
-  icon,
-  label,
-  onClick,
-  disabled,
-  title,
-  flat,
-  roundedEdge,
-  isDark = false,
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={disabled}
-    title={title}
-    className={
-      flat
-        ? `flex items-center gap-1.5 sm:gap-2 pr-2.5 sm:pr-3.5 pl-2.5 py-1 h-8 w-full transition-colors duration-200 ${
-            roundedEdge === 'top' ? 'rounded-t-[20px]' : roundedEdge === 'bottom' ? 'rounded-b-[20px]' : ''
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : `${hoverTint(isDark)} cursor-pointer`}`
-        : `flex items-center gap-1.5 pr-2.5 pl-1 py-1 h-8 w-full rounded-full ${isDark ? GLASS_PILL_DARK : GLASS_PILL} ${
-            disabled ? 'opacity-50 cursor-not-allowed' : `${isDark ? GLASS_PILL_DARK_HOVER : GLASS_PILL_HOVER} cursor-pointer`
-          }`
-    }
-  >
-    <span className="flex w-6 h-6 items-center justify-center rounded-full bg-latest-grey-300 flex-shrink-0">
-      <Image src={icon} alt="" width={15} height={15} />
-    </span>
-    <span className={`text-xs font-medium ${navText(isDark)} truncate`}>{label}</span>
-  </button>
-)
-
-/**
- * Single combined "Connect Wallet" pill shown when NEITHER chain is
- * connected — normal nav-row height (matches Privacy Mode / the humanity
- * chip), so the nav never has to reserve the taller two-pill stack's height
- * up front. Starts the existing combined WaaP→Aztec connect flow. Once the
- * first leg connects, the cluster switches to the stacked per-chain pills
- * (see walletCluster in Header).
- */
-const ConnectWalletPill: React.FC<{ onClick: () => void; connecting?: boolean; isDark?: boolean }> = ({
-  onClick,
-  connecting,
-  isDark = false,
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={connecting}
-    title={connecting ? 'Connecting…' : 'Connect Wallet'}
-    aria-label={connecting ? 'Connecting wallet' : 'Connect wallet'}
-    className={`flex items-center justify-center gap-2 h-9 sm:h-10 w-9 sm:w-auto px-0 sm:px-4 rounded-full ${isDark ? GLASS_PILL_DARK : GLASS_PILL} flex-shrink-0 ${
-      connecting ? 'opacity-60 cursor-not-allowed' : `${isDark ? GLASS_PILL_DARK_HOVER : GLASS_PILL_HOVER} cursor-pointer`
-    }`}
-  >
-    <Icon icon="ph:wallet-fill" width={16} height={16} className={`${accentPink(isDark)} flex-shrink-0`} />
-    {/* Text collapses first on narrow widths — icon-only affordance below
-        `sm`, same collapse pattern as the Privacy Mode label — so this
-        pill can never push the hamburger toggle out past the nav edge. */}
-    <span className={`hidden sm:inline text-xs sm:text-sm font-medium ${navText(isDark)} whitespace-nowrap`}>
-      {connecting ? 'Connecting…' : 'Connect Wallet'}
-    </span>
-  </button>
 )
 
 interface HumanityPointsChipProps {
@@ -791,17 +392,11 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     waapAddress,
     isWaapConnected,
     connectWaapWallet,
-    disconnectWaapWallet,
     aztecAddress,
     isAztecConnected,
-    disconnectAztecWallet,
     connectAztecWallet,
     walletConnectionPhase,
-    waapLoginMethod: loginMethod,
-    waapWalletIcon: walletIcon,
-    aztecAlias,
     availableAccounts,
-    switchAztecAccount,
   } = useWalletStore()
 
   // Humanity is an L1-ONLY property of the EVM wallet (issue #122) — it has
@@ -840,13 +435,6 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   // an evm-linked-elsewhere conflict). Live off the CURRENT response — used for
   // the inline conflict notice so it clears the instant the pair matches.
   const serverLinkedL2 = disclosedLinkedL2(conflict)
-
-  // Persistent (session) view of the linked Aztec account for the connected EVM
-  // wallet — remembered from any earlier server disclosure this session (bound
-  // or conflict), so the "Linked" badge on the Switch Account list survives a
-  // dropdown reopen even after the transient conflict response has cleared. In
-  // memory only (never localStorage); null until something has been disclosed.
-  const sessionLinkedL2 = useSessionLinkedL2(waapAddress)
 
   // Is that server-disclosed linked account one of the Azguard accounts the user
   // already has connected? Used only to tune the inline notice copy.
@@ -1043,84 +631,22 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     </div>
   )
 
-  // Fully disconnected: one compact pill, same height as the rest of the nav
-  // row (no stacking yet — nothing to stack). Once the first chain connects,
-  // swap to the two-pill stack below so each chain gets its own connect
-  // state + dropdown without ever showing two oversized "Connect" pills at
-  // once (that was overflowing the nav — see PR feedback).
-  const walletCluster = !isWaapConnected && !isAztecConnected ? (
-    <ConnectWalletPill onClick={handleConnectWallet} connecting={isL1Connecting} isDark={isDark} />
-  ) : (
-    // Merged wallet cluster — a single FLAT segment, not a pill. It holds the
-    // ETH row and the Aztec row flush against each other, split by one hairline
-    // divider (below). Deliberately NOT a glass pill: a raised pill here read as
-    // a second pill sitting ON TOP of the nav's own pill ("pill on pill"), so it
-    // carries no fill/shadow/blur and is instead segmented off with a single
-    // vertical hairline on its left edge. Each row renders `flat` (plain
-    // rectangular rows, no rounded/border/shadow of their own) so the two
-    // addresses read as one clean flush segment.
-    //
-    // Width steps up in stages rather than jumping straight from 150px to the
-    // full 252px (#242). The address text was over-truncating at in-between
-    // widths where there was clearly more room to give it, so each stage adds
-    // back a little before the next one lands.
-    <div
-      className="flex flex-col gap-1 w-[150px] sm:w-[200px] md:w-[220px] min-[900px]:w-[236px] lg:w-[252px] flex-shrink-0 pl-2 sm:pl-3"
-    >
-      {isWaapConnected ? (
-        <WalletDisplay
-          address={waapAddress || undefined}
-          isConnected={isWaapConnected}
-          walletIcon={walletIcon || '/assets/wallets/wally-dark.svg'}
-          networkIcon="/assets/svg/network-logo.svg"
-          balance={l1NativeBalance}
-          onDisconnect={disconnectWaapWallet}
-          walletType={WalletType.WAAP}
-          loginMethod={loginMethod}
-          flat
-          isDark={isDark}
-          actionsLocked={isTransferInProgress}
-        />
-      ) : (
-        <WalletConnectPill
-          icon="/assets/svg/network-logo.svg"
-          label={isL1Connecting ? '…' : 'Connect'}
-          onClick={handleConnectWallet}
-          disabled={isL1Connecting}
-          title="Connect Ethereum (L1) wallet"
-          flat
-          isDark={isDark}
-        />
-      )}
-
-      {isAztecConnected ? (
-        <WalletDisplay
-          address={aztecAddress || undefined}
-          displayName={aztecAlias || undefined}
-          isConnected={isAztecConnected}
-          walletIcon="/assets/svg/aztec-wallet-logo.svg"
-          onDisconnect={disconnectAztecWallet}
-          availableAccounts={availableAccounts}
-          onSelectAccount={switchAztecAccount}
-          linkedAccountAddress={sessionLinkedL2 || undefined}
-          linkedEvmAddress={waapAddress || undefined}
-          walletType={WalletType.AZTEC}
-          flat
-          isDark={isDark}
-          actionsLocked={isTransferInProgress}
-        />
-      ) : (
-        <WalletConnectPill
-          icon="/assets/svg/aztec-wallet-logo.svg"
-          label={isL2Connecting ? '…' : 'Connect Aztec Wallet'}
-          onClick={isWaapConnected ? handleConnectAztecOnly : handleConnectWallet}
-          disabled={isL2Connecting}
-          title="Connect Aztec (L2) wallet"
-          flat
-          isDark={isDark}
-        />
-      )}
-    </div>
+  // Account Chip — the single wallet-only chip + its account dropdown (Wallets ·
+  // Identity & proofs · Limits & usage · Disconnect). It reads the wallet /
+  // attestation stores directly; Header keeps ownership of the combined connect
+  // flow (handleConnectWallet drives the WaaP→Aztec auto-connect useEffect
+  // above), so the connect actions and in-flight flags are passed in as props.
+  // The humanity/points chip stays a SEPARATE element beside it (see below).
+  const walletCluster = (
+    <AccountChip
+      isDark={isDark}
+      onConnectWallet={handleConnectWallet}
+      onConnectAztec={isWaapConnected ? handleConnectAztecOnly : handleConnectWallet}
+      isL1Connecting={isL1Connecting}
+      isL2Connecting={isL2Connecting}
+      l1NativeBalance={l1NativeBalance}
+      actionsLocked={isTransferInProgress}
+    />
   )
 
   const secondaryNav = (

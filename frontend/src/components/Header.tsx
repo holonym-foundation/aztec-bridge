@@ -5,14 +5,14 @@ import { useToast } from '@/hooks/useToast'
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useL1TokenBalances } from '@/hooks/useL1Operations'
-import { LOGIN_METHODS, WalletType } from '@/types/wallet'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
-import { silkUrl } from '@/config/l1.config'
 import { L1_CHAIN_ID, POCH_MINT_URL } from '@/config'
+import { useAttestationCheck } from '@/hooks/useAttestationCheck'
+import AccountChip from '@/components/AccountChip'
 import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
@@ -23,7 +23,6 @@ import {
   describeConflict,
   conflictMessage,
   disclosedLinkedL2,
-  accountLabel,
   shortAddr,
 } from '@/hooks/useBindingStatus'
 
@@ -52,6 +51,11 @@ if (typeof window !== 'undefined') {
     'ph:warning-circle',
     'ph:info',
     'ph:hand-soap',
+    'ph:identification-card',
+    'ph:plus-circle',
+    'ph:gauge',
+    'ph:seal-check-fill',
+    'ph:link',
   ])
 }
 
@@ -96,9 +100,9 @@ function glassPill(isDark: boolean, active = false): string {
  * a clean line of uniform chips: inner contents scale to fit this height rather
  * than each chip's content dictating its own height. The version chip lives
  * BELOW the Shield chip (its own left-column chip), outside this row, so it is
- * deliberately NOT bound to this height. The connected account chip's two wallet
- * rows split this height evenly (each row is flex-1), so they always fit instead
- * of overflowing the pill.
+ * deliberately NOT bound to this height. The skinny account chip owns this same
+ * height itself (h-14) as a single collapsed row, so it lines up with the rest
+ * of the row without Header having to wrap it in a height container.
  */
 const CHIP_H = 'h-14'
 
@@ -158,6 +162,10 @@ function panelDivider(isDark: boolean): string {
 function menuItemHover(isDark: boolean): string {
   return isDark ? 'hover:bg-white/[0.10]' : 'hover:bg-latest-grey-300'
 }
+/** Progress-track background under a limit fill bar (Limits & usage section). */
+function trackBg(isDark: boolean): string {
+  return isDark ? 'bg-white/[0.12]' : 'bg-black/[0.06]'
+}
 
 // Humanity Score is wired to the real L1-only proof-of-personhood result via
 // useL1Humanity (POCH first, Passport fallback — see HumanityPointsChip below).
@@ -205,400 +213,6 @@ const HumanPointsIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 )
 
-type WalletDisplayProps = {
-  address?: string
-  displayName?: string | null
-  isConnected: boolean
-  walletIcon: string
-  networkIcon?: string
-  balance?: string
-  onDisconnect?: () => void
-  availableAccounts?: Array<{ alias: string; address: string; index?: number }>
-  onSelectAccount?: (account: { alias: string; address: string; index?: number }) => void
-  walletType: WalletType
-  loginMethod?: string | null
-  /**
-   * L2 account the SERVER has disclosed as the pair for the connected EVM wallet
-   * (from the authoritative conflict/bound response — never localStorage). When
-   * an account in the Switch Account list matches it, that row is marked "Linked
-   * to your EVM wallet 0x…" so the user can pick it. Undefined when nothing is
-   * disclosed yet — the list shows no "linked" badge rather than guessing.
-   */
-  linkedAccountAddress?: string
-  /** Connected EVM address, used only to label the linked row ("…EVM wallet 0x…"). */
-  linkedEvmAddress?: string
-  /**
-   * True when this row lives inside the merged wallet-cluster pill (see
-   * walletCluster in Header) — drops its own rounded/border/shadow/blur so
-   * the row reads as a flat strip and the *cluster's* single outer pill
-   * supplies the glass-pill material, instead of stacking a second
-   * independently-rounded pill on top of it.
-   */
-  flat?: boolean
-  /**
-   * Which outer corners this flat row owns, matching the cluster's own
-   * rounded-[20px] shape (top row rounds its top corners, bottom row its
-   * bottom corners). Without this the row's hover/active background is a
-   * plain rectangle whose square corner pokes past the cluster's curve —
-   * a flush-edge mismatch at the pill's outer corner (issue #72).
-   */
-  roundedEdge?: 'top' | 'bottom'
-  /** True when Privacy Mode is on and the page is on the dark background. */
-  isDark?: boolean
-  /**
-   * Hard-lock the fund-losing actions in this row's dropdown (Disconnect +
-   * Switch Account) while a transfer is in progress (issue #136). Copy Address /
-   * Open Wallet stay enabled — they can't orphan the transfer.
-   */
-  actionsLocked?: boolean
-}
-
-/** Shown on the locked Disconnect / Switch-Account rows during a transfer. */
-const TRANSFER_LOCK_HINT = 'Locked during transfer to protect your funds.'
-
-function truncateAddr(addr: string): string {
-  if (addr.length <= 13) return addr
-  return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`
-}
-
-/**
- * One wallet pill in the CONNECTED state: truncated address (or alias) +
- * dropdown for copy address / open wallet / switch account / disconnect.
- * Renders null when not connected — see WalletConnectPill for that state.
- */
-const WalletDisplay: React.FC<WalletDisplayProps> = ({
-  address,
-  displayName,
-  isConnected,
-  walletIcon,
-  networkIcon,
-  balance,
-  onDisconnect,
-  availableAccounts,
-  onSelectAccount,
-  walletType,
-  loginMethod,
-  linkedAccountAddress,
-  linkedEvmAddress,
-  flat,
-  roundedEdge,
-  isDark = false,
-  actionsLocked = false,
-}) => {
-  const [showDropdown, setShowDropdown] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowDropdown(false)
-      }
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setShowDropdown(false)
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [])
-
-  const handleClick = () => {
-    setShowDropdown(!showDropdown)
-  }
-
-  const handleCopyAddress = () => {
-    if (address) {
-      navigator.clipboard.writeText(address)
-      setCopied(true)
-      setTimeout(() => {
-        setCopied(false)
-        setShowDropdown(false)
-      }, 2000)
-    }
-  }
-
-  const handleDisconnect = () => {
-    if (onDisconnect) {
-      onDisconnect()
-    }
-    setShowDropdown(false)
-  }
-
-  const handleOpenWallet = () => {
-    window.open(silkUrl, '_blank', 'noopener,noreferrer')
-    setShowDropdown(false)
-  }
-
-  if (!isConnected) return null
-
-  return (
-    <div className="relative w-full" ref={dropdownRef}>
-      <button
-        type="button"
-        className={
-          flat
-            ? `flex items-center gap-1.5 sm:gap-2 pr-3.5 sm:pr-4 pl-2.5 flex-1 min-h-0 w-full cursor-pointer transition-colors duration-200 ${
-                roundedEdge === 'top' ? 'rounded-t-[20px]' : roundedEdge === 'bottom' ? 'rounded-b-[20px]' : ''
-              } ${showDropdown ? activeTint(isDark) : hoverTint(isDark)}`
-            : `flex items-center gap-1.5 pr-2 pl-1 py-1 h-8 w-full rounded-full ${glassPill(isDark, showDropdown)} cursor-pointer`
-        }
-        onClick={handleClick}
-        aria-haspopup="true"
-        aria-expanded={showDropdown}
-      >
-        <span className="flex w-6 h-6 p-[2px] justify-center items-center rounded-full bg-[#FDE7F3] flex-shrink-0">
-          <Image src={walletIcon} alt="" width={20} height={20} />
-        </span>
-        {networkIcon && <Image src={networkIcon} alt="" width={14} height={14} className="flex-shrink-0" />}
-        {/* min-w-0 lets this block shrink/truncate instead of pushing the
-            caret out — the caret gets its own guaranteed room via the
-            row's pr-4 + gap, not by squeezing against the text (see #72
-            follow-up: caret was crowded against the address/balance). */}
-        <span className="flex flex-col items-start leading-tight min-w-0 flex-1">
-          <span className={`text-xs font-medium ${navText(isDark)} truncate max-w-full`} title={address || ''}>
-            {displayName || (address ? truncateAddr(address) : '')}
-          </span>
-          {balance && walletType === WalletType.WAAP && (
-            <span className={`text-[9px] ${subtleText(isDark)} leading-none truncate max-w-full`}>{balance} ETH</span>
-          )}
-        </span>
-        <Icon
-          icon="ph:caret-down"
-          width={12}
-          height={12}
-          className={`ml-auto flex-shrink-0 ${mutedIconText(isDark)} transition-transform duration-150 ${showDropdown ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {showDropdown && (
-        <div className={`absolute right-0 mt-2 shadow-lg z-50 min-w-[190px] py-2 rounded-[16px] ${panelSurface(isDark)} ${navText(isDark)}`}>
-          <div
-            className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer relative transition-colors duration-150`}
-            onClick={handleCopyAddress}
-          >
-            <Icon icon="ph:copy" width={20} height={20} />
-            <span>{copied ? 'Copied!' : 'Copy Address'}</span>
-          </div>
-
-          {loginMethod === LOGIN_METHODS.WAAP && (
-            <div
-              className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer relative transition-colors duration-150`}
-              onClick={handleOpenWallet}
-            >
-              <Icon icon="majesticons:open" width={20} height={20} />
-              <span>Open Wallet</span>
-            </div>
-          )}
-
-          {availableAccounts && availableAccounts.length > 1 && onSelectAccount && (
-            <>
-              <div className={`border-t ${panelDivider(isDark)} my-1`} />
-              <div className="px-4 py-1">
-                <span className={`text-xs ${mutedIconText(isDark)} font-medium`}>Switch Account</span>
-              </div>
-              {/* #136: switching the Aztec account mid-transfer would re-point
-                  the flow at a different L2 recipient and orphan the in-flight
-                  claim, so the switch rows are hard-disabled (not merely
-                  confirm-gated) until the transfer settles. */}
-              {actionsLocked && (
-                <p className={`px-4 pb-1 text-[10px] leading-snug ${subtleText(isDark)}`}>{TRANSFER_LOCK_HINT}</p>
-              )}
-              {/* Current account indicator — the dropdown intentionally hides the
-                  active account from the switch list (you can't switch to what
-                  you're already on), so this non-interactive row keeps it visible
-                  and labelled "Current" so users aren't confused that one account
-                  appears to be "missing". Never rendered as a switchable row, so
-                  there's no duplicate. */}
-              {(() => {
-                const current = availableAccounts.find((a) => a.address === address)
-                const currentLabel = displayName || (current ? accountLabel(current) : address ? truncateAddr(address) : '')
-                return (
-                  <div className="flex items-center gap-2 px-4 py-2 cursor-default">
-                    <Icon icon="ph:check" width={18} height={18} className={accentPink(isDark)} />
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-sm truncate">{currentLabel}</span>
-                      <span className={`text-xs ${mutedIconText(isDark)}`}>
-                        {address ? truncateAddr(address) : ''} · Current
-                      </span>
-                    </div>
-                  </div>
-                )
-              })()}
-              {availableAccounts
-                .filter((acc) => acc.address !== address)
-                .map((acc, i) => {
-                  const isLinked =
-                    !!linkedAccountAddress && acc.address.toLowerCase() === linkedAccountAddress.toLowerCase()
-                  return (
-                    <div
-                      key={acc.address}
-                      className={`flex items-center gap-2 px-4 py-2 transition-colors duration-150 ${
-                        actionsLocked ? 'opacity-50 cursor-not-allowed' : `${menuItemHover(isDark)} cursor-pointer`
-                      }`}
-                      aria-disabled={actionsLocked}
-                      title={actionsLocked ? TRANSFER_LOCK_HINT : undefined}
-                      onClick={() => {
-                        if (actionsLocked) return
-                        onSelectAccount(acc)
-                        setShowDropdown(false)
-                      }}
-                    >
-                      <Icon icon="ph:wallet" width={18} height={18} className={subtleText(isDark)} />
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-sm truncate">{accountLabel(acc, i)}</span>
-                        <span className={`text-xs ${mutedIconText(isDark)}`}>{truncateAddr(acc.address)}</span>
-                      </div>
-                      {isLinked && (
-                        <span
-                          className={`ml-auto flex items-center gap-1 text-[10px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
-                          title={
-                            linkedEvmAddress
-                              ? `Linked to your EVM wallet ${shortAddr(linkedEvmAddress)}`
-                              : 'Linked to your EVM wallet'
-                          }
-                        >
-                          <Icon icon="ph:link-simple" width={14} height={14} className="flex-shrink-0" />
-                          {linkedEvmAddress ? `Linked ${shortAddr(linkedEvmAddress)}` : 'Linked'}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-              <div className={`border-t ${panelDivider(isDark)} my-1`} />
-            </>
-          )}
-
-          {/* #136: disconnecting mid-transfer tears down the wallet session the
-              live /progress view depends on, orphaning the transfer's recovery
-              data — so this is hard-disabled during an active transfer rather
-              than confirm-gated. */}
-          <div
-            className={`flex items-center gap-2 px-4 py-2 transition-colors duration-150 ${
-              actionsLocked ? 'opacity-50 cursor-not-allowed' : `${menuItemHover(isDark)} cursor-pointer`
-            } ${
-              // NOTE: `text-red-500` never resolved here — this app's tailwind.config.js
-              // replaces (not extends) the default palette, which drops the red-500/
-              // gray-300/400/500 numbered scales, so `text-red-500` silently compiles to
-              // no rule and this row inherits its color from the dropdown panel instead
-              // (harmless in light mode — that inherited navy still reads fine — but
-              // would've inherited near-white in dark mode with no "danger" cue left).
-              // Pre-existing bug; left as-is for light so that mode stays byte-identical,
-              // fixed only for dark where an unstyled Disconnect loses its meaning.
-              isDark ? 'text-[#FF6B6B]' : 'text-red-500'
-            }`}
-            aria-disabled={actionsLocked}
-            title={actionsLocked ? TRANSFER_LOCK_HINT : undefined}
-            onClick={actionsLocked ? undefined : handleDisconnect}
-          >
-            <Icon icon="ph:sign-out" width={20} height={20} />
-            <span>Disconnect</span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-interface WalletConnectPillProps {
-  icon: string
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  title?: string
-  /** See WalletDisplayProps.flat — same "flat row inside the merged cluster pill" treatment. */
-  flat?: boolean
-  /** See WalletDisplayProps.roundedEdge. */
-  roundedEdge?: 'top' | 'bottom'
-  /** True when Privacy Mode is on and the page is on the dark background. */
-  isDark?: boolean
-}
-
-/**
- * One wallet pill in the NOT-CONNECTED state, used inside the merged
- * cluster once the *other* chain has already connected (see walletCluster
- * in Header below). Compact — same footprint as the connected WalletDisplay
- * pill so the cluster doesn't jump in width when a chain connects/disconnects.
- */
-const WalletConnectPill: React.FC<WalletConnectPillProps> = ({
-  icon,
-  label,
-  onClick,
-  disabled,
-  title,
-  flat,
-  roundedEdge,
-  isDark = false,
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={disabled}
-    title={title}
-    className={
-      flat
-        ? `flex items-center gap-1.5 sm:gap-2 pr-2.5 sm:pr-3.5 pl-2.5 flex-1 min-h-0 w-full transition-colors duration-200 ${
-            roundedEdge === 'top' ? 'rounded-t-[20px]' : roundedEdge === 'bottom' ? 'rounded-b-[20px]' : ''
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : `${hoverTint(isDark)} cursor-pointer`}`
-        : `flex items-center gap-1.5 pr-2.5 pl-1 py-1 h-8 w-full rounded-full ${isDark ? GLASS_PILL_DARK : GLASS_PILL} ${
-            disabled ? 'opacity-50 cursor-not-allowed' : `${isDark ? GLASS_PILL_DARK_HOVER : GLASS_PILL_HOVER} cursor-pointer`
-          }`
-    }
-  >
-    <span className="flex w-6 h-6 items-center justify-center rounded-full bg-latest-grey-300 flex-shrink-0">
-      <Image src={icon} alt="" width={15} height={15} />
-    </span>
-    <span className={`text-xs font-medium ${navText(isDark)} truncate`}>{label}</span>
-  </button>
-)
-
-/**
- * Single combined "Connect Wallet" pill shown when NEITHER chain is
- * connected — normal nav-row height (matches Privacy Mode / the humanity
- * chip), so the nav never has to reserve the taller two-pill stack's height
- * up front. Starts the existing combined WaaP→Aztec connect flow. Once the
- * first leg connects, the cluster switches to the stacked per-chain pills
- * (see walletCluster in Header).
- */
-const ConnectWalletPill: React.FC<{ onClick: () => void; connecting?: boolean; isDark?: boolean; flat?: boolean }> = ({
-  onClick,
-  connecting,
-  isDark = false,
-  flat = false,
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={connecting}
-    title={connecting ? 'Connecting…' : 'Connect Wallet'}
-    aria-label={connecting ? 'Connecting wallet' : 'Connect wallet'}
-    className={
-      flat
-        ? // Inside the standalone account chip: fill the chip, no pill material
-          // of its own (the chip supplies the glass pill), so there is no
-          // pill-on-pill stacking.
-          `flex items-center justify-center gap-2 w-9 sm:w-auto px-0 sm:px-4 rounded-[20px] flex-1 ${
-            connecting ? 'opacity-60 cursor-not-allowed' : `${hoverTint(isDark)} cursor-pointer`
-          }`
-        : `flex items-center justify-center gap-2 h-9 sm:h-10 w-9 sm:w-auto px-0 sm:px-4 rounded-full ${isDark ? GLASS_PILL_DARK : GLASS_PILL} flex-shrink-0 ${
-            connecting ? 'opacity-60 cursor-not-allowed' : `${isDark ? GLASS_PILL_DARK_HOVER : GLASS_PILL_HOVER} cursor-pointer`
-          }`
-    }
-  >
-    <Icon icon="ph:wallet-fill" width={16} height={16} className={`${accentPink(isDark)} flex-shrink-0`} />
-    {/* Text collapses first on narrow widths — icon-only affordance below
-        `sm`, same collapse pattern as the Privacy Mode label — so this
-        pill can never push the hamburger toggle out past the nav edge. */}
-    <span className={`hidden sm:inline text-xs sm:text-sm font-medium ${navText(isDark)} whitespace-nowrap`}>
-      {connecting ? 'Connecting…' : 'Connect Wallet'}
-    </span>
-  </button>
-)
-
 interface HumanityPointsChipProps {
   /** L1-only proof-of-personhood result from useL1Humanity — 'poch' | 'passport' | null. */
   method: 'poch' | 'passport' | null
@@ -609,10 +223,12 @@ interface HumanityPointsChipProps {
   points: number
   /** True when Privacy Mode is on and the page is on the dark background. */
   isDark?: boolean
+  /** EVM wallet connected — gates the "Get verified" CTA vs the connect prompt. */
+  isConnected?: boolean
   /**
-   * Copy shown in the expanded panel when NOT verified. Varies by connection
-   * state (see Header): prompt to connect the EVM wallet when nothing is
-   * connected, or the eligibility reason once a wallet is connected.
+   * Copy shown in the expanded panel when the EVM wallet is NOT connected —
+   * a prompt to connect it. Once connected, the tooltip surfaces a Get-verified
+   * CTA instead (no raw eligibility reason / "0/1 required" framing, per #272).
    */
   unverifiedHint?: string
 }
@@ -643,25 +259,21 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
   isFetching,
   points,
   isDark = false,
+  isConnected = false,
   unverifiedHint = 'Connect your Ethereum wallet to verify personhood.',
 }) => {
-  const isPassport = method === 'passport' && typeof passportScore === 'number'
+  // A ZERO passport score counts as "no score yet" — the chip never renders a
+  // bare 0 (#272). It shows a neutral "—" on the face and a Get-verified CTA in
+  // the tooltip instead.
+  const hasScore = method === 'passport' && typeof passportScore === 'number' && passportScore > 0
   const isPoch = method === 'poch'
-  const isVerified = isPassport || isPoch
-  const scoreLabel = isPassport ? String(passportScore) : isPoch ? 'Verified' : '—'
-  const scorePct = isPassport
+  const isVerified = hasScore || isPoch
+  const scoreLabel = hasScore ? String(passportScore) : isPoch ? 'Verified' : '—'
+  const scorePct = hasScore
     ? Math.min(100, Math.max(0, (passportScore! / (passportThreshold || passportScore!)) * 100))
     : isPoch
       ? 100
       : 0
-
-  const scoreDetail = isPassport
-    ? String(passportScore)
-    : isPoch
-      ? 'Verified'
-      : isFetching
-        ? 'Checking…'
-        : 'Not verified'
 
   return (
     <div className="relative">
@@ -714,70 +326,107 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
             <div>
               <div className="flex items-center justify-between gap-3 mb-1.5">
                 <span className="text-xs font-medium text-white/[0.70]">Humanity</span>
-                {/* Cumulative score, NOT a fraction, so no "/threshold" denominator (#112/#113). */}
-                <span className={`text-sm font-semibold ${isVerified ? 'text-[#FA8FC4]' : 'text-white/[0.60]'}`}>
-                  {scoreDetail}
-                </span>
+                {/* JUST a number (#272) — never a fraction or "out of X". A zero
+                    or missing score surfaces a Get-verified CTA, not a bare 0. */}
+                {isFetching ? (
+                  <span className="text-sm font-semibold text-white/[0.60]">Checking…</span>
+                ) : hasScore ? (
+                  <span className="text-sm font-semibold text-[#FA8FC4]">{passportScore}</span>
+                ) : isPoch ? (
+                  <span className="text-sm font-semibold text-[#FA8FC4]">Verified</span>
+                ) : isConnected ? (
+                  <a
+                    href="https://app.passport.xyz"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-semibold text-[#FA8FC4] underline"
+                  >
+                    Get verified
+                  </a>
+                ) : null}
               </div>
-              <div className="w-full h-1.5 rounded-full bg-white/[0.15] overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-[width] duration-300 ${isVerified ? 'bg-[#FA8FC4]' : 'bg-white/[0.30]'}`}
-                  style={{ width: `${scorePct}%` }}
-                />
-              </div>
+              {(hasScore || isPoch) && (
+                <div className="w-full h-1.5 rounded-full bg-white/[0.15] overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#FA8FC4] transition-[width] duration-300"
+                    style={{ width: `${scorePct}%` }}
+                  />
+                </div>
+              )}
               <p className="text-[11px] leading-snug text-white/[0.75] mt-2">
-                A cumulative proof-of-personhood score. Higher means stronger proof you&apos;re a real, unique human. From{' '}
-                <a
-                  href={POCH_MINT_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 align-middle underline font-medium"
-                >
-                  <Icon icon="ph:hand-soap" width={13} height={13} className="text-[#FA8FC4]" />
-                  Proof of Clean Hands
-                </a>{' '}
-                and{' '}
+                Your Proof of Personhood Score. Higher means stronger proof you&apos;re a real, unique human.
+              </p>
+              {/* Sources — the two proofs the score is built from. Brand marks
+                  (public/assets/svg) are painted via CSS mask so they inherit the
+                  pink accent that reads on the dark tooltip in both themes. */}
+              <p className="text-[11px] leading-snug text-white/[0.75] mt-1.5">
+                Sources:{' '}
                 <a
                   href="https://app.passport.xyz"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 align-middle underline font-medium"
                 >
-                  <Icon icon="ph:identification-card" width={13} height={13} className="text-[#FA8FC4]" />
+                  <span
+                    aria-hidden
+                    className="inline-block w-[13px] h-[13px] align-middle bg-[#FA8FC4] [mask:url(/assets/svg/passport.svg)_center/contain_no-repeat] [-webkit-mask:url(/assets/svg/passport.svg)_center/contain_no-repeat]"
+                  />
                   Human Passport
+                </a>{' '}
+                and{' '}
+                <a
+                  href={POCH_MINT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 align-middle underline font-medium"
+                >
+                  <span
+                    aria-hidden
+                    className="inline-block w-[13px] h-[13px] align-middle bg-[#FA8FC4] [mask:url(/assets/svg/clean-hands.svg)_center/contain_no-repeat] [-webkit-mask:url(/assets/svg/clean-hands.svg)_center/contain_no-repeat]"
+                  />
+                  Proof of Clean Hands
                 </a>
                 .
               </p>
+              {/* Clean Hands: held / not-held, with a CTA when not held (#272). */}
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="inline-block w-[15px] h-[15px] bg-[#FA8FC4] [mask:url(/assets/svg/clean-hands.svg)_center/contain_no-repeat] [-webkit-mask:url(/assets/svg/clean-hands.svg)_center/contain_no-repeat]"
+                  />
+                  <span className="text-[11px] font-medium text-[#FA8FC4]">Proof of Clean Hands</span>
+                </span>
+                {isPoch ? (
+                  <a
+                    href={POCH_MINT_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-[#FA8FC4] underline"
+                  >
+                    <Icon icon="ph:seal-check-fill" width={13} height={13} />
+                    Held
+                  </a>
+                ) : (
+                  <a
+                    href={POCH_MINT_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-semibold text-[#FA8FC4] underline"
+                  >
+                    Get Clean Hands
+                  </a>
+                )}
+              </div>
               {isPoch && (
-                <div className="mt-2">
-                  {/* Proof of Clean Hands badge (#127/#128). The L1 humanity
-                      result only tells us POCH is satisfied (method === 'poch');
-                      it carries NO mint date or expiry, so this shows the PoCH
-                      mark + an explanation, never fabricated dates.
-                      TODO(poch-meta): surface actual mint/expiry by fetching the
-                      Clean-Hands SBT / attestation metadata (a new data path,
-                      not exposed by the current eligibility route). */}
-                  <span className="inline-flex items-center gap-1.5">
-                    <Icon icon="ph:hand-soap" width={15} height={15} className="text-[#FA8FC4]" />
-                    <span className="text-[11px] font-medium text-[#FA8FC4]">Proof of Clean Hands</span>
-                  </span>
-                  <p className="text-[11px] leading-snug text-white/[0.75] mt-1">
-                    A privacy-preserving proof you&apos;re a real, sanctions-screened human. No numeric score needed. Mint date and expiry aren&apos;t available in this view yet.{' '}
-                    <a
-                      href={POCH_MINT_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline font-medium"
-                    >
-                      Manage
-                    </a>
-                  </p>
-                </div>
-              )}
-              {!isVerified && (
-                <p className="text-[11px] leading-snug text-white/[0.70] mt-1.5">
-                  {isFetching ? 'Checking eligibility…' : unverifiedHint}
+                // POCH is a boolean proof: the L1 result carries no mint date or
+                // expiry, so never fabricate them here.
+                <p className="text-[11px] leading-snug text-white/[0.75] mt-1.5">
+                  A privacy-preserving proof you&apos;re a real, sanctions-screened human. No numeric score needed. Mint date and expiry aren&apos;t available in this view yet.
                 </p>
+              )}
+              {!isVerified && !isConnected && (
+                <p className="text-[11px] leading-snug text-white/[0.70] mt-1.5">{unverifiedHint}</p>
               )}
             </div>
             <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.15]">
@@ -1067,91 +716,27 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     </div>
   )
 
-  // Fully disconnected: one compact pill, same height as the rest of the nav
-  // row (no stacking yet — nothing to stack). Once the first chain connects,
-  // swap to the two-pill stack below so each chain gets its own connect
-  // state + dropdown without ever showing two oversized "Connect" pills at
-  // once (that was overflowing the nav — see PR feedback).
-  const walletCluster = !isWaapConnected && !isAztecConnected ? (
-    <ConnectWalletPill onClick={handleConnectWallet} connecting={isL1Connecting} isDark={isDark} flat />
-  ) : (
-    // Merged wallet cluster — the two flat rows (ETH + Aztec) stacked flush,
-    // split by one hairline divider (below). The rows carry no material of their
-    // own; the standalone account chip that wraps this cluster supplies the
-    // single glass pill (see the account chip in the header return), so there is
-    // no pill-on-pill stacking. Each row is flex-1, so the pair splits the
-    // chip's fixed height evenly and always fits. roundedEdge rounds each row's
-    // hover/active background to match the chip's outer corners.
-    <div className="flex flex-col h-full w-[150px] sm:w-[252px]">
-      {isWaapConnected ? (
-        <WalletDisplay
-          address={waapAddress || undefined}
-          isConnected={isWaapConnected}
-          walletIcon={walletIcon || '/assets/wallets/wally-dark.svg'}
-          networkIcon="/assets/svg/network-logo.svg"
-          balance={l1NativeBalance}
-          onDisconnect={disconnectWaapWallet}
-          walletType={WalletType.WAAP}
-          loginMethod={loginMethod}
-          flat
-          roundedEdge="top"
-          isDark={isDark}
-          actionsLocked={isTransferInProgress}
-        />
-      ) : (
-        <WalletConnectPill
-          icon="/assets/svg/network-logo.svg"
-          label={isL1Connecting ? '…' : 'Connect'}
-          onClick={handleConnectWallet}
-          disabled={isL1Connecting}
-          title="Connect Ethereum (L1) wallet"
-          flat
-          roundedEdge="top"
-          isDark={isDark}
-        />
-      )}
-
-      {/* Single flush divider (#108/#109). Runs edge-to-edge across the full
-          width of the wallet segment — a plain full-bleed hairline separating
-          the EVM row from the Aztec row. A subtle dark hairline on the light
-          glass / a faint white hairline on the dark privacy surface, so it
-          reads as one crisp border in either theme without becoming a bright
-          bar. */}
-      <div
-        className={`h-px w-full flex-shrink-0 ${isDark ? 'bg-white/[0.12]' : 'bg-black/[0.08]'}`}
-        aria-hidden="true"
-      />
-
-      {isAztecConnected ? (
-        <WalletDisplay
-          address={aztecAddress || undefined}
-          displayName={aztecAlias || undefined}
-          isConnected={isAztecConnected}
-          walletIcon="/assets/svg/aztec-wallet-logo.svg"
-          onDisconnect={disconnectAztecWallet}
-          availableAccounts={availableAccounts}
-          onSelectAccount={switchAztecAccount}
-          linkedAccountAddress={sessionLinkedL2 || undefined}
-          linkedEvmAddress={waapAddress || undefined}
-          walletType={WalletType.AZTEC}
-          flat
-          roundedEdge="bottom"
-          isDark={isDark}
-          actionsLocked={isTransferInProgress}
-        />
-      ) : (
-        <WalletConnectPill
-          icon="/assets/svg/aztec-wallet-logo.svg"
-          label={isL2Connecting ? '…' : 'Connect Aztec Wallet'}
-          onClick={isWaapConnected ? handleConnectAztecOnly : handleConnectWallet}
-          disabled={isL2Connecting}
-          title="Connect Aztec (L2) wallet"
-          flat
-          roundedEdge="bottom"
-          isDark={isDark}
-        />
-      )}
-    </div>
+  // Skinny variant-A account chip — a single uniform-height nav chip standing at
+  // the right end of the nav (like the Shield brand chip). It encapsulates the
+  // connect / connected states and the Wallets · Identity & proofs · Limits &
+  // usage · Disconnect dropdown, reading wallet-store state itself. Header only
+  // threads the props it can't self-source: the connect actions, the derived
+  // connecting/lock/balance flags, and the authoritative binding data (conflict
+  // notice + server-disclosed linked L2 account).
+  const accountChip = (
+    <AccountChip
+      isDark={isDark}
+      onConnectWallet={handleConnectWallet}
+      onConnectAztec={handleConnectAztecOnly}
+      isL1Connecting={isL1Connecting}
+      isL2Connecting={isL2Connecting}
+      l1NativeBalance={l1NativeBalance}
+      actionsLocked={isTransferInProgress}
+      loginMethod={loginMethod}
+      conflictNotice={walletNotice || undefined}
+      conflictSevere={!!conflict}
+      linkedAccountAddress={sessionLinkedL2 || undefined}
+    />
   )
 
   const secondaryNav = (
@@ -1283,36 +868,19 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           isFetching={humanitySource.isFetching}
           points={points}
           isDark={isDark}
+          isConnected={isWaapConnected}
           unverifiedHint={unverifiedHint}
         />
       </div>
 
-      {/* Account chip — its own standalone glass pill at the uniform top-row
-          height, pulled OUT of the center pill so it sits on its own at the
-          right end. Holds the connect affordance (disconnected) or the two
-          stacked wallet rows (connected). An actionable binding notice — a
-          server conflict or device-local pre-warn, naming the exact counterpart
-          account (issue #98) — anchors beneath it. */}
+      {/* Account chip — the skinny variant-A chip, its own standalone glass pill
+          at the uniform top-row height (CHIP_H / h-14 supplied by AccountChip
+          itself), pulled OUT of the center pill so it sits on its own at the
+          right end. A single collapsed row (avatars + Account + verified + caret)
+          that opens the account dropdown. The binding-conflict notice renders as
+          a static banner inside that dropdown (#282), not a floating overlay. */}
       <div className="relative z-40 flex-shrink-0">
-        <div className={`${CHIP_H} flex items-stretch rounded-[20px] ${glassPill(isDark)}`}>
-          {walletCluster}
-        </div>
-        {walletNotice && (
-          <div
-            role="alert"
-            className={`absolute right-0 top-full mt-2 z-50 w-[240px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-3 flex items-start gap-2 border-l-2 ${
-              conflict ? 'border-l-[#E3357E]' : 'border-l-[#FA8FC4]'
-            }`}
-          >
-            <Icon
-              icon="ph:warning-circle"
-              width={16}
-              height={16}
-              className={`mt-[1px] flex-shrink-0 ${accentPink(isDark)}`}
-            />
-            <p className={`text-[11px] leading-snug ${navText(isDark)}`}>{walletNotice}</p>
-          </div>
-        )}
+        {accountChip}
       </div>
 
       {/* Mobile secondary-nav panel (credentials / How it works / Docs / Fee

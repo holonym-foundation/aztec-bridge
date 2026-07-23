@@ -6,6 +6,11 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useWalletStore } from '@/stores/walletStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { shortAddr, accountLabel } from '@/hooks/useBindingStatus'
+import { POCH_MINT_URL } from '@/config'
+import { BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD } from '@/config/env.config'
+import { silkUrl } from '@/config/l1.config'
+import { LOGIN_METHODS } from '@/types/wallet'
+import { copyToClipboard } from '@/utils'
 
 // Preload the Phosphor glyphs used inside the chip + dropdown so iconify has
 // them cached before first paint (same pattern Header uses for its own set).
@@ -14,6 +19,7 @@ if (typeof window !== 'undefined') {
     'ph:seal-check-fill',
     'ph:caret-down',
     'ph:link',
+    'ph:link-simple',
     'ph:wallet',
     'ph:arrows-left-right',
     'ph:sign-out',
@@ -22,6 +28,9 @@ if (typeof window !== 'undefined') {
     'ph:plus-circle',
     'ph:gauge',
     'ph:check',
+    'ph:copy',
+    'ph:warning-circle',
+    'majesticons:open',
   ])
 }
 
@@ -29,6 +38,13 @@ if (typeof window !== 'undefined') {
 const EVM_NETWORK_ICON = '/assets/svg/network-logo.svg'
 const AZTEC_ICON = '/assets/svg/aztec.svg'
 const EVM_WALLET_FALLBACK = '/assets/wallets/wally-dark.svg'
+
+// Compliance figures surfaced in the account dropdown. Both come from env
+// (BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD) — never hardcoded — so
+// they track config. Neither is NEXT_PUBLIC, so on the client `process.env`
+// returns undefined and they resolve to their config defaults ($25k / $1,000).
+const DEPOSIT_CAP_LABEL = `$${Number(BRIDGE_MAX_DEPOSIT_USD) / 1000}k`
+const TRAVEL_RULE_LABEL = `$${Number(TRAVEL_RULE_THRESHOLD_USD).toLocaleString()}`
 
 // ─── Theme helpers (ported from Header's glass-pill vocabulary; this app is
 // Tailwind-only and the design system ships CSS modules, so the LOOK is
@@ -100,12 +116,30 @@ interface AccountChipProps {
   l1NativeBalance?: string
   /** Hard-lock fund-losing actions (Disconnect) during an in-progress transfer. */
   actionsLocked?: boolean
+  /** WAAP login method — gates the "Open Wallet" row (Header owns the store field). */
+  loginMethod?: string | null
+  /**
+   * Actionable binding-conflict notice, rendered as a static BANNER at the top
+   * of the dropdown (above the account list) rather than a floating overlay that
+   * would cover the account-selection rows (issue #282).
+   */
+  conflictNotice?: string
+  /** True when the notice is a hard server conflict (deeper accent) vs a softer pre-warn. */
+  conflictSevere?: boolean
+  /**
+   * L2 account the SERVER has disclosed as the pair for the connected EVM wallet
+   * (authoritative bound response — never localStorage). The matching row in the
+   * Switch Account list gets a "Linked" badge so the user can pick it (issue #284).
+   */
+  linkedAccountAddress?: string
 }
 
 /**
- * Account Chip (Variant A) — a single wallet-only chip in the top-right nav that
- * opens an account dropdown. Encapsulates the connect / connected states and the
- * Wallets · Identity & proofs · Limits & usage · Disconnect dropdown.
+ * Account Chip (Variant A) — a single skinny wallet-only chip in the top-right
+ * nav that opens an account dropdown. Encapsulates the connect / connected
+ * states and the Wallets · Identity & proofs · Limits & usage · Disconnect
+ * dropdown. Sits standalone at the right end of the nav at the uniform top-row
+ * height (h-14 / CHIP_H), like the Shield brand + humanity chips.
  *
  * The humanity/points chip is a SEPARATE element that stays beside this in the
  * Header — it is intentionally NOT folded in here.
@@ -118,6 +152,10 @@ const AccountChip: React.FC<AccountChipProps> = ({
   isL2Connecting = false,
   l1NativeBalance,
   actionsLocked = false,
+  loginMethod,
+  conflictNotice,
+  conflictSevere = false,
+  linkedAccountAddress,
 }) => {
   const {
     waapAddress,
@@ -146,10 +184,16 @@ const AccountChip: React.FC<AccountChipProps> = ({
     typeof passportScore === 'number' &&
     typeof passportThreshold === 'number' &&
     passportScore >= passportThreshold
-  const isVerified = eligible || scorePasses
+  const isPoch = method === 'poch'
+  // On the Passport tier = verified via Passport but not yet holding Clean Hands.
+  const onPassportTier = !isPoch && (method === 'passport' || scorePasses)
+  const isVerified = eligible || scorePasses || isPoch
 
   const [open, setOpen] = useState(false)
   const [aztecSwitchOpen, setAztecSwitchOpen] = useState(false)
+  // #275: which wallet row was just copied (keyed by address) so the check +
+  // "Copied" flip is scoped to the row the user acted on, not both rows.
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -167,6 +211,15 @@ const AccountChip: React.FC<AccountChipProps> = ({
     }
   }, [])
 
+  // #275: copies the FULL address (not the truncated label), flips to a check +
+  // "Copied" for ~1.5s, keeping the dropdown open so the user can copy again.
+  const handleCopy = async (addr?: string) => {
+    if (!addr) return
+    await copyToClipboard(addr)
+    setCopiedKey(addr)
+    setTimeout(() => setCopiedKey((k) => (k === addr ? null : k)), 1500)
+  }
+
   // ── State 1: nothing connected → a compact "Connect wallet" chip. ──
   if (!isWaapConnected && !isAztecConnected) {
     return (
@@ -176,7 +229,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
         disabled={isL1Connecting}
         title={isL1Connecting ? 'Connecting…' : 'Connect wallet'}
         aria-label={isL1Connecting ? 'Connecting wallet' : 'Connect wallet'}
-        className={`flex items-center justify-center gap-2 h-9 sm:h-10 w-9 sm:w-auto px-0 sm:px-4 rounded-full flex-shrink-0 ${
+        className={`flex items-center justify-center gap-2 h-14 w-14 sm:w-auto px-0 sm:px-5 rounded-[20px] flex-shrink-0 ${
           isDark ? GLASS_PILL_DARK : GLASS_PILL
         } ${isL1Connecting ? 'opacity-60 cursor-not-allowed' : `${isDark ? GLASS_PILL_DARK_HOVER : GLASS_PILL_HOVER} cursor-pointer`}`}
       >
@@ -206,8 +259,11 @@ const AccountChip: React.FC<AccountChipProps> = ({
 
   return (
     <div className="relative flex-shrink-0" ref={rootRef}>
+      {/* Skinny collapsed chip — a SINGLE row (stacked avatars + Account + verified
+          + caret) at the uniform top-row height (h-14 / CHIP_H), never two stacked
+          wallet rows. */}
       <div
-        className={`flex items-center gap-1 h-9 sm:h-10 pl-1.5 pr-1.5 rounded-full max-w-[190px] sm:max-w-[240px] ${glassPill(isDark, open)}`}
+        className={`flex items-center gap-1 h-14 pl-2 pr-2 rounded-[20px] max-w-[200px] sm:max-w-[260px] ${glassPill(isDark, open)}`}
       >
         <button
           type="button"
@@ -247,15 +303,23 @@ const AccountChip: React.FC<AccountChipProps> = ({
         </button>
 
         {/* EVM connected, Aztec NOT → inline Connect Aztec affordance (sibling
-            button, not nested). Reuses the existing Aztec-only connect action. */}
+            button, not nested). #287: clear ACTIVE treatment when idle (tinted
+            fill + border + hover) so it can't read as disabled; only faded +
+            cursor-not-allowed while actually connecting. */}
         {isWaapConnected && !isAztecConnected && (
           <button
             type="button"
             onClick={onConnectAztec}
             disabled={isL2Connecting}
             title="Connect Aztec wallet"
-            className={`flex items-center gap-1 flex-shrink-0 pl-1.5 pr-2 py-1 rounded-full text-[11px] font-medium ${
-              isL2Connecting ? 'opacity-60 cursor-not-allowed' : `${hoverTint(isDark)} cursor-pointer`
+            className={`flex items-center gap-1 flex-shrink-0 pl-1.5 pr-2 py-1 rounded-full text-[11px] font-medium border ${
+              isL2Connecting
+                ? 'opacity-60 cursor-not-allowed border-transparent'
+                : `cursor-pointer ${
+                    isDark
+                      ? 'bg-[#FA8FC4]/[0.14] border-[#FA8FC4]/[0.30] hover:bg-[#FA8FC4]/[0.22]'
+                      : 'bg-[#FA8FC4]/[0.16] border-[#81133B]/[0.25] hover:bg-[#FA8FC4]/[0.26]'
+                  }`
             } ${accentPink(isDark)}`}
           >
             <Image src={AZTEC_ICON} alt="" width={13} height={13} className="flex-shrink-0" />
@@ -269,6 +333,21 @@ const AccountChip: React.FC<AccountChipProps> = ({
           role="menu"
           className={`absolute right-0 mt-2 z-50 w-[290px] max-w-[calc(100vw-1.5rem)] max-h-[min(72vh,560px)] overflow-y-auto rounded-[16px] shadow-lg py-2 flex flex-col ${panelSurface(isDark)} ${navText(isDark)}`}
         >
+          {/* #282: the binding-conflict notice is a STATIC banner at the top of the
+              dropdown, above the account list — so it can never float over and
+              block the Switch / account-selection rows. */}
+          {conflictNotice && (
+            <div
+              role="alert"
+              className={`mx-2 mb-1 rounded-xl p-2.5 flex items-start gap-2 border-l-2 ${
+                conflictSevere ? 'border-l-[#E3357E]' : 'border-l-[#FA8FC4]'
+              } ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.03]'}`}
+            >
+              <Icon icon="ph:warning-circle" width={15} height={15} className={`mt-[1px] flex-shrink-0 ${accentPink(isDark)}`} />
+              <p className={`text-[11px] leading-snug ${navText(isDark)}`}>{conflictNotice}</p>
+            </div>
+          )}
+
           {/* ── Wallets ── */}
           <SectionLabel isDark={isDark}>Wallets</SectionLabel>
 
@@ -279,9 +358,24 @@ const AccountChip: React.FC<AccountChipProps> = ({
               networkIcon={EVM_NETWORK_ICON}
               primary={waapAddress ? shortAddr(waapAddress) : 'EVM wallet'}
               secondary={l1NativeBalance ? `${l1NativeBalance} ETH` : 'Ethereum'}
+              fullAddress={waapAddress || undefined}
+              copied={!!waapAddress && copiedKey === waapAddress}
+              onCopy={() => handleCopy(waapAddress || undefined)}
               onSwitch={onConnectWallet}
               switchTitle="Re-open the wallet login to switch EVM account"
             />
+          )}
+
+          {/* Open Wallet — only for the embedded WAAP login (opens the Silk UI). */}
+          {loginMethod === LOGIN_METHODS.WAAP && (
+            <button
+              type="button"
+              onClick={() => window.open(silkUrl, '_blank', 'noopener,noreferrer')}
+              className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg text-left transition-colors duration-150 ${menuItemHover(isDark)} cursor-pointer`}
+            >
+              <Icon icon="majesticons:open" width={16} height={16} className={mutedIconText(isDark)} />
+              <span className={`text-xs font-medium ${navText(isDark)}`}>Open Wallet</span>
+            </button>
           )}
 
           {isAztecConnected && (
@@ -291,6 +385,9 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 avatar={AztecAvatar}
                 primary={aztecAlias || (aztecAddress ? shortAddr(aztecAddress) : 'Aztec account')}
                 secondary={aztecAddress ? shortAddr(aztecAddress) : 'Aztec'}
+                fullAddress={aztecAddress || undefined}
+                copied={!!aztecAddress && copiedKey === aztecAddress}
+                onCopy={() => handleCopy(aztecAddress || undefined)}
                 onSwitch={availableAccounts.length > 1 ? () => setAztecSwitchOpen((v) => !v) : undefined}
                 switchTitle="Switch Azguard account"
                 switchActive={aztecSwitchOpen}
@@ -299,6 +396,10 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 <div className="px-2 pb-1">
                   {availableAccounts.map((acc, i) => {
                     const isCurrent = acc.address === aztecAddress
+                    // #284: mark the account the server disclosed as bound to the
+                    // connected EVM wallet, so the user can spot and pick it.
+                    const isLinked =
+                      !!linkedAccountAddress && acc.address.toLowerCase() === linkedAccountAddress.toLowerCase()
                     return (
                       <button
                         key={acc.address}
@@ -317,13 +418,22 @@ const AccountChip: React.FC<AccountChipProps> = ({
                           height={15}
                           className={isCurrent ? accentPink(isDark) : subtleText(isDark)}
                         />
-                        <span className="flex flex-col min-w-0">
+                        <span className="flex flex-col min-w-0 flex-1">
                           <span className="text-xs truncate">{accountLabel(acc, i)}</span>
                           <span className={`text-[10px] ${mutedIconText(isDark)}`}>
                             {shortAddr(acc.address)}
                             {isCurrent ? ' · Current' : ''}
                           </span>
                         </span>
+                        {isLinked && (
+                          <span
+                            className={`ml-auto flex items-center gap-1 text-[10px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
+                            title="Linked to your EVM wallet"
+                          >
+                            <Icon icon="ph:link-simple" width={13} height={13} className="flex-shrink-0" />
+                            Linked
+                          </span>
+                        )}
                       </button>
                     )
                   })}
@@ -332,17 +442,20 @@ const AccountChip: React.FC<AccountChipProps> = ({
             </>
           )}
 
-          {/* Link a New Wallet — functional placeholder for the future WAAP
-              wallet-linking flow (see DS AccountDrawer / walletLinkingShared). */}
-          <PromoRow
-            isDark={isDark}
-            icon="ph:link"
-            label="Link a New Wallet"
-            hint="Coming soon"
-            onClick={() => {
-              // Placeholder stub — the WAAP wallet-linking flow lands later.
-            }}
-          />
+          {/* Link a New Wallet — DISABLED variant. Non-interactive (no onClick)
+              until the WAAP wallet-linking flow ships; opacity-40 (opacity-50 is a
+              no-op on this repo's sparse opacity scale) + muted + cursor-not-allowed
+              + select-none make the "Coming soon" state read as intentionally inert. */}
+          <div
+            aria-disabled="true"
+            className="flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg opacity-40 cursor-not-allowed select-none"
+          >
+            <Icon icon="ph:link" width={16} height={16} className={mutedIconText(isDark)} />
+            <span className={`text-xs font-medium ${mutedIconText(isDark)}`}>Link a New Wallet</span>
+            <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${trackBg(isDark)} ${subtleText(isDark)}`}>
+              Coming soon
+            </span>
+          </div>
 
           <Divider isDark={isDark} />
 
@@ -353,35 +466,41 @@ const AccountChip: React.FC<AccountChipProps> = ({
             isDark={isDark}
             icon="ph:identification-card"
             title="Passport"
-            caption="Required to transfer"
+            caption={`Required · ${TRAVEL_RULE_LABEL} per human`}
             status={
               attFetching
                 ? 'Checking…'
                 : typeof passportScore === 'number'
-                  ? `${passportScore}${typeof passportThreshold === 'number' ? ` / ${passportThreshold}` : ''}`
-                  : method === 'poch'
+                  ? `${passportScore}`
+                  : isPoch
                     ? 'Covered by Clean Hands'
                     : 'Not verified'
             }
-            good={scorePasses || method === 'poch'}
+            good={scorePasses || isPoch}
           />
           <ProofRow
             isDark={isDark}
             icon="ph:hand-soap"
             title="Clean Hands SBT"
-            caption="Unlocks higher limits"
-            status={attFetching ? 'Checking…' : method === 'poch' ? 'Verified' : 'Not held'}
-            good={method === 'poch'}
+            caption={`Unlocks ${DEPOSIT_CAP_LABEL}`}
+            status={attFetching ? 'Checking…' : isPoch ? 'Verified' : 'Not held'}
+            good={isPoch}
           />
-          <PromoRow
-            isDark={isDark}
-            icon="ph:plus-circle"
-            label="Verify more"
-            hint="Coming soon"
-            onClick={() => {
-              // Placeholder stub — embedded verification lands later.
-            }}
-          />
+          {/* Contextual next step: no proof → Get verified; Passport tier →
+              Upgrade to Clean Hands; already Clean Hands → hidden. */}
+          {!isPoch && (
+            <a
+              href={onPassportTier ? POCH_MINT_URL : 'https://app.passport.xyz'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
+            >
+              <Icon icon="ph:plus-circle" width={16} height={16} className={accentPink(isDark)} />
+              <span className={`text-xs font-medium ${navText(isDark)}`}>
+                {onPassportTier ? 'Upgrade to Clean Hands' : 'Get verified'}
+              </span>
+            </a>
+          )}
 
           <Divider isDark={isDark} />
 
@@ -423,7 +542,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
             )}
             <LimitBar
               isDark={isDark}
-              label="Travel Rule (lifetime)"
+              label={`Lifetime limit (${TRAVEL_RULE_LABEL}/human)`}
               valueText={
                 typeof travelRuleRemainingUsd === 'number'
                   ? `$${travelRuleRemainingUsd.toLocaleString()} left`
@@ -464,7 +583,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
 }
 
 // ─── Small presentational building blocks (mirror the DS AccountDrawer
-// section / row / promo structure, in Shield's Tailwind + Phosphor stack) ────
+// section / row structure, in Shield's Tailwind + Phosphor stack) ────
 
 const SectionLabel: React.FC<{ isDark: boolean; children: React.ReactNode }> = ({ isDark, children }) => (
   <div className={`px-4 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${mutedIconText(isDark)}`}>
@@ -482,11 +601,17 @@ const WalletRow: React.FC<{
   networkIcon?: string
   primary: string
   secondary: string
+  /** Full address to copy on hover (#275). */
+  fullAddress?: string
+  copied?: boolean
+  onCopy?: () => void
   onSwitch?: () => void
   switchTitle?: string
   switchActive?: boolean
-}> = ({ isDark, avatar, networkIcon, primary, secondary, onSwitch, switchTitle, switchActive }) => (
-  <div className="flex items-center gap-2 px-4 py-1.5">
+}> = ({ isDark, avatar, networkIcon, primary, secondary, fullAddress, copied, onCopy, onSwitch, switchTitle, switchActive }) => (
+  // #275: `group` lets hover/focus reveal the copy control. This is a div (not a
+  // button) so the copy/switch buttons aren't nested inside a button.
+  <div className="group flex items-center gap-2 px-4 py-1.5">
     <span className="relative flex-shrink-0">
       {avatar}
       {networkIcon && (
@@ -503,6 +628,20 @@ const WalletRow: React.FC<{
       <span className={`text-xs font-medium truncate ${navText(isDark)}`}>{primary}</span>
       <span className={`text-[10px] ${subtleText(isDark)} truncate`}>{secondary}</span>
     </span>
+    {fullAddress && onCopy && (
+      <button
+        type="button"
+        onClick={onCopy}
+        title="Copy address"
+        aria-label="Copy full address"
+        className={`flex items-center gap-1 flex-shrink-0 px-1.5 py-1 rounded-full text-[11px] font-medium opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 transition-opacity duration-150 ${hoverTint(isDark)} ${
+          copied ? accentPink(isDark) : subtleText(isDark)
+        }`}
+      >
+        <Icon icon={copied ? 'ph:check' : 'ph:copy'} width={14} height={14} />
+        {copied && <span>Copied</span>}
+      </button>
+    )}
     {onSwitch && (
       <button
         type="button"
@@ -517,28 +656,6 @@ const WalletRow: React.FC<{
       </button>
     )}
   </div>
-)
-
-const PromoRow: React.FC<{
-  isDark: boolean
-  icon: string
-  label: string
-  hint?: string
-  onClick: () => void
-}> = ({ isDark, icon, label, hint, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg text-left transition-colors duration-150 ${menuItemHover(isDark)} cursor-pointer`}
-  >
-    <Icon icon={icon} width={16} height={16} className={accentPink(isDark)} />
-    <span className={`text-xs font-medium ${navText(isDark)}`}>{label}</span>
-    {hint && (
-      <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${trackBg(isDark)} ${subtleText(isDark)}`}>
-        {hint}
-      </span>
-    )}
-  </button>
 )
 
 const ProofRow: React.FC<{

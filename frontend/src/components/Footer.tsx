@@ -34,16 +34,16 @@ interface TextLink {
 }
 
 const RESOURCE_LINKS: TextLink[] = [
-  { label: 'Docs', href: '/docs' },
-  { label: 'Blog', href: 'https://human.tech/blog', external: true },
-  {
-    label: 'Press & Media Kit',
-    href: 'https://holonym.notion.site/Shield-Brand-Kit-shield-human-tech-385abe540a8f811a80baf4111cd469cc',
-    external: true,
-  },
   // NOTE: /privacy and /terms pages are assumed on human.tech and may not exist yet — confirm before shipping.
   { label: 'Privacy Policy', href: 'https://human.tech/policy', external: true },
   { label: 'Terms of Use', href: 'https://human.tech/terms', external: true },
+]
+
+// NOTE: Aztec-ecosystem quicklink URLs are best-known values — confirm before shipping.
+const ECOSYSTEM_LINKS: TextLink[] = [
+  { label: 'Aztec Scan', href: 'https://aztecscan.xyz', external: true },
+  { label: 'Azguard', href: 'https://azguardwallet.io', external: true },
+  { label: 'ZK Passport', href: 'https://zkpassport.id', external: true },
 ]
 
 const SocialIcons: React.FC<{ className?: string }> = ({ className }) => (
@@ -77,21 +77,44 @@ const ResourceLinks: React.FC<{ className?: string }> = ({ className }) => (
   </div>
 )
 
+const EcosystemLinks: React.FC<{ className?: string }> = ({ className }) => (
+  <div className={`flex items-center gap-x-3 gap-y-2 flex-wrap ${className || ''}`}>
+    <span className='text-latest-grey-500 uppercase tracking-wide text-[10px]'>Ecosystem</span>
+    {ECOSYSTEM_LINKS.map(({ label, href }) => (
+      <Link
+        key={label}
+        href={href}
+        target='_blank'
+        rel='noopener noreferrer'
+        title={label}
+        className='inline-flex items-center gap-x-1 text-latest-grey-600 hover:text-shield transition-colors'>
+        {label}
+        <Icon icon='ph:arrow-square-out' width={12} height={12} aria-hidden='true' />
+      </Link>
+    ))}
+  </div>
+)
+
 const Footer: React.FC<FooterProps> = ({ className }) => {
   return (
-    <footer className={`relative w-full text-xs ${className || ''}`}>
+    <footer className={`relative w-full text-xs pb-8 ${className || ''}`}>
       {/* Desktop Footer */}
-      <div className='hidden md:flex justify-between items-center w-full px-10 relative'>
-        {/* Left Side Social Icons */}
-        <SocialIcons />
+      <div className='hidden md:flex flex-col w-full px-10 gap-4'>
+        <div className='flex justify-between items-center w-full relative'>
+          {/* Left Side Social Icons */}
+          <SocialIcons />
 
-        {/* Center Text */}
-        <div className='absolute left-1/2 transform -translate-x-1/2 text-latest-grey-700 whitespace-nowrap'>
-          © 2025 Human Tech. All rights reserved.
+          {/* Center Text */}
+          <div className='absolute left-1/2 transform -translate-x-1/2 text-latest-grey-700 whitespace-nowrap'>
+            © 2025 human.tech. All rights reserved.
+          </div>
+
+          {/* Right Side Links */}
+          <ResourceLinks className='justify-end' />
         </div>
 
-        {/* Right Side Links */}
-        <ResourceLinks className='justify-end' />
+        {/* Ecosystem Quicklinks */}
+        <EcosystemLinks className='justify-center' />
       </div>
 
       {/* Mobile Footer */}
@@ -99,12 +122,15 @@ const Footer: React.FC<FooterProps> = ({ className }) => {
         {/* Top Social Icons */}
         <SocialIcons className='justify-center flex-wrap' />
 
+        {/* Ecosystem Quicklinks */}
+        <EcosystemLinks className='justify-center' />
+
         {/* Middle Resource Links */}
         <ResourceLinks className='justify-center' />
 
         {/* Bottom Copyright */}
         <div className='text-latest-grey-700 text-center'>
-          © 2025 Human Tech. All rights reserved.
+          © 2025 human.tech. All rights reserved.
         </div>
       </div>
     </footer>

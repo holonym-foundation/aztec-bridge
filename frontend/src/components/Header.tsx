@@ -609,10 +609,12 @@ interface HumanityPointsChipProps {
   points: number
   /** True when Privacy Mode is on and the page is on the dark background. */
   isDark?: boolean
+  /** EVM wallet connected — gates the "Get verified" CTA vs the connect prompt. */
+  isConnected?: boolean
   /**
-   * Copy shown in the expanded panel when NOT verified. Varies by connection
-   * state (see Header): prompt to connect the EVM wallet when nothing is
-   * connected, or the eligibility reason once a wallet is connected.
+   * Copy shown in the expanded panel when the EVM wallet is NOT connected —
+   * a prompt to connect it. Once connected, the tooltip surfaces a Get-verified
+   * CTA instead (no raw eligibility reason / "0/1 required" framing, per #272).
    */
   unverifiedHint?: string
 }
@@ -643,25 +645,21 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
   isFetching,
   points,
   isDark = false,
+  isConnected = false,
   unverifiedHint = 'Connect your Ethereum wallet to verify personhood.',
 }) => {
-  const isPassport = method === 'passport' && typeof passportScore === 'number'
+  // A ZERO passport score counts as "no score yet" — the chip never renders a
+  // bare 0 (#272). It shows a neutral "—" on the face and a Get-verified CTA in
+  // the tooltip instead.
+  const hasScore = method === 'passport' && typeof passportScore === 'number' && passportScore > 0
   const isPoch = method === 'poch'
-  const isVerified = isPassport || isPoch
-  const scoreLabel = isPassport ? String(passportScore) : isPoch ? 'Verified' : '—'
-  const scorePct = isPassport
+  const isVerified = hasScore || isPoch
+  const scoreLabel = hasScore ? String(passportScore) : isPoch ? 'Verified' : '—'
+  const scorePct = hasScore
     ? Math.min(100, Math.max(0, (passportScore! / (passportThreshold || passportScore!)) * 100))
     : isPoch
       ? 100
       : 0
-
-  const scoreDetail = isPassport
-    ? String(passportScore)
-    : isPoch
-      ? 'Verified'
-      : isFetching
-        ? 'Checking…'
-        : 'Not verified'
 
   return (
     <div className="relative">
@@ -714,70 +712,107 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
             <div>
               <div className="flex items-center justify-between gap-3 mb-1.5">
                 <span className="text-xs font-medium text-white/[0.70]">Humanity</span>
-                {/* Cumulative score, NOT a fraction, so no "/threshold" denominator (#112/#113). */}
-                <span className={`text-sm font-semibold ${isVerified ? 'text-[#FA8FC4]' : 'text-white/[0.60]'}`}>
-                  {scoreDetail}
-                </span>
+                {/* JUST a number (#272) — never a fraction or "out of X". A zero
+                    or missing score surfaces a Get-verified CTA, not a bare 0. */}
+                {isFetching ? (
+                  <span className="text-sm font-semibold text-white/[0.60]">Checking…</span>
+                ) : hasScore ? (
+                  <span className="text-sm font-semibold text-[#FA8FC4]">{passportScore}</span>
+                ) : isPoch ? (
+                  <span className="text-sm font-semibold text-[#FA8FC4]">Verified</span>
+                ) : isConnected ? (
+                  <a
+                    href="https://app.passport.xyz"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-semibold text-[#FA8FC4] underline"
+                  >
+                    Get verified
+                  </a>
+                ) : null}
               </div>
-              <div className="w-full h-1.5 rounded-full bg-white/[0.15] overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-[width] duration-300 ${isVerified ? 'bg-[#FA8FC4]' : 'bg-white/[0.30]'}`}
-                  style={{ width: `${scorePct}%` }}
-                />
-              </div>
+              {(hasScore || isPoch) && (
+                <div className="w-full h-1.5 rounded-full bg-white/[0.15] overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#FA8FC4] transition-[width] duration-300"
+                    style={{ width: `${scorePct}%` }}
+                  />
+                </div>
+              )}
               <p className="text-[11px] leading-snug text-white/[0.75] mt-2">
-                A cumulative proof-of-personhood score. Higher means stronger proof you&apos;re a real, unique human. From{' '}
-                <a
-                  href={POCH_MINT_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 align-middle underline font-medium"
-                >
-                  <Icon icon="ph:hand-soap" width={13} height={13} className="text-[#FA8FC4]" />
-                  Proof of Clean Hands
-                </a>{' '}
-                and{' '}
+                Your Proof of Personhood Score. Higher means stronger proof you&apos;re a real, unique human.
+              </p>
+              {/* Sources — the two proofs the score is built from. Brand marks
+                  (public/assets/svg) are painted via CSS mask so they inherit the
+                  pink accent that reads on the dark tooltip in both themes. */}
+              <p className="text-[11px] leading-snug text-white/[0.75] mt-1.5">
+                Sources:{' '}
                 <a
                   href="https://app.passport.xyz"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 align-middle underline font-medium"
                 >
-                  <Icon icon="ph:identification-card" width={13} height={13} className="text-[#FA8FC4]" />
+                  <span
+                    aria-hidden
+                    className="inline-block w-[13px] h-[13px] align-middle bg-[#FA8FC4] [mask:url(/assets/svg/passport.svg)_center/contain_no-repeat] [-webkit-mask:url(/assets/svg/passport.svg)_center/contain_no-repeat]"
+                  />
                   Human Passport
+                </a>{' '}
+                and{' '}
+                <a
+                  href={POCH_MINT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 align-middle underline font-medium"
+                >
+                  <span
+                    aria-hidden
+                    className="inline-block w-[13px] h-[13px] align-middle bg-[#FA8FC4] [mask:url(/assets/svg/clean-hands.svg)_center/contain_no-repeat] [-webkit-mask:url(/assets/svg/clean-hands.svg)_center/contain_no-repeat]"
+                  />
+                  Proof of Clean Hands
                 </a>
                 .
               </p>
+              {/* Clean Hands: held / not-held, with a CTA when not held (#272). */}
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="inline-block w-[15px] h-[15px] bg-[#FA8FC4] [mask:url(/assets/svg/clean-hands.svg)_center/contain_no-repeat] [-webkit-mask:url(/assets/svg/clean-hands.svg)_center/contain_no-repeat]"
+                  />
+                  <span className="text-[11px] font-medium text-[#FA8FC4]">Proof of Clean Hands</span>
+                </span>
+                {isPoch ? (
+                  <a
+                    href={POCH_MINT_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-[#FA8FC4] underline"
+                  >
+                    <Icon icon="ph:seal-check-fill" width={13} height={13} />
+                    Held
+                  </a>
+                ) : (
+                  <a
+                    href={POCH_MINT_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-semibold text-[#FA8FC4] underline"
+                  >
+                    Get Clean Hands
+                  </a>
+                )}
+              </div>
               {isPoch && (
-                <div className="mt-2">
-                  {/* Proof of Clean Hands badge (#127/#128). The L1 humanity
-                      result only tells us POCH is satisfied (method === 'poch');
-                      it carries NO mint date or expiry, so this shows the PoCH
-                      mark + an explanation, never fabricated dates.
-                      TODO(poch-meta): surface actual mint/expiry by fetching the
-                      Clean-Hands SBT / attestation metadata (a new data path,
-                      not exposed by the current eligibility route). */}
-                  <span className="inline-flex items-center gap-1.5">
-                    <Icon icon="ph:hand-soap" width={15} height={15} className="text-[#FA8FC4]" />
-                    <span className="text-[11px] font-medium text-[#FA8FC4]">Proof of Clean Hands</span>
-                  </span>
-                  <p className="text-[11px] leading-snug text-white/[0.75] mt-1">
-                    A privacy-preserving proof you&apos;re a real, sanctions-screened human. No numeric score needed. Mint date and expiry aren&apos;t available in this view yet.{' '}
-                    <a
-                      href={POCH_MINT_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline font-medium"
-                    >
-                      Manage
-                    </a>
-                  </p>
-                </div>
-              )}
-              {!isVerified && (
-                <p className="text-[11px] leading-snug text-white/[0.70] mt-1.5">
-                  {isFetching ? 'Checking eligibility…' : unverifiedHint}
+                // POCH is a boolean proof: the L1 result carries no mint date or
+                // expiry, so never fabricate them here.
+                <p className="text-[11px] leading-snug text-white/[0.75] mt-1.5">
+                  A privacy-preserving proof you&apos;re a real, sanctions-screened human. No numeric score needed. Mint date and expiry aren&apos;t available in this view yet.
                 </p>
+              )}
+              {!isVerified && !isConnected && (
+                <p className="text-[11px] leading-snug text-white/[0.70] mt-1.5">{unverifiedHint}</p>
               )}
             </div>
             <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.15]">
@@ -1283,6 +1318,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           isFetching={humanitySource.isFetching}
           points={points}
           isDark={isDark}
+          isConnected={isWaapConnected}
           unverifiedHint={unverifiedHint}
         />
       </div>

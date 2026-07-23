@@ -88,9 +88,12 @@ export function useAttestationCheck() {
           reservedDepositUsd: passportData.reservedUsd,
         }
       } catch (err: any) {
+        // Prefer the server's own human-readable reason; never surface a raw
+        // error body/message (can be technical or a full HTML error page).
         const parsed = err?.parsedBody as { reason?: string; error?: string } | null | undefined
         const reason =
-          parsed?.reason ?? parsed?.error ?? err?.body ?? err?.message ?? 'Failed to check attestation eligibility'
+          parsed?.reason ?? parsed?.error ?? 'We could not check your verification status. Please try again.'
+        console.warn('[attestationCheck] eligibility check failed:', err?.message ?? err)
         return {
           eligible: false,
           method: null,

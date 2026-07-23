@@ -451,9 +451,6 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
     if (!aztecAddress) throw new Error('Aztec wallet not connected')
     if (!walletAdapter) throw new Error('Aztec wallet adapter not ready')
 
-    const notifyAmount = `${amountDisplayL1} ${selectedToken?.symbol ?? 'USDC'}`
-    const notifyMode: 'public' | 'private' = isPrivacyModeEnabled ? 'private' : 'public'
-
     // Validate the optional third-party fuel recipient. If invalid, refuse to proceed —
     // we don't want to silently fall back to the user's own L2 when they intended to send
     // the fee juice elsewhere.
@@ -577,8 +574,6 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               type: 'deposit',
               title: 'Deposit in progress',
               message: 'Keep this page open while it completes.',
-              amount: notifyAmount,
-              mode: notifyMode,
             })
             break
           case BridgeEventType.DEPOSIT_CONFIRMED:
@@ -604,8 +599,6 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               type: 'deposit',
               title: 'Deposit confirmed',
               message: 'Claiming on Aztec. Export a recovery backup to stay safe.',
-              amount: notifyAmount,
-              mode: notifyMode,
               action: {
                 label: 'Export recovery backup',
                 onClick: () => {
@@ -712,8 +705,6 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               type: 'claim',
               title: 'Bridge complete',
               message: 'Tokens claimed on Aztec.',
-              amount: notifyAmount,
-              mode: notifyMode,
             })
             // The claim just landed on L2 — refresh the cUSDC / Clean USDC balance
             // so the user sees the credited funds without a manual reload (#230b).
@@ -843,8 +834,6 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 type: 'success',
                 title: 'Deposit likely already completed',
                 message: 'Check your L2 balance in Activity.',
-                amount: notifyAmount,
-                mode: notifyMode,
               })
               break
             }
@@ -856,8 +845,6 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 type: 'error',
                 title: "L2 claim didn't finish",
                 message: 'Your funds are safe. Resume from Activity.',
-                amount: notifyAmount,
-                mode: notifyMode,
               })
               break
             }
@@ -880,34 +867,26 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             if (isCongestionErr) {
               pushNotification({
                 type: 'error',
-                title: 'Aztec testnet is congested',
-                message: 'Your transaction was dropped. You can retry.',
-                amount: notifyAmount,
-                mode: notifyMode,
+                title: 'The Aztec network is busy',
+                message: 'Your deposit did not go through. No funds moved. Please try again.',
               })
             } else if (isReloadableErr) {
               pushNotification({
                 type: 'error',
-                title: 'Bridge failed (0xfb8f41b2)',
-                message: 'Please reload the page.',
-                amount: notifyAmount,
-                mode: notifyMode,
+                title: 'Deposit could not finish',
+                message: 'Please reload the page and try again. No funds moved.',
               })
             } else if (isArtifactErr) {
               pushNotification({
                 type: 'error',
-                title: 'Contract artifact not found',
-                message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
-                amount: notifyAmount,
-                mode: notifyMode,
+                title: 'Bridge is temporarily unavailable',
+                message: 'We could not complete your deposit right now. No funds moved. Please try again soon.',
               })
             } else {
               pushNotification({
                 type: 'error',
                 title: 'Deposit failed',
-                message: 'No funds moved. You can retry.',
-                amount: notifyAmount,
-                mode: notifyMode,
+                message: 'No funds moved. You can try again.',
               })
             }
             break
@@ -1273,7 +1252,6 @@ export function useExportClaimData() {
  */
 export function useL1HasSoulboundToken() {
   const { waapAddress: l1Address, isWaapConnected } = useWalletStore()
-  const notify = useToast()
 
   const queryKey = ['l1HasSoulboundToken', l1Address]
   const queryFn = async () => {
@@ -1295,12 +1273,13 @@ export function useL1HasSoulboundToken() {
 
       return Boolean(hasSBT)
     } catch (error) {
-      console.error('Error checking L1 SBT status:', error)
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      // Don't toast for wallet-locked errors — user just needs to unlock
-      if (!errorMessage.includes('locked')) {
-        notify('error', 'Failed to check SBT status on Ethereum: ' + errorMessage)
-      }
+      // Non-fatal background read: the bridge works whether or not this L1 SBT
+      // status resolves. A locked wallet or a momentary RPC hiccup would make
+      // this throw, so we log for diagnostics and return false — the query
+      // retries on its own. We deliberately do NOT push a toast/feed error here:
+      // a transient status-check failure must never sit as a persistent red
+      // error that makes the whole bridge look broken.
+      console.error('Error checking L1 SBT status (non-fatal, will retry):', error)
       return false
     }
   }
@@ -1380,8 +1359,16 @@ export function useL1MintSoulboundToken(onSuccess: (data: any) => void) {
       onSuccess(data)
     },
     onError: (error) => {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      notify('error', errorMessage)
+      // Keep the raw error in the console; show plain copy. A rejected wallet
+      // prompt or an object error must never render as "[object Object]".
+      console.error('Failed to mint SBT on Ethereum:', error)
+      const detail = extractErrorMessage(error)
+      notify('error', {
+        heading: 'Could not verify on Ethereum',
+        message: detail
+          ? `${detail}. Please try again.`
+          : 'The verification step could not be completed. Please try again.',
+      })
     },
     // toastMessages: {
     //   pending: 'Minting SBT on Ethereum...',

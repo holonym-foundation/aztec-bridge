@@ -169,11 +169,9 @@ export const useL2PrivateFeeJuiceBalance = () => {
 
       const userAddress = AztecAddress.fromStringUnsafe(aztecAddress)
 
-      // Read the user's BridgedFPC balance — the FPC's private note-based ledger
-      // of what they can spend on private fuel. FeeJuice itself has NO private
-      // balance on Aztec (the canonical contract only exposes balance_of_public);
-      // privacy comes from the FPC pooling FJ publicly and privatizing the
-      // per-user accounting. This is a different number from FEE_JUICE.balance_of_public.
+      // read the user's BridgedFPC balance (what they can spend on private
+      // fuel via the FPC) — NOT FEE_JUICE.balance_of_private (the user's own
+      // private FeeJuice notes), which is a different number.
       const [privateBalanceResult] = await walletAdapter.simulateViews([
         {
           contract: BRIDGED_FPC_ADDRESS,
@@ -320,9 +318,6 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
     if (!aztecAddress) throw new Error('Aztec wallet not connected')
     if (!walletAdapter) throw new Error('Aztec wallet adapter not ready')
 
-    const notifyAmount = `${amountDisplayL2} ${selectedToken?.symbol ?? 'cUSDC'}`
-    const notifyMode: 'public' | 'private' = isPrivacyModeEnabled ? 'private' : 'public'
-
     logInfo('Withdrawal from L2 to L1 initiated', {
       direction: 'L2_TO_L1',
       fromNetwork: 'Aztec',
@@ -403,8 +398,6 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               type: 'withdrawal',
               title: 'Withdrawal in progress',
               message: 'Keep this page open while it completes.',
-              amount: notifyAmount,
-              mode: notifyMode,
             })
             break
           case BridgeEventType.BURN_CONFIRMED:
@@ -426,8 +419,6 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               type: 'withdrawal',
               title: 'Withdrawal confirmed',
               message: 'Finalizing on Ethereum. Export a recovery backup to stay safe.',
-              amount: notifyAmount,
-              mode: notifyMode,
               action: {
                 label: 'Export recovery backup',
                 onClick: () => {
@@ -510,8 +501,6 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               type: 'withdrawal',
               title: 'Withdrawal complete',
               message: 'Tokens withdrawn to Ethereum.',
-              amount: notifyAmount,
-              mode: notifyMode,
             })
             break
           }
@@ -604,12 +593,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             if (event.fundsAtRisk) {
               pushNotification({
                 type: 'error',
-                title: isBlockNotProvenHint ? 'Withdrawal blocked, try later' : "L1 withdraw didn't finish",
+                title: isBlockNotProvenHint ? 'Withdrawal not ready yet' : 'Withdrawal did not finish',
                 message: isBlockNotProvenHint
-                  ? 'The network needs more time. Try again later.'
-                  : 'Your funds are safe on L2. Resume from Activity.',
-                amount: notifyAmount,
-                mode: notifyMode,
+                  ? 'The network needs a little more time. Please try again later.'
+                  : 'Your funds are safe on Aztec. You can resume this withdrawal from Activity.',
               })
               break
             }
@@ -622,18 +609,14 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             if (isArtifact) {
               pushNotification({
                 type: 'error',
-                title: 'Contract artifact not found',
-                message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
-                amount: notifyAmount,
-                mode: notifyMode,
+                title: 'Bridge is temporarily unavailable',
+                message: 'We could not complete your withdrawal right now. No funds moved. Please try again soon.',
               })
             } else {
               pushNotification({
                 type: 'error',
                 title: 'Withdrawal failed',
-                message: 'No funds moved. You can retry.',
-                amount: notifyAmount,
-                mode: notifyMode,
+                message: 'No funds moved. You can try again.',
               })
             }
             break

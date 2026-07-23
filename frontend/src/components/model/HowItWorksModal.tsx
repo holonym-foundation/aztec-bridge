@@ -85,7 +85,31 @@ const HowItWorksModal: React.FC = () => {
               ))}
             </ol>
 
-            <div className="mt-5 flex items-start gap-2 rounded-[10px] bg-[#E5EFFF] px-3 py-2.5">
+            <div className="mt-5 rounded-[10px] border border-[#E5E5E5] px-3 py-3">
+              <div className="flex items-center gap-2">
+                <Icon icon="ph:gas-pump-fill" width={17} height={17} className="flex-shrink-0 text-[#17235E]" />
+                <p className="text-[14px] font-semibold text-[#0A0A0A]">Fee Juice is gas on Aztec</p>
+              </div>
+              <p className="mt-1.5 text-[13px] leading-[18px] text-[#737373]">
+                Aztec charges gas in Fee Juice, not ETH. The last step of a bridge is a claim on Aztec that has to
+                pay its own gas, so an account holding no Fee Juice cannot finish collecting its tokens.
+              </p>
+              <p className="mt-2 text-[13px] leading-[18px] text-[#737373]">
+                Turn on the gas top-up while you bridge and a slice of the amount you send is swapped into Fee Juice
+                in the same transaction. You can also buy it on its own, at any time, from the Top up screen. Privacy
+                Mode spends a separate private balance.
+              </p>
+              <Link
+                href="/fee-juice"
+                onClick={closeModal}
+                className="mt-2.5 inline-flex items-center gap-1.5 text-[13px] font-medium text-[#17235E] underline underline-offset-2 transition-opacity hover:opacity-80"
+              >
+                <Icon icon="ph:gas-pump" width={14} height={14} />
+                Top up Fee Juice
+              </Link>
+            </div>
+
+            <div className="mt-3 flex items-start gap-2 rounded-[10px] bg-[#E5EFFF] px-3 py-2.5">
               <Icon icon="ph:shield-check" width={18} height={18} className="mt-0.5 flex-shrink-0 text-[#0A0A0A]" />
               <p className="text-[13px] leading-[18px] text-[#737373]">
                 Turn on <span className="font-medium text-[#0A0A0A]">Privacy Mode</span> to make your Aztec

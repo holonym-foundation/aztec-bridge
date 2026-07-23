@@ -199,7 +199,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
       {/* Extra bottom padding (pb-5) keeps the last content row clear of the swap
           toggle, which is absolutely positioned at bottom-[-30px] and straddles the
           From/To boundary. Without it the toggle's top edge overlaps the attestation pill. */}
-      <div className="bg-[#F5F5F5] rounded-md p-2.5 pb-5 relative">
+      <div data-tour="amount" className="bg-[#F5F5F5] rounded-md p-2.5 pb-5 relative">
         <p className="text-14 font-semibold text-latest-grey-100">From</p>
         <div className="flex justify-between">
           {/* Network selector */}

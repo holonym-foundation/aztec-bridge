@@ -40,6 +40,7 @@ export default function WalletDiscoveryModal({
   return (
     <AnimatePresence>
       <motion.div
+        data-tour-blocks
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}

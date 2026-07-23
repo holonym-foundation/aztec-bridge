@@ -13,6 +13,7 @@ import {
   sanitizeBoolean,
   sanitizeNodeInfo,
   sanitizeCiphertext,
+  getClientIp,
   MAX_STRING_LENGTH,
 } from '@/lib/validation'
 
@@ -310,10 +311,7 @@ export async function POST(request: NextRequest) {
         privateFuelSecretHash: privateFuelSecretHash ?? undefined,
         fuelRecipient: isL2ToL1 ? undefined : fuelRecipient,
         // Client IP for audit trail
-        clientIp:
-          request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-          request.headers.get('x-real-ip') ??
-          undefined,
+        clientIp: getClientIp(request.headers),
       },
     })
 

@@ -8,7 +8,7 @@
  *   docker run -d --name shield-test-pg -p 55432:5432 \
  *     -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=shield_test postgres:16
  *   export DATABASE_URL="postgresql://test:test@localhost:55432/shield_test"
- *   export JWT_SECRET=test POCH_ATTESTER_PRIVATE_KEY=0x11{..32 bytes..} PASSPORT_SIGNER_PRIVATE_KEY=0x22{..}
+ *   export JWT_SECRET=$(printf 'test%.0s' {1..8}) POCH_ATTESTER_PRIVATE_KEY=0x11{..32 bytes..} PASSPORT_SIGNER_PRIVATE_KEY=0x22{..}
  *   npx prisma db push --skip-generate
  *   npx tsx src/lib/address-binding.integration.test.ts
  *
@@ -20,6 +20,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { signJWT } from '@/lib/jwt'
 import { GET as statusRoute } from '@/app/api/attestation/status/route'
+import { PATCH as patchOperationRoute } from '@/app/api/bridge/operations/[id]/route'
 import {
   enforceAddressBinding,
   checkAddressBindingConflict,
@@ -50,6 +51,7 @@ async function it(name: string, fn: () => Promise<void>) {
 }
 
 async function reset() {
+  await prisma.bridgeActivity.deleteMany({})
   await prisma.attestationReservation.deleteMany({})
   await prisma.addressBinding.deleteMany({})
   await prisma.user.deleteMany({})
@@ -83,6 +85,39 @@ async function mkHold(userId: string, amountUsd: number, opts: { method?: string
       createdAt: new Date(now - (opts.ageMs ?? 0)),
     },
   })
+}
+
+async function mkOperation(userId: string) {
+  return prisma.bridgeActivity.create({
+    data: {
+      fkUserId: userId,
+      direction: 'L1_TO_L2',
+      status: 'pending',
+      encryptedCiphertext: 'x',
+      encryptedIv: 'x',
+      encryptedTag: 'x',
+      keyDerivationMessage: 'x',
+      keyDerivationDomain: 'https://testnet.shield.human.tech/',
+      tokenSymbolL1: 'USDC',
+      tokenDecimalsL1: 6,
+      amountL1: '1000000',
+      amountDisplayL1: '1',
+    },
+  })
+}
+
+async function patchOperation(
+  user: { id: string; l1Address: string; l2Address: string },
+  id: string,
+  body: Record<string, unknown>,
+) {
+  const token = signJWT({ userId: user.id, l1Address: user.l1Address, l2Address: user.l2Address })
+  const req = new NextRequest(`https://testnet.shield.human.tech/api/bridge/operations/${id}`, {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return patchOperationRoute(req, { params: Promise.resolve({ id }) })
 }
 
 async function main() {
@@ -224,6 +259,31 @@ async function main() {
     const tr = await evaluateTravelRuleThreshold({ userId: a.id })
     assert.equal(tr.lifetimeUsd, 600)
     assert.equal(tr.exceeded, false)
+  })
+
+  console.log('\n── LOW 10: the operations PATCH write is scoped to the owner ───\n')
+
+  await it('the owner can still patch their own operation', async () => {
+    await reset()
+    const owner = await mkUser(L1_VICTIM, L2_VICTIM)
+    const op = await mkOperation(owner.id)
+
+    const res = await patchOperation(owner, op.id, { status: 'deposited' })
+    assert.equal(res.status, 200, await res.text())
+    const after = await prisma.bridgeActivity.findUnique({ where: { id: op.id } })
+    assert.equal(after?.status, 'deposited')
+  })
+
+  await it("another user's JWT cannot patch it, and leaves the row untouched", async () => {
+    await reset()
+    const owner = await mkUser(L1_VICTIM, L2_VICTIM)
+    const stranger = await mkUser(L1_ATTACKER, L2_OTHER)
+    const op = await mkOperation(owner.id)
+
+    const res = await patchOperation(stranger, op.id, { status: 'failed' })
+    assert.equal(res.status, 404)
+    const after = await prisma.bridgeActivity.findUnique({ where: { id: op.id } })
+    assert.equal(after?.status, 'pending', "the owner's row must be untouched")
   })
 
   await reset()

@@ -4,7 +4,7 @@ import { SiweMessage } from 'siwe'
 import { prisma } from '@/lib/prisma'
 import { signJWT } from '@/lib/jwt'
 import { consumeNonce } from '@/lib/siweNonceStore'
-import { AuthenticateSchema } from '@/lib/validation'
+import { AuthenticateSchema, getClientIp } from '@/lib/validation'
 import { getAllowedAppHosts, getAllowedAppOrigins, isLocalDevHost } from '@/lib/domainAllowlist'
 
 /** Aztec address: 0x followed by 64 hex chars */
@@ -138,8 +138,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Upsert user ──────────────────────────────────────────────────
-    const clientIp =
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? request.headers.get('x-real-ip') ?? null
+    const clientIp = getClientIp(request.headers) ?? null
 
     const user = await prisma.user.upsert({
       where: {

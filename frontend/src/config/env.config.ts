@@ -38,7 +38,9 @@ export const FAUCET_PRIVATE_KEY = process.env.FAUCET_PRIVATE_KEY ?? ''
 // ─── Auth (server) ──────────────────────────────────────────────────
 
 export const JWT_SECRET = process.env.JWT_SECRET ?? ''
-export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? '7d'
+// There is no revocation path, so the lifetime is the only bound on a stolen
+// token. Raise it back with JWT_EXPIRES_IN if the re-signing prompt is too much.
+export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? '1d'
 
 // ─── Attestation (server) ───────────────────────────────────────────
 

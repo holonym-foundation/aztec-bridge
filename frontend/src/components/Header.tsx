@@ -13,6 +13,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { silkUrl } from '@/config/l1.config'
 import { L1_CHAIN_ID, POCH_MINT_URL } from '@/config'
+import { BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD } from '@/config/env.config'
+import { copyToClipboard } from '@/utils'
+import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
@@ -52,6 +55,11 @@ if (typeof window !== 'undefined') {
     'ph:warning-circle',
     'ph:info',
     'ph:hand-soap',
+    'ph:identification-card',
+    'ph:plus-circle',
+    'ph:gauge',
+    'ph:seal-check-fill',
+    'ph:link',
   ])
 }
 
@@ -158,6 +166,10 @@ function panelDivider(isDark: boolean): string {
 function menuItemHover(isDark: boolean): string {
   return isDark ? 'hover:bg-white/[0.10]' : 'hover:bg-latest-grey-300'
 }
+/** Progress-track background under a limit fill bar (Limits & usage section). */
+function trackBg(isDark: boolean): string {
+  return isDark ? 'bg-white/[0.12]' : 'bg-black/[0.06]'
+}
 
 // Humanity Score is wired to the real L1-only proof-of-personhood result via
 // useL1Humanity (POCH first, Passport fallback — see HumanityPointsChip below).
@@ -251,6 +263,14 @@ type WalletDisplayProps = {
    * Open Wallet stay enabled — they can't orphan the transfer.
    */
   actionsLocked?: boolean
+  /**
+   * Actionable binding-conflict notice, rendered as a static banner at the TOP
+   * of this row's dropdown (above the account list) rather than a floating
+   * overlay that would cover the Switch / account-selection rows (issue #282).
+   */
+  conflictNotice?: string
+  /** True when the notice is a hard server conflict (deeper accent) vs a softer pre-warn. */
+  conflictSevere?: boolean
 }
 
 /** Shown on the locked Disconnect / Switch-Account rows during a transfer. */
@@ -259,6 +279,92 @@ const TRANSFER_LOCK_HINT = 'Locked during transfer to protect your funds.'
 function truncateAddr(addr: string): string {
   if (addr.length <= 13) return addr
   return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`
+}
+
+/**
+ * Compliance figures surfaced in the account dropdown. Both come from env
+ * (BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD) — never hardcoded — so
+ * they track config. Neither is NEXT_PUBLIC, so on the client `process.env`
+ * returns undefined and they resolve to their config defaults ($25k / $1,000).
+ */
+const DEPOSIT_CAP_LABEL = `$${Number(BRIDGE_MAX_DEPOSIT_USD) / 1000}k`
+const TRAVEL_RULE_LABEL = `$${Number(TRAVEL_RULE_THRESHOLD_USD).toLocaleString()}`
+
+/** Section heading inside the account dropdown (Wallets / Identity & proofs / …). */
+const SectionLabel: React.FC<{ isDark: boolean; children: React.ReactNode }> = ({ isDark, children }) => (
+  <div className={`px-4 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${mutedIconText(isDark)}`}>
+    {children}
+  </div>
+)
+
+/** One proof (Passport / Clean Hands) row: icon + title/caption + status pill. */
+const ProofRow: React.FC<{
+  isDark: boolean
+  icon: string
+  title: string
+  caption: string
+  status: string
+  good: boolean
+}> = ({ isDark, icon, title, caption, status, good }) => (
+  <div className="flex items-center gap-2 px-4 py-1.5">
+    <Icon icon={icon} width={16} height={16} className={good ? accentPink(isDark) : mutedIconText(isDark)} />
+    <span className="flex flex-col min-w-0 flex-1">
+      <span className={`text-xs font-medium ${navText(isDark)}`}>{title}</span>
+      <span className={`text-[10px] ${subtleText(isDark)}`}>{caption}</span>
+    </span>
+    <span
+      className={`flex items-center gap-1 flex-shrink-0 text-[11px] font-medium ${good ? accentPink(isDark) : subtleText(isDark)}`}
+    >
+      {good && <Icon icon="ph:seal-check-fill" width={13} height={13} />}
+      {status}
+    </span>
+  </div>
+)
+
+/**
+ * One usage/limit bar. When a real ratio can't be computed (no client-side cap
+ * total is exposed) the fill is a striped placeholder so the $ value above reads
+ * as real while the bar is clearly an estimate, never a fabricated fill level.
+ */
+const LimitBar: React.FC<{
+  isDark: boolean
+  label: string
+  valueText: string
+  pct?: number
+  placeholder?: boolean
+  tint: 'maroon' | 'amber' | 'navy'
+}> = ({ isDark, label, valueText, pct, placeholder, tint }) => {
+  const fillColor =
+    tint === 'maroon'
+      ? isDark
+        ? 'bg-[#FA8FC4]'
+        : 'bg-[#81133B]'
+      : tint === 'amber'
+        ? 'bg-[#F79009]'
+        : isDark
+          ? 'bg-white/[0.40]'
+          : 'bg-[#17235E]'
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-2">
+        <span className={`text-[11px] ${subtleText(isDark)} truncate`}>{label}</span>
+        <span className={`text-[11px] font-medium ${navText(isDark)} flex-shrink-0`}>{valueText}</span>
+      </div>
+      <div className={`w-full h-1.5 rounded-full overflow-hidden ${trackBg(isDark)}`}>
+        {typeof pct === 'number' ? (
+          <div className={`h-full rounded-full ${fillColor}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+        ) : placeholder ? (
+          <div
+            className="h-full w-full opacity-60"
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(45deg, rgba(129,19,59,0.35) 0, rgba(129,19,59,0.35) 4px, transparent 4px, transparent 8px)',
+            }}
+          />
+        ) : null}
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -284,10 +390,32 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
   roundedEdge,
   isDark = false,
   actionsLocked = false,
+  conflictNotice,
+  conflictSevere = false,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false)
   const [copied, setCopied] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Identity & proofs + Limits & usage are EVM/L1 properties (the attestation
+  // query keys on the EVM wallet), so they render only in the WAAP row's
+  // dropdown — the account-level menu — never duplicated in the Aztec row.
+  const { data: attestation, isFetching: attFetching } = useAttestationCheck()
+  const isWaapWallet = walletType === WalletType.WAAP
+  const method = attestation?.method ?? null
+  const passportScore = attestation?.passportScore
+  const passportThreshold = attestation?.passportThreshold
+  const remainingDepositUsd = attestation?.remainingDepositUsd
+  const reservedDepositUsd = attestation?.reservedDepositUsd
+  const travelRuleRemainingUsd = attestation?.travelRuleRemainingUsd
+  const depositLimitReached = attestation?.depositLimitReached ?? false
+  const scorePasses =
+    typeof passportScore === 'number' &&
+    typeof passportThreshold === 'number' &&
+    passportScore >= passportThreshold
+  const isPoch = method === 'poch'
+  // On the Passport tier = verified via Passport but not yet holding Clean Hands.
+  const onPassportTier = !isPoch && (method === 'passport' || scorePasses)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -311,15 +439,13 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
     setShowDropdown(!showDropdown)
   }
 
-  const handleCopyAddress = () => {
-    if (address) {
-      navigator.clipboard.writeText(address)
-      setCopied(true)
-      setTimeout(() => {
-        setCopied(false)
-        setShowDropdown(false)
-      }, 2000)
-    }
+  // #275: copies the FULL address (not the truncated label), flips to a check +
+  // "Copied" for ~1.5s, and keeps the dropdown open so the user can copy again.
+  const handleCopyFull = async () => {
+    if (!address) return
+    await copyToClipboard(address)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
   }
 
   const handleDisconnect = () => {
@@ -376,22 +502,79 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
       </button>
 
       {showDropdown && (
-        <div className={`absolute right-0 mt-2 shadow-lg z-50 min-w-[190px] py-2 rounded-[16px] ${panelSurface(isDark)} ${navText(isDark)}`}>
-          <div
-            className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer relative transition-colors duration-150`}
-            onClick={handleCopyAddress}
-          >
-            <Icon icon="ph:copy" width={20} height={20} />
-            <span>{copied ? 'Copied!' : 'Copy Address'}</span>
+        <div
+          role="menu"
+          className={`absolute right-0 mt-2 shadow-lg z-50 w-[290px] max-w-[calc(100vw-1.5rem)] max-h-[min(72vh,560px)] overflow-y-auto py-2 rounded-[16px] ${panelSurface(isDark)} ${navText(isDark)}`}
+        >
+          {/* #282: the binding-conflict notice is inlined as a STATIC banner at
+              the top of the dropdown, above the account list — so it can never
+              float over and block the Switch / account-selection rows the way
+              the old floating overlay did. */}
+          {conflictNotice && (
+            <div
+              role="alert"
+              className={`mx-2 mb-1 rounded-xl p-2.5 flex items-start gap-2 border-l-2 ${
+                conflictSevere ? 'border-l-[#E3357E]' : 'border-l-[#FA8FC4]'
+              } ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.03]'}`}
+            >
+              <Icon icon="ph:warning-circle" width={15} height={15} className={`mt-[1px] flex-shrink-0 ${accentPink(isDark)}`} />
+              <p className={`text-[11px] leading-snug ${navText(isDark)}`}>{conflictNotice}</p>
+            </div>
+          )}
+
+          {/* ── Wallets ── */}
+          <SectionLabel isDark={isDark}>Wallets</SectionLabel>
+          {/* #275: hover/focus reveals a copy control that copies the FULL
+              address (not the truncated label) and flips to a check + "Copied"
+              for ~1.5s. The row is a div so the copy button isn't nested in a
+              button. */}
+          <div className="group flex items-center gap-2 px-4 py-1.5">
+            <span className="flex w-7 h-7 p-[2px] justify-center items-center rounded-full bg-[#FDE7F3] flex-shrink-0">
+              <Image src={walletIcon} alt="" width={20} height={20} />
+            </span>
+            <span className="flex flex-col min-w-0 flex-1">
+              <span className={`text-xs font-medium truncate ${navText(isDark)}`}>
+                {displayName || (address ? truncateAddr(address) : 'Wallet')}
+              </span>
+              <span className={`text-[10px] truncate ${subtleText(isDark)}`}>
+                {isWaapWallet ? (balance ? `${balance} ETH` : 'Ethereum') : 'Aztec'}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={handleCopyFull}
+              title="Copy address"
+              aria-label="Copy full address"
+              className={`ml-auto flex items-center gap-1 flex-shrink-0 px-1.5 py-1 rounded-full text-[11px] font-medium opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 transition-opacity duration-150 ${hoverTint(isDark)} ${copied ? accentPink(isDark) : subtleText(isDark)}`}
+            >
+              <Icon icon={copied ? 'ph:check' : 'ph:copy'} width={14} height={14} />
+              {copied && <span>Copied</span>}
+            </button>
           </div>
 
           {loginMethod === LOGIN_METHODS.WAAP && (
             <div
-              className={`flex items-center gap-2 px-4 py-2 ${menuItemHover(isDark)} cursor-pointer relative transition-colors duration-150`}
+              className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
               onClick={handleOpenWallet}
             >
-              <Icon icon="majesticons:open" width={20} height={20} />
-              <span>Open Wallet</span>
+              <Icon icon="majesticons:open" width={18} height={18} className={mutedIconText(isDark)} />
+              <span className="text-sm">Open Wallet</span>
+            </div>
+          )}
+
+          {isWaapWallet && (
+            // Link a New Wallet — disabled visual variant. Non-interactive (no
+            // onClick) until the WAAP wallet-linking flow ships; opacity/muted/
+            // cursor make the "Coming soon" state read as intentionally inert.
+            <div
+              aria-disabled="true"
+              className="flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg opacity-40 cursor-not-allowed select-none"
+            >
+              <Icon icon="ph:link" width={16} height={16} className={mutedIconText(isDark)} />
+              <span className={`text-xs font-medium ${mutedIconText(isDark)}`}>Link a New Wallet</span>
+              <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${trackBg(isDark)} ${subtleText(isDark)}`}>
+                Coming soon
+              </span>
             </div>
           )}
 
@@ -417,6 +600,8 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
               {(() => {
                 const current = availableAccounts.find((a) => a.address === address)
                 const currentLabel = displayName || (current ? accountLabel(current) : address ? truncateAddr(address) : '')
+                const currentIsLinked =
+                  !!linkedAccountAddress && !!address && address.toLowerCase() === linkedAccountAddress.toLowerCase()
                 return (
                   <div className="flex items-center gap-2 px-4 py-2 cursor-default">
                     <Icon icon="ph:check" width={18} height={18} className={accentPink(isDark)} />
@@ -426,6 +611,19 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
                         {address ? truncateAddr(address) : ''} · Current
                       </span>
                     </div>
+                    {currentIsLinked && (
+                      <span
+                        className={`ml-auto flex items-center gap-1 text-[10px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
+                        title={
+                          linkedEvmAddress
+                            ? `Linked to your EVM wallet ${shortAddr(linkedEvmAddress)}`
+                            : 'Linked to your EVM wallet'
+                        }
+                      >
+                        <Icon icon="ph:link-simple" width={14} height={14} className="flex-shrink-0" />
+                        {linkedEvmAddress ? `Linked ${shortAddr(linkedEvmAddress)}` : 'Linked'}
+                      </span>
+                    )}
                   </div>
                 )
               })()}
@@ -473,6 +671,101 @@ const WalletDisplay: React.FC<WalletDisplayProps> = ({
             </>
           )}
 
+          {isWaapWallet && (
+            <>
+              <div className={`border-t ${panelDivider(isDark)} my-1`} />
+              {/* ── Identity & proofs ── */}
+              <SectionLabel isDark={isDark}>Identity &amp; proofs</SectionLabel>
+              <ProofRow
+                isDark={isDark}
+                icon="ph:identification-card"
+                title="Passport"
+                caption={`Required · ${TRAVEL_RULE_LABEL} per human`}
+                status={
+                  attFetching
+                    ? 'Checking…'
+                    : typeof passportScore === 'number'
+                      ? `${passportScore}`
+                      : isPoch
+                        ? 'Covered by Clean Hands'
+                        : 'Not verified'
+                }
+                good={scorePasses || isPoch}
+              />
+              <ProofRow
+                isDark={isDark}
+                icon="ph:hand-soap"
+                title="Clean Hands SBT"
+                caption={`Unlocks ${DEPOSIT_CAP_LABEL}`}
+                status={attFetching ? 'Checking…' : isPoch ? 'Verified' : 'Not held'}
+                good={isPoch}
+              />
+              {/* Contextual next step: no proof → Get verified; Passport tier →
+                  Upgrade to Clean Hands; already Clean Hands → hidden. */}
+              {!isPoch && (
+                <a
+                  href={onPassportTier ? POCH_MINT_URL : 'https://app.passport.xyz'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
+                >
+                  <Icon icon="ph:plus-circle" width={16} height={16} className={accentPink(isDark)} />
+                  <span className={`text-xs font-medium ${navText(isDark)}`}>
+                    {onPassportTier ? 'Upgrade to Clean Hands' : 'Get verified'}
+                  </span>
+                </a>
+              )}
+
+              <div className={`border-t ${panelDivider(isDark)} my-1`} />
+              {/* ── Limits & usage ── */}
+              <SectionLabel isDark={isDark}>
+                <span className="inline-flex items-center gap-1.5">
+                  <Icon icon="ph:gauge" width={13} height={13} className={mutedIconText(isDark)} />
+                  Limits &amp; usage
+                </span>
+              </SectionLabel>
+              <div className="px-4 py-1 flex flex-col gap-2.5">
+                <LimitBar
+                  isDark={isDark}
+                  label="Deposit allowance"
+                  valueText={
+                    depositLimitReached
+                      ? 'Reached'
+                      : typeof remainingDepositUsd === 'number'
+                        ? `$${remainingDepositUsd.toLocaleString()} left`
+                        : 'No limit'
+                  }
+                  pct={depositLimitReached ? 100 : undefined}
+                  placeholder={!depositLimitReached && typeof remainingDepositUsd === 'number'}
+                  tint="maroon"
+                />
+                {typeof reservedDepositUsd === 'number' && reservedDepositUsd > 0 && (
+                  <LimitBar
+                    isDark={isDark}
+                    label="On hold (pending)"
+                    valueText={`$${reservedDepositUsd.toLocaleString()}`}
+                    pct={undefined}
+                    placeholder
+                    tint="amber"
+                  />
+                )}
+                <LimitBar
+                  isDark={isDark}
+                  label={`Lifetime limit (${TRAVEL_RULE_LABEL}/human)`}
+                  valueText={
+                    typeof travelRuleRemainingUsd === 'number'
+                      ? `$${travelRuleRemainingUsd.toLocaleString()} left`
+                      : 'No limit'
+                  }
+                  pct={undefined}
+                  placeholder={typeof travelRuleRemainingUsd === 'number'}
+                  tint="navy"
+                />
+              </div>
+              <div className={`border-t ${panelDivider(isDark)} my-1`} />
+            </>
+          )}
+
           {/* #136: disconnecting mid-transfer tears down the wallet session the
               live /progress view depends on, orphaning the transfer's recovery
               data — so this is hard-disabled during an active transfer rather
@@ -516,6 +809,13 @@ interface WalletConnectPillProps {
   roundedEdge?: 'top' | 'bottom'
   /** True when Privacy Mode is on and the page is on the dark background. */
   isDark?: boolean
+  /**
+   * #287: give this pill a clear active-button treatment when idle (tinted fill
+   * + border + hover) so it can't read as disabled — used for the "Connect
+   * Aztec" affordance once the EVM wallet is up. It only looks faded/blocked
+   * while actually connecting (disabled).
+   */
+  emphasized?: boolean
 }
 
 /**
@@ -533,6 +833,7 @@ const WalletConnectPill: React.FC<WalletConnectPillProps> = ({
   flat,
   roundedEdge,
   isDark = false,
+  emphasized = false,
 }) => (
   <button
     type="button"
@@ -543,7 +844,17 @@ const WalletConnectPill: React.FC<WalletConnectPillProps> = ({
       flat
         ? `flex items-center gap-1.5 sm:gap-2 pr-2.5 sm:pr-3.5 pl-2.5 flex-1 min-h-0 w-full transition-colors duration-200 ${
             roundedEdge === 'top' ? 'rounded-t-[20px]' : roundedEdge === 'bottom' ? 'rounded-b-[20px]' : ''
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : `${hoverTint(isDark)} cursor-pointer`}`
+          } ${
+            disabled
+              ? 'opacity-50 cursor-not-allowed'
+              : emphasized
+                ? `cursor-pointer border ${
+                    isDark
+                      ? 'bg-[#FA8FC4]/[0.14] border-[#FA8FC4]/[0.30] hover:bg-[#FA8FC4]/[0.22]'
+                      : 'bg-[#FA8FC4]/[0.16] border-[#81133B]/[0.25] hover:bg-[#FA8FC4]/[0.26]'
+                  }`
+                : `${hoverTint(isDark)} cursor-pointer`
+          }`
         : `flex items-center gap-1.5 pr-2.5 pl-1 py-1 h-8 w-full rounded-full ${isDark ? GLASS_PILL_DARK : GLASS_PILL} ${
             disabled ? 'opacity-50 cursor-not-allowed' : `${isDark ? GLASS_PILL_DARK_HOVER : GLASS_PILL_HOVER} cursor-pointer`
           }`
@@ -1173,6 +1484,8 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           roundedEdge="bottom"
           isDark={isDark}
           actionsLocked={isTransferInProgress}
+          conflictNotice={walletNotice || undefined}
+          conflictSevere={!!conflict}
         />
       ) : (
         <WalletConnectPill
@@ -1184,6 +1497,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           flat
           roundedEdge="bottom"
           isDark={isDark}
+          emphasized={isWaapConnected}
         />
       )}
     </div>
@@ -1333,22 +1647,10 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         <div className={`${CHIP_H} flex items-stretch rounded-[20px] ${glassPill(isDark)}`}>
           {walletCluster}
         </div>
-        {walletNotice && (
-          <div
-            role="alert"
-            className={`absolute right-0 top-full mt-2 z-50 w-[240px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-3 flex items-start gap-2 border-l-2 ${
-              conflict ? 'border-l-[#E3357E]' : 'border-l-[#FA8FC4]'
-            }`}
-          >
-            <Icon
-              icon="ph:warning-circle"
-              width={16}
-              height={16}
-              className={`mt-[1px] flex-shrink-0 ${accentPink(isDark)}`}
-            />
-            <p className={`text-[11px] leading-snug ${navText(isDark)}`}>{walletNotice}</p>
-          </div>
-        )}
+        {/* #282: the binding-conflict notice no longer floats here as an overlay
+            (it covered the dropdown's Switch / account rows). It's now inlined as
+            a static banner at the top of the Aztec wallet dropdown, above the
+            account list — see WalletDisplay's conflictNotice. */}
       </div>
 
       {/* Mobile secondary-nav panel (credentials / How it works / Docs / Fee

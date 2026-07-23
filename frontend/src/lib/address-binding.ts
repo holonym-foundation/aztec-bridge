@@ -18,72 +18,63 @@ import {
 } from './deposit-ledger'
 
 /**
- * Enforce 1:1 binding between L1 and L2 addresses.
- * Creates the binding on first use; rejects if either address is already bound elsewhere.
- * Returns an error string if binding is violated, null if OK.
+ * A binding is looked up by its L1 address alone.
+ *
+ * SIWE proves the L1 address; the L2 half is taken from caller-chosen SIWE
+ * `resources` and is never proven. Matching on the L2 side therefore let anyone
+ * pair a throwaway L1 with a stranger's Aztec account and lock that account out
+ * of the bridge for good — the row is permanent and there is no unbind path —
+ * and it disclosed the claiming L1 back to the victim. Deposit caps do not rely
+ * on the pair being exclusive: they are counted per L1 address (see capSubject).
  */
+function findBindingForL1(l1Address: string) {
+  return prisma.addressBinding.findUnique({ where: { l1Address } })
+}
+
 /**
  * Report an existing binding that conflicts with this pair, without creating
- * one. Pre-flight callers use this: creating the binding is irreversible (there
- * is no unbind path) and the L2 address is not proven, so a read-shaped request
- * must not be able to consume someone else's address.
+ * one. Pre-flight callers use this: creating the binding is irreversible, so a
+ * read-shaped request must not be able to consume an address.
  */
 export async function checkAddressBindingConflict(
   l1Address: string,
   l2Address: string,
 ): Promise<string | null> {
-  const existing = await prisma.addressBinding.findFirst({
-    where: {
-      OR: [
-        { l1Address },
-        { l2Address },
-      ],
-    },
-  })
+  const existing = await findBindingForL1(l1Address)
   return existing ? describeBindingConflict(existing, l1Address, l2Address) : null
 }
 
 function describeBindingConflict(
-  existing: { l1Address: string; l2Address: string },
+  existing: { l2Address: string },
   l1Address: string,
   l2Address: string,
 ): string | null {
-  if (existing.l1Address === l1Address && existing.l2Address === l2Address) {
+  if (existing.l2Address === l2Address) {
     return null
   }
-  if (existing.l1Address === l1Address) {
-    return `L1 address ${l1Address} is already bound to a different L2 address`
-  }
-  return `L2 address ${l2Address} is already bound to a different L1 address`
+  return `L1 address ${l1Address} is already bound to a different L2 address`
 }
 
 export async function enforceAddressBinding(l1Address: string, l2Address: string): Promise<string | null> {
-  const existing = await prisma.addressBinding.findFirst({
-    where: {
-      OR: [
-        { l1Address },
-        { l2Address },
-      ],
-    },
-  })
-
-  if (!existing) {
-    try {
-      await prisma.addressBinding.create({
-        data: { l1Address, l2Address },
-      })
-    } catch (err: any) {
-      // P2002 = unique constraint violation (concurrent request created it first).
-      // Re-check to see if the binding matches or conflicts.
-      if (err?.code === 'P2002') {
-        return enforceAddressBinding(l1Address, l2Address)
-      }
-      throw err
-    }
-    return null
+  const existing = await findBindingForL1(l1Address)
+  if (existing) {
+    return describeBindingConflict(existing, l1Address, l2Address)
   }
 
-  return describeBindingConflict(existing, l1Address, l2Address)
+  try {
+    await prisma.addressBinding.create({
+      data: { l1Address, l2Address },
+    })
+  } catch (err: any) {
+    if (err?.code !== 'P2002') throw err
+    // Either this L1 raced itself, or the L2 half is already recorded under a
+    // different L1. Only the former can conflict: an unproven L2 collision must
+    // never block, so leaving this L1 unrecorded is the correct outcome.
+    const raced = await findBindingForL1(l1Address)
+    return raced ? describeBindingConflict(raced, l1Address, l2Address) : null
+  }
+
+  return null
 }
 
 /** Rolling window (ms) over which per-user deposits are summed for the cap. */
@@ -183,14 +174,35 @@ interface RawHold {
   method: string
 }
 
-/** A user's non-tombstoned (amountUsd > 0) holds, optionally filtered by method. */
-async function fetchHeldRows(
+/**
+ * The identity a cap is counted against: the L1 address, plus every user row
+ * that shares it. A `User` is a (l1Address, l2Address) pair, so counting per
+ * user row would hand the same L1 address a fresh allowance for each L2 address
+ * it pairs with. The L1 address is the one half SIWE actually proves.
+ */
+async function capSubject(
   userId: string,
+  client: Prisma.TransactionClient = prisma,
+): Promise<{ l1Address: string; userIds: string[] }> {
+  const user = await client.user.findUnique({ where: { id: userId }, select: { l1Address: true } })
+  // Falling back to the single row keeps counting at least as strict as before.
+  if (!user) return { l1Address: userId, userIds: [userId] }
+  const peers = await client.user.findMany({
+    where: { l1Address: user.l1Address },
+    select: { id: true },
+  })
+  const userIds = peers.map((p) => p.id)
+  return { l1Address: user.l1Address, userIds: userIds.length > 0 ? userIds : [userId] }
+}
+
+/** Non-tombstoned (amountUsd > 0) holds for a cap subject, optionally by method. */
+async function fetchHeldRows(
+  userIds: string[],
   client: Prisma.TransactionClient,
   methods?: NonceMethod[],
 ): Promise<RawHold[]> {
   const rows = await client.attestationReservation.findMany({
-    where: { fkUserId: userId, amountUsd: { gt: 0 }, ...(methods ? { method: { in: methods } } : {}) },
+    where: { fkUserId: { in: userIds }, amountUsd: { gt: 0 }, ...(methods ? { method: { in: methods } } : {}) },
     select: { amountUsd: true, expiresAt: true, createdAt: true, method: true },
   })
   return rows.map((r) => ({
@@ -228,14 +240,18 @@ export async function resolveExpiredHolds(
   client: Prisma.TransactionClient = prisma,
 ): Promise<void> {
   try {
-    const user = await client.user.findUnique({ where: { id: userId }, select: { l1Address: true } })
-    if (!user) return
+    const subject = await capSubject(userId, client)
     const stale = await client.attestationReservation.findMany({
-      where: { fkUserId: userId, method: 'passport', amountUsd: { gt: 0 }, expiresAt: { lt: new Date() } },
+      where: {
+        fkUserId: { in: subject.userIds },
+        method: 'passport',
+        amountUsd: { gt: 0 },
+        expiresAt: { lt: new Date() },
+      },
       select: { id: true, nonce: true },
     })
     for (const row of stale) {
-      const consumed = await reader(user.l1Address, BigInt(row.nonce), 'passport')
+      const consumed = await reader(subject.l1Address, BigInt(row.nonce), 'passport')
       const next = resolveHold({ status: 'active', expired: true, neverExpires: false, nonceConsumed: consumed })
       if (next !== 'released') continue
       // Guard on amountUsd > 0 so a concurrent settle can't be clobbered.
@@ -267,7 +283,8 @@ export async function getReservedDepositUsd(
   client: Prisma.TransactionClient = prisma,
 ): Promise<number> {
   await resolveExpiredHolds(userId, readNonceConsumedOnChain, client)
-  const raw = await fetchHeldRows(userId, client)
+  const subject = await capSubject(userId, client)
+  const raw = await fetchHeldRows(subject.userIds, client)
   return sumAt(raw, Date.now(), null, ['active'])
 }
 
@@ -320,11 +337,12 @@ export async function reservePassportBudget(params: {
     // blocks here and then reads the hold this transaction wrote.
     // $executeRaw, not $queryRaw: pg_advisory_xact_lock returns void, which the
     // query deserializer rejects ("cannot deserialize column of type 'void'").
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.userId}))`
+    const subject = await capSubject(params.userId, tx)
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${subject.l1Address}))`
 
     const now = Date.now()
-    const passportRows = await fetchHeldRows(params.userId, tx, ['passport'])
-    const allRows = await fetchHeldRows(params.userId, tx)
+    const passportRows = await fetchHeldRows(subject.userIds, tx, ['passport'])
+    const allRows = await fetchHeldRows(subject.userIds, tx)
 
     let maxAmount = params.perTxMaxAmount
     let confirmedUsd = 0
@@ -424,9 +442,10 @@ export async function reservePochBudget(params: {
   await resolveExpiredHolds(params.userId)
 
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.userId}))`
+    const subject = await capSubject(params.userId, tx)
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${subject.l1Address}))`
     const now = Date.now()
-    const allRows = await fetchHeldRows(params.userId, tx)
+    const allRows = await fetchHeldRows(subject.userIds, tx)
     const held24h = sumAt(allRows, now, DEPOSIT_CAP_WINDOW_MS)
     const settled24h = sumAt(allRows, now, DEPOSIT_CAP_WINDOW_MS, ['consumed'])
     const reservedUsd = Math.max(0, held24h - settled24h)
@@ -481,7 +500,7 @@ export async function evaluateDepositLimit(params: {
   }
 
   await resolveExpiredHolds(params.userId)
-  const raw = await fetchHeldRows(params.userId, prisma)
+  const raw = await fetchHeldRows((await capSubject(params.userId)).userIds, prisma)
   const now = Date.now()
   const settled24h = sumAt(raw, now, DEPOSIT_CAP_WINDOW_MS, ['consumed'])
   const held24h = sumAt(raw, now, DEPOSIT_CAP_WINDOW_MS)
@@ -510,10 +529,10 @@ export interface TravelRuleResult {
  * Evaluate the cumulative per-human Travel Rule threshold for a user's L1→L2 deposit.
  *
  * Uses SETTLED lifetime volume from the durable held ledger (no window) for the
- * bound (L1,L2) User — the only stable per-human anchor, since AddressBinding
- * enforces 1 L1 ↔ 1 L2. `exceeded` is settled-only so a transient hold does not
- * route the user to Clean Hands. Only the passport tier consults this; POCH-verified
- * humans are exempt (POCH holds are excluded from this lifetime sum).
+ * L1 address — the only half SIWE proves, and so the only stable anchor.
+ * `exceeded` is settled-only so a transient hold does not route the user to Clean
+ * Hands. Only the passport tier consults this; POCH-verified humans are exempt
+ * (POCH holds are excluded from this lifetime sum).
  */
 export async function evaluateTravelRuleThreshold(params: {
   userId: string
@@ -527,7 +546,7 @@ export async function evaluateTravelRuleThreshold(params: {
   }
 
   await resolveExpiredHolds(params.userId)
-  const raw = await fetchHeldRows(params.userId, prisma, ['passport'])
+  const raw = await fetchHeldRows((await capSubject(params.userId)).userIds, prisma, ['passport'])
   const now = Date.now()
   const lifetimeUsd = sumAt(raw, now, null, ['consumed'])
   const symbol = params.tokenSymbol ?? 'USDC'

@@ -22,6 +22,41 @@ import {
  * Creates the binding on first use; rejects if either address is already bound elsewhere.
  * Returns an error string if binding is violated, null if OK.
  */
+/**
+ * Report an existing binding that conflicts with this pair, without creating
+ * one. Pre-flight callers use this: creating the binding is irreversible (there
+ * is no unbind path) and the L2 address is not proven, so a read-shaped request
+ * must not be able to consume someone else's address.
+ */
+export async function checkAddressBindingConflict(
+  l1Address: string,
+  l2Address: string,
+): Promise<string | null> {
+  const existing = await prisma.addressBinding.findFirst({
+    where: {
+      OR: [
+        { l1Address },
+        { l2Address },
+      ],
+    },
+  })
+  return existing ? describeBindingConflict(existing, l1Address, l2Address) : null
+}
+
+function describeBindingConflict(
+  existing: { l1Address: string; l2Address: string },
+  l1Address: string,
+  l2Address: string,
+): string | null {
+  if (existing.l1Address === l1Address && existing.l2Address === l2Address) {
+    return null
+  }
+  if (existing.l1Address === l1Address) {
+    return `L1 address ${l1Address} is already bound to a different L2 address`
+  }
+  return `L2 address ${l2Address} is already bound to a different L1 address`
+}
+
 export async function enforceAddressBinding(l1Address: string, l2Address: string): Promise<string | null> {
   const existing = await prisma.addressBinding.findFirst({
     where: {
@@ -48,15 +83,7 @@ export async function enforceAddressBinding(l1Address: string, l2Address: string
     return null
   }
 
-  if (existing.l1Address === l1Address && existing.l2Address === l2Address) {
-    return null
-  }
-
-  if (existing.l1Address === l1Address) {
-    return `L1 address ${l1Address} is already bound to a different L2 address`
-  }
-
-  return `L2 address ${l2Address} is already bound to a different L1 address`
+  return describeBindingConflict(existing, l1Address, l2Address)
 }
 
 /** Rolling window (ms) over which per-user deposits are summed for the cap. */

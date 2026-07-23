@@ -6,6 +6,7 @@ import SwapIcon from './SwapIcon'
 import { Icon } from '@iconify/react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { POCH_MINT_URL } from '@/config'
+import { BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD } from '@/config/env.config'
 
 interface BridgeSectionProps {
   bridgeConfig: BridgeState
@@ -49,16 +50,7 @@ interface BridgeSectionProps {
   compact?: boolean
 }
 
-// Compact USD for limit pills: 25000 → "$25k", 1500 → "$1.5k", 900 → "$900".
-function formatCompactUsd(usd: number): string {
-  if (usd >= 1000) {
-    const k = usd / 1000
-    return `$${Number.isInteger(k) ? k : Number(k.toFixed(1))}k`
-  }
-  return `$${usd.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
-}
-
-// Full USD for the "available to bridge" headline / hold detail: 1000 → "$1,000",
+// Full USD for the limit headline / hold detail: 1000 → "$1,000",
 // 1234.5 → "$1,234.50". Drops cents when the amount is whole.
 function formatUsd(usd: number): string {
   const hasCents = !Number.isInteger(usd)
@@ -107,50 +99,47 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
     if (onSwap) onSwap()
   }
 
-  // Attestation indicator + Proof of Clean Hands nudge.
-  // Passport (uniqueness) carries a per-tx USD cap; PoCH lifts it. The cap comes
-  // from the attestation result (passportMaxAmount, token base units), never a
-  // hardcoded 1000, so it tracks whatever the backend enforces.
-  const passportCapUsd = passportMaxAmount != null ? Number(passportMaxAmount) / 1e6 : undefined
-  const capLabel =
-    passportCapUsd != null ? `$${passportCapUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : ''
-  // Clean-Hands tier shows its DAILY limit when a real value is threaded in (e.g. "$25k/day").
-  // Empty when the limit is not exposed to the client — the pill stays honest with no number.
-  const dailyLimitLabel =
-    pochDailyLimitUsd != null && pochDailyLimitUsd > 0 ? `${formatCompactUsd(pochDailyLimitUsd)}/day` : ''
+  // Attestation indicator + Proof of Clean Hands nudge. The cascade picks one method,
+  // so only that tier is badged.
+  const isPoch = attestationMethod === 'poch'
+
+  // Per-human deposit LIMIT for the ACTIVE tier: the figure the pill shows. Passport-only
+  // is held to the Travel-Rule threshold ($1k). Clean Hands (PoCH) unlocks the full alpha
+  // cap ($25k). These are strictly tier-gated so a Passport-only user never sees the
+  // Clean-Hands cap. pochDailyLimitUsd is threaded from BRIDGE_MAX_DEPOSIT_USD upstream;
+  // fall back to the same config value if it isn't passed.
+  const cleanHandsLimitUsd = pochDailyLimitUsd ?? Number(BRIDGE_MAX_DEPOSIT_USD)
+  const passportLimitUsd = Number(TRAVEL_RULE_THRESHOLD_USD)
+  const tierLimitUsd = isPoch ? cleanHandsLimitUsd : passportLimitUsd
+
   const amountNum = Number(inputAmount)
-  // Nudge only on the Passport path, only as the amount nears or crosses the cap.
+  // Nudge only on the Passport path, only as the amount nears or crosses the tier limit.
   // PoCH-verified users already have the higher limit, so they are never nagged.
   const nearPassportCap =
     attestationMethod === 'passport' &&
-    passportCapUsd != null &&
     !isNaN(amountNum) &&
     amountNum > 0 &&
-    amountNum >= passportCapUsd * 0.9
+    amountNum >= passportLimitUsd * 0.9
 
-  // Verified-tier badge: icon + short label, matched to the humanity icons in the Header
-  // tooltip (PoCH → ph:hand-soap, Passport → ph:identification-card). One method wins the
-  // attestation cascade, so only that tier is badged.
-  const isPoch = attestationMethod === 'poch'
-  const badgeIcon = isPoch ? 'ph:hand-soap' : 'ph:identification-card'
+  // Verified-tier badge: brand icon + short label. Passport tier uses the Human Passport
+  // mark, Clean Hands tier uses the Clean Hands mark. Tinted via CSS mask to the label color.
+  const badgeIconSrc = isPoch ? '/assets/svg/clean-hands.svg' : '/assets/svg/passport.svg'
   const badgeLabel = isPoch ? 'Clean Hands' : 'Passport'
   const badgeClass = isPoch
     ? 'bg-[rgba(15,123,79,0.10)] text-[#0F7B4F]'
     : 'bg-[rgba(23,35,94,0.08)] text-[#17235E]'
-  // Headline the user cares about: how much they can bridge right now. Falls back to the
-  // static cap label when the remaining budget isn't surfaced (cap disabled).
-  const remainingLabel = remainingDepositUsd != null ? `${formatUsd(remainingDepositUsd)} available to bridge` : null
-  const headlineLabel = remainingLabel ?? (isPoch ? dailyLimitLabel || null : capLabel ? `max ${capLabel}` : null)
-  // Temporary hold from a pending deposit — appended to the badge tooltip when present.
+  // Make it unmistakably a cap per human, not a wallet balance.
+  const headlineLabel = tierLimitUsd > 0 ? `up to ${formatUsd(tierLimitUsd)} per human` : null
+  // Temporary hold from a pending deposit, appended to the badge tooltip when present.
   const reservedNote =
     reservedDepositUsd != null && reservedDepositUsd > 0
       ? ` ${formatUsd(reservedDepositUsd)} on hold from a pending deposit.`
       : ''
   const badgeTooltip = isPoch
-    ? `Verified with Proof of Clean Hands.${dailyLimitLabel ? ` Daily limit ${dailyLimitLabel}.` : ''}${reservedNote}`
+    ? `Verified with Proof of Clean Hands. Bridge up to ${formatUsd(cleanHandsLimitUsd)} per human.${reservedNote}`
     : `Verified with Passport (uniqueness).${
         passportScore != null && passportThreshold != null ? ` Score ${passportScore} ≥ ${passportThreshold}.` : ''
-      }${capLabel ? ` ${capLabel} lifetime limit.` : ''}${reservedNote} Verify with Proof of Clean Hands for a higher limit.`
+      } Bridge up to ${formatUsd(passportLimitUsd)} per human.${reservedNote} Verify with Proof of Clean Hands to unlock ${formatUsd(cleanHandsLimitUsd)}.`
 
   // Compact summary rows shown while a detail accordion is expanded — e.g.
   // "From Eth Sepolia · 100 USDC" / "To Aztec · cUSDC". Tapping a row re-selects
@@ -288,7 +277,20 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
               data-tooltip-content={badgeTooltip}
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-12 font-medium cursor-default ${badgeClass}`}
             >
-              <Icon icon={badgeIcon} width={13} height={13} className="shrink-0" />
+              <span
+                aria-hidden
+                className="inline-block h-[13px] w-[13px] shrink-0 bg-current"
+                style={{
+                  maskImage: `url(${badgeIconSrc})`,
+                  WebkitMaskImage: `url(${badgeIconSrc})`,
+                  maskRepeat: 'no-repeat',
+                  WebkitMaskRepeat: 'no-repeat',
+                  maskPosition: 'center',
+                  WebkitMaskPosition: 'center',
+                  maskSize: 'contain',
+                  WebkitMaskSize: 'contain',
+                }}
+              />
               {badgeLabel}
             </span>
             {headlineLabel && (
@@ -303,7 +305,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                 className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-12 font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708] hover:bg-[rgba(181,71,8,0.18)] transition-colors"
               >
                 <Icon icon="ph:arrow-up-right-bold" width={12} height={12} className="shrink-0" />
-                Above {capLabel} needs Proof of Clean Hands
+                Above {formatUsd(passportLimitUsd)} needs Proof of Clean Hands
               </a>
             )}
             <ReactTooltip

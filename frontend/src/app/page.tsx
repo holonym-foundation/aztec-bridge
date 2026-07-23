@@ -360,6 +360,31 @@ export default function Home() {
     }
   }, [insufficientClaimGas, fuelEnabled, setFuelEnabled])
 
+  // ── Withdraw-direction fuel gate (L2 → L1) ──────────────────────────────
+  // A withdrawal burns on Aztec, paid from the user's standing fuel: the private
+  // BridgedFPC balance in privacy mode (spent via pay_fee), else the public
+  // FeeJuice balance. The BridgedFPC balance is a DIFFERENT quantity from the raw
+  // private Fee Juice a user sees in their wallet, so a user can hold in-wallet FJ
+  // yet have zero here and be genuinely unable to pay the burn. Mirror the panel's
+  // fuel selection and block only on a CONFIRMED shortfall (balance loaded AND
+  // estimate loaded AND short) so we never false-block while either is resolving.
+  const withdrawFuelType: 'public' | 'private' =
+    isPrivacyModeEnabled && !!BRIDGED_FPC_ADDRESS ? 'private' : 'public'
+  const { data: withdrawBurnFeeWei } = useClaimFeeEstimate(withdrawFuelType)
+  const withdrawFuelBalance = withdrawFuelType === 'private' ? privateFeeJuiceBalance : feeJuiceBalance
+  const withdrawFuelInsufficient =
+    bridgeConfig.direction === BridgeDirection.L2_TO_L1 &&
+    isWaapConnected &&
+    isAztecConnected &&
+    withdrawFuelBalance != null &&
+    withdrawBurnFeeWei != null &&
+    Number(withdrawFuelBalance) < Number(withdrawBurnFeeWei) / 1e18
+  const withdrawDisabledReason = withdrawFuelInsufficient
+    ? withdrawFuelType === 'private'
+      ? 'Not enough private fuel to cover the L2 burn. Top up to withdraw.'
+      : 'Not enough Fee Juice to cover the L2 burn. Top up to withdraw.'
+    : undefined
+
   // Bridge success callback (runs after L1→L2 bridge or L2→L1 withdrawal)
   const handleBridgeSuccess = useCallback(
     (_data: any) => {
@@ -760,9 +785,10 @@ export default function Home() {
                   (bridgeConfig.direction === BridgeDirection.L1_TO_L2 &&
                     isWaapConnected && isAztecConnected &&
                     (!fuelSufficient || !fuelRecipientValid || !fuelAmountValid)) ||
+                  withdrawFuelInsufficient ||
                   authFailed
                 }
-                disabledReason={bridgeDisabledReason}
+                disabledReason={bridgeDisabledReason ?? withdrawDisabledReason}
                 // Binding conflict guard — disable + name the linked wallet
                 // before bridging into a guaranteed-failing pair.
                 bindingBlocked={!!bindingConflict}

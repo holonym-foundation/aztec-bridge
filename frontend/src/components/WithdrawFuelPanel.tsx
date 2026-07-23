@@ -300,18 +300,39 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
           </span>
         </span>
         <span className="flex items-center gap-1">
-          you have
+          {usingPrivateFuel ? (
+            <span className="flex items-center gap-0.5">
+              Private fuel
+              <Icon
+                icon="ph:info"
+                width={12}
+                height={12}
+                className="cursor-help text-latest-grey-500"
+                data-tooltip-id="withdraw-fuel-label"
+                data-tooltip-content="Separate from the Fee Juice in your wallet. This is the private fuel (BridgedFPC) that pays the L2 burn. Top up to withdraw privately."
+              />
+            </span>
+          ) : (
+            'you have'
+          )}
           {fjLoading ? (
             <span className="inline-block h-2.5 w-10 bg-neutral-300 rounded animate-pulse" />
           ) : (
             <span className={`font-semibold ${underfunded || fjZero ? 'text-[#D92D20]' : ''}`}>
-              {applicableBalance ?? '--'} FJ
+              {applicableBalance ?? '--'}
+              {usingPrivateFuel ? '' : ' FJ'}
             </span>
           )}
         </span>
       </div>
       <ReactTooltip
         id="withdraw-fj-warning"
+        place="top"
+        className="z-[100]"
+        style={{ fontSize: '12px', maxWidth: '220px' }}
+      />
+      <ReactTooltip
+        id="withdraw-fuel-label"
         place="top"
         className="z-[100]"
         style={{ fontSize: '12px', maxWidth: '220px' }}

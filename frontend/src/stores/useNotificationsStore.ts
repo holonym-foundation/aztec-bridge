@@ -78,6 +78,10 @@ interface NotificationsState {
     action?: NotificationAction
     amount?: string
     mode?: 'public' | 'private'
+    // When set, the entry self-removes after this many ms. Used for a transient
+    // heads-up (a momentary reminder) that shouldn't linger in the feed until
+    // the user dismisses it — everything else persists until dismissed.
+    autoDismissMs?: number
   }) => void
   dismiss: (id: string) => void
   dismissAll: () => void
@@ -88,12 +92,16 @@ const unread = (list: AppNotification[]) => list.filter((n) => !n.read).length
 
 const makeId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
-export const useNotificationsStore = create<NotificationsState>((set) => ({
+export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   notifications: [],
   unreadCount: 0,
   lastGenie: null,
 
-  pushNotification: ({ type, title, message, key, action, amount, mode }) =>
+  pushNotification: ({ type, title, message, key, action, amount, mode, autoDismissMs }) => {
+    // Id of the row this push landed on (new or keyed-updated). Null when the
+    // push was collapsed by the dedupe guard, in which case there's nothing to
+    // auto-dismiss.
+    let scheduledId: string | null = null
     set((state) => {
       // Keyed upsert — refresh the existing row in place (new text/timestamp,
       // bumped to the top) and preserve its read state so a progress row the
@@ -112,6 +120,7 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
             mode,
             timestamp: Date.now(),
           }
+          scheduledId = existing.id
           const rest = state.notifications.filter((_, i) => i !== idx)
           const notifications = [updated, ...rest].slice(0, MAX_NOTIFICATIONS)
           return { notifications, unreadCount: unread(notifications) }
@@ -141,9 +150,16 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
         timestamp: Date.now(),
         read: false,
       }
+      scheduledId = next.id
       const notifications = [next, ...state.notifications].slice(0, MAX_NOTIFICATIONS)
       return { notifications, unreadCount: unread(notifications), lastGenie: { id: next.id, type } }
-    }),
+    })
+
+    if (autoDismissMs && autoDismissMs > 0 && scheduledId) {
+      const targetId = scheduledId
+      setTimeout(() => get().dismiss(targetId), autoDismissMs)
+    }
+  },
 
   dismiss: (id) =>
     set((state) => {
@@ -173,4 +189,5 @@ export const pushNotification = (input: {
   action?: NotificationAction
   amount?: string
   mode?: 'public' | 'private'
+  autoDismissMs?: number
 }) => useNotificationsStore.getState().pushNotification(input)

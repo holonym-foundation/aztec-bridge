@@ -17,6 +17,8 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useToast } from '@/hooks/useToast'
 import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
+import { useResumeAttemptsStore } from '@/stores/useResumeAttemptsStore'
+import { openSupport } from '@/utils/support'
 import { BridgeDirection } from '@/types/bridge'
 
 export interface ProgressCardProps {
@@ -224,6 +226,12 @@ export default function ProgressCard({
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
     )
   }, [operations, direction])
+
+  // This op has failed resume enough times that re-offering the naive full-width Resume
+  // just loops. The detail + support live in the Messages feed and the status chip now, so
+  // the card only softens to a calm "Get help" line (see the escalation in progress/resume).
+  const stuckCount = useResumeAttemptsStore((s) => (resumableOp ? (s.attempts[resumableOp.id]?.count ?? 0) : 0))
+  const escalated = stuckCount >= 3
 
   // Mirrors the Activity page/drawer resume handler (activity/page.tsx isn't importable):
   // decrypt to prove wallet ownership, stash recovery data, then hand off to /progress/resume.
@@ -749,13 +757,25 @@ export default function ProgressCard({
         <div className="mt-3 mb-6 flex flex-col items-center gap-2">
           <div className="flex w-full items-stretch gap-2">
             <button
-              onClick={fuelErrorDetected ? () => router.push('/fee-juice?resume=1') : handleResumeClick}
-              disabled={!fuelErrorDetected && resuming}
+              onClick={
+                escalated && !fuelErrorDetected
+                  ? openSupport
+                  : fuelErrorDetected
+                    ? () => router.push('/fee-juice?resume=1')
+                    : handleResumeClick
+              }
+              disabled={!fuelErrorDetected && !escalated && resuming}
               className={`flex-[8_1_0%] rounded-lg py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60 ${
                 fuelErrorDetected ? 'bg-[#81133B]' : 'bg-[#17235E]'
               }`}
             >
-              {fuelErrorDetected ? 'Top up Fee Juice' : resuming ? 'Resuming…' : resumeLabel}
+              {escalated && !fuelErrorDetected
+                ? 'Get help'
+                : fuelErrorDetected
+                  ? 'Top up Fee Juice'
+                  : resuming
+                    ? 'Resuming…'
+                    : resumeLabel}
             </button>
             <button
               onClick={() => router.push('/?app=1')}
@@ -776,7 +796,7 @@ export default function ProgressCard({
             >
               {resuming ? 'Resuming…' : `Already topped up? ${resumeLabel}`}
             </button>
-          ) : fuelTopUpSecondary ? (
+          ) : fuelTopUpSecondary && !escalated ? (
             <button
               onClick={() => router.push('/fee-juice?resume=1')}
               className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"

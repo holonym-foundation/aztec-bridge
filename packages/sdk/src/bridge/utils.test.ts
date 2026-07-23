@@ -16,11 +16,21 @@ describe('isAlreadyConsumedError', () => {
     ['NothingToConsumeAtBlock(123, 4)', /NothingToConsumeAtBlock/i],
     ['AlreadyConsumed(0xabc)', /AlreadyConsumed/i],
     ['revert: message already consumed', /message.*already.*consumed/i],
-    ['nonexistent L1-to-L2 message', /nonexistent L1-to-L2 message/i],
-    ['l1_to_l2_msg_exists', /l1_to_l2_msg_exists/i],
+    ['message has already been nullified', /message has already been nullified/i],
+    ['This deposit has already been claimed.', /deposit has already been claimed/i],
     ['reverted with 0x945d8c59', /0x945d8c59/i],
   ])('matches "%s"', (errMsg) => {
     expect(isAlreadyConsumedError(errMsg)).toBe(true)
+  })
+
+  it('does NOT match the not-anchored-yet shapes (Aztec 5.0 split)', () => {
+    // "No L1 to L2 message found" / "nonexistent L1-to-L2 message" /
+    // "l1_to_l2_msg_exists" mean the message is not consumable YET — the claim
+    // is still possible. Treating them as consumed marks an unclaimed deposit
+    // as completed and strands the funds.
+    expect(isAlreadyConsumedError('nonexistent L1-to-L2 message')).toBe(false)
+    expect(isAlreadyConsumedError('Assertion failed: l1_to_l2_msg_exists')).toBe(false)
+    expect(isAlreadyConsumedError('No L1 to L2 message found for message hash 0xabc')).toBe(false)
   })
 
   it('does NOT match generic "execution reverted"', () => {

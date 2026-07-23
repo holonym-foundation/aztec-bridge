@@ -1,4 +1,4 @@
-import { Slide, toast, ToastOptions } from 'react-toastify'
+import { toast, ToastOptions, collapseToast, type ToastTransitionProps } from 'react-toastify'
 import React from 'react'
 import { UseQueryOptions, UseMutationOptions, useQuery, useMutation, QueryFunction } from '@tanstack/react-query'
 import PrivacyModeToast from '@/components/toast/PrivacyModeToast'
@@ -8,6 +8,7 @@ import LoadingToast from '@/components/toast/LoadingToast'
 import SuccessToast from '@/components/toast/SuccessToast'
 import WarningToast from '@/components/toast/WarningToast'
 import ErrorToast from '@/components/toast/ErrorToast'
+import { pushNotification, type NotificationType } from '@/stores/useNotificationsStore'
 
 /**
  * Toast System with Loading Spinner Support and Duplicate Error Prevention
@@ -47,9 +48,18 @@ type ToastType = 'default' | 'success' | 'info' | 'warn' | 'error' | 'privacy-mo
 // styled spans). String messages still work; the toast renderers accept both.
 type ToastMessageInput = string | { message: string | React.ReactNode; heading?: string }
 
+// `feed` opts a toast OUT of being mirrored into the Messages feed. Default is
+// to mirror — the feed is the single source of truth, so every meaningful toast
+// lands there. Set `feed: false` only when a richer, semantic pushNotification
+// is issued for the same event at the call site (so the event isn't recorded
+// twice).
+type FeedOption = { feed?: boolean }
+
+type ToastOptionsWithFeed = ToastOptions & FeedOption
+
 type CustomToastOptions = ToastOptions & {
   animatePromise?: boolean
-}
+} & FeedOption
 
 type ToastMessageObject = {
   message: string | React.ReactNode
@@ -67,18 +77,93 @@ type ToastMessages = {
 // CONSTANTS
 // ============================================================================
 
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+// react-toastify types collapseToast's duration as an internal enum; it accepts
+// any ms value at runtime. Wrap once so call sites can pass plain numbers.
+const collapse = (node: HTMLElement, done: () => void, ms: number) =>
+  (collapseToast as (n: HTMLElement, d: () => void, duration?: number) => void)(node, done, ms)
+
+// Toast exit: react-toastify's slide-out. New messages are surfaced from the
+// Messages tab itself (NotificationsDrawer's peek bubble, driven by the feed
+// store), so the toast no longer flies into the tab — it just slides away while
+// the tab peeks the message out and pulses its unread badge.
+const slideExit = (node: HTMLElement, done: () => void, position: string) => {
+  const exitClasses = `Toastify--animate Toastify__slide-exit--${position}`.split(' ')
+  const onEnd = () => {
+    node.removeEventListener('animationend', onEnd)
+    collapse(node, done, 300)
+  }
+  node.classList.add(...exitClasses)
+  node.addEventListener('animationend', onEnd)
+}
+
+// Custom react-toastify transition. Entrance is unchanged from the previous
+// `Slide` (same position-appended enter classes, whose CSS the library injects).
+// The EXIT slides out; reduced-motion / drag-dismiss just close with no travel.
+const GenieToastTransition = ({
+  children,
+  position,
+  preventExitTransition,
+  done,
+  nodeRef,
+  isIn,
+  playToast,
+}: ToastTransitionProps) => {
+  React.useLayoutEffect(() => {
+    const node = nodeRef.current
+    if (!node) return
+    const enterClasses = `Toastify--animate Toastify__slide-enter--${position}`.split(' ')
+    node.classList.add(...enterClasses)
+    const onEnd = (e: AnimationEvent) => {
+      if (e.target !== node) return
+      playToast()
+      node.removeEventListener('animationend', onEnd)
+      node.removeEventListener('animationcancel', onEnd)
+      node.classList.remove(...enterClasses)
+    }
+    node.addEventListener('animationend', onEnd)
+    node.addEventListener('animationcancel', onEnd)
+    // Runs once on mount, mirroring react-toastify's cssTransition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  React.useEffect(() => {
+    if (isIn) return
+    const node = nodeRef.current
+    if (!node) {
+      done()
+      return
+    }
+    // No travel for drag-dismiss or reduced-motion: the toast just closes and
+    // the Messages badge increments on its own.
+    if (preventExitTransition || prefersReducedMotion()) {
+      done()
+      return
+    }
+    slideExit(node, done, position)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isIn])
+
+  return React.createElement(React.Fragment, null, children)
+}
+
 const DEFAULT_TOAST_OPTIONS: ToastOptions = {
   position: 'top-right',
-  // 15s default — long enough for users to read multi-line warning toasts
-  // (e.g. claim-attempt updates during a 15-min bridge wait). Persistent
-  // banners override this with autoClose: false at the call site.
-  autoClose: 15000,
+  // Short by default — transient success/info/default toasts genie into Messages
+  // promptly (the message persists there anyway). Warnings run longer and errors
+  // are non-auto (see the per-type overrides in createToast). Persistent banners
+  // override this with autoClose: false at the call site.
+  autoClose: 4000,
   pauseOnHover: true,
   pauseOnFocusLoss: true,
   closeButton: false,
   closeOnClick: true,
   icon: false,
-  transition: Slide,
+  transition: GenieToastTransition,
 }
 
 const LOADING_TOAST_OPTIONS: Partial<ToastOptions> = {
@@ -102,6 +187,56 @@ const TOAST_COMPONENTS = {
   error: ErrorToast,
   'privacy-mode': PrivacyModeToast,
 } as const
+
+// ============================================================================
+// FEED MIRRORING — single source of truth
+// ============================================================================
+
+// Toast severities that don't represent a "message" worth keeping: the default
+// (styleless) toast and the privacy-mode UI toggle. Everything else is mirrored.
+const FEED_TYPE_FOR: Partial<Record<ToastType, NotificationType>> = {
+  success: 'success',
+  error: 'error',
+  warn: 'warning',
+  info: 'info',
+}
+
+/**
+ * Mirror a toast into the persistent Messages feed so nothing shown transiently
+ * is ever lost. `feed === false` opts out (used where the call site already
+ * pushes a richer, semantic notification for the same event). A toast that
+ * carries a `toastId` is mirrored under that id as a stable key, so a flow's
+ * repeating status toasts (which all reuse one id) collapse into a single,
+ * live-updating feed row instead of one row per emit.
+ */
+const mirrorToFeed = (
+  type: ToastType,
+  message: string | React.ReactNode,
+  heading: string | undefined,
+  options: ToastOptionsWithFeed,
+): boolean => {
+  if (options.feed === false) return false
+  const feedType = FEED_TYPE_FOR[type]
+  if (!feedType) return false
+
+  const stringMessage = typeof message === 'string' ? message : undefined
+  // With a heading, title = heading and body = the message. Without one, the
+  // message itself is the title. A JSX-only message with no heading can't be
+  // represented as feed text, so skip it (the toast still shows).
+  const title = heading ?? stringMessage
+  const body = heading ? stringMessage : undefined
+  if (!title || !title.trim()) return false
+
+  const key =
+    typeof options.toastId === 'string'
+      ? options.toastId
+      : typeof options.toastId === 'number'
+        ? String(options.toastId)
+        : undefined
+
+  pushNotification({ type: feedType, title, message: body, key })
+  return true
+}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -148,6 +283,14 @@ const extractErrorMessage = (error: unknown): string | null => {
 }
 
 /**
+ * Per-severity timing defaults, layered under caller options. Errors stay
+ * on-screen until dismissed (non-auto); warnings run longer than the short
+ * default so users don't miss them; everything else takes the default.
+ */
+const typeOverrides = (type: ToastType): ToastOptions =>
+  type === 'error' ? { autoClose: false, closeOnClick: false } : type === 'warn' ? { autoClose: 8000 } : {}
+
+/**
  * Creates merged options with proper precedence
  */
 const createMergedOptions = (baseOptions: ToastOptions, customOptions: ToastOptions = {}) => ({
@@ -163,8 +306,18 @@ const createToast = (
   type: ToastType,
   message: string | React.ReactNode,
   heading?: string,
-  options: ToastOptions = {},
+  options: ToastOptionsWithFeed = {},
 ) => {
+  // #202/#207. Record the event in the Messages feed first. When it lands
+  // there, the feed row plus the peek-from-tab bubble ARE the surfacing, so the
+  // corner toast is always redundant and is suppressed — including pinned
+  // (autoClose:false) or interactive banners, which now surface via the feed
+  // (with an inline action where one is needed) plus the peek bubble only.
+  // Persistent safety text that must stay on-screen lives in its own page
+  // component (e.g. ProgressCard's "keep this page open" banner), not a toast.
+  const mirrored = mirrorToFeed(type, message, heading, options)
+  if (mirrored) return null
+
   // For error toasts, check if this exact message is already active
   // Use only the heading for de-dupe when message is non-string (JSX),
   // since JSX nodes can't be reliably stringified for keying.
@@ -189,8 +342,9 @@ const createToast = (
   }
 
   const Component = TOAST_COMPONENTS[type]
-  const errorOverrides = type === 'error' ? { autoClose: false as const, closeOnClick: false } : {}
-  const toastOptions = createMergedOptions({}, { ...errorOverrides, ...options })
+  const { feed: _feed, ...toastableOptions } = options
+  const toastOptions = createMergedOptions({}, { ...typeOverrides(type), ...toastableOptions })
+
   const finalOptions = {
     className: `${type}-toast`,
     ...(type === 'privacy-mode' ? { toastId: 'privacy-mode-toastId' } : {}),
@@ -239,8 +393,18 @@ const updateToastState = (
   type: 'success' | 'error',
   message: string | React.ReactNode,
   heading?: string,
-  options: ToastOptions = {},
+  options: ToastOptionsWithFeed = {},
 ) => {
+  // #202/#207. Mirror the resolved state into the feed. When it lands there it
+  // surfaces via the peek bubble plus feed, so always retire the transient
+  // loading toast rather than morphing it into a redundant corner success/error
+  // — even when the caller pinned the resolved state open (autoClose:false).
+  const mirrored = mirrorToFeed(type, message, heading, options)
+  if (mirrored) {
+    toast.dismiss(toastId)
+    return
+  }
+
   // For error toasts, check if this exact message is already active.
   // Match createToast's keying so JSX messages don't trigger string interpolation.
   if (type === 'error') {
@@ -265,8 +429,8 @@ const updateToastState = (
   }
 
   const Component = TOAST_COMPONENTS[type]
-  const errorOverrides = type === 'error' ? { autoClose: false as const, closeOnClick: false } : {}
-  const mergedOptions = createMergedOptions({}, { ...errorOverrides, ...options })
+  const { feed: _feed, ...toastableOptions } = options
+  const mergedOptions = createMergedOptions({}, { ...typeOverrides(type), ...toastableOptions })
 
   toast.update(toastId, {
     // `message` widened to ReactNode for ErrorToast; the other toast
@@ -496,7 +660,7 @@ export function useToastMutation<TData = unknown, TError = unknown, TVariables =
 // STANDALONE FUNCTIONS
 // ============================================================================
 
-export const showToast = (type: ToastType, input: ToastMessageInput, options?: ToastOptions) => {
+export const showToast = (type: ToastType, input: ToastMessageInput, options?: ToastOptionsWithFeed) => {
   const { message, heading } = normalizeMessage(input)
   createToast(type, message, heading, options)
 }

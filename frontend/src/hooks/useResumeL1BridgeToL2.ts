@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import type { RecoveryClaimData } from '@human.tech/clean.sdk'
 import { useWalletStore, requestWaapWallet, WAAP_METHOD } from '@/stores/walletStore'
@@ -9,6 +9,7 @@ import type { BridgeEvent } from '@human.tech/clean.sdk'
 import { BridgeEventType } from '@human.tech/clean.sdk'
 import { getAztecscanUrl, L2_CHAIN_ID } from '@/config'
 import { verifyEncryptionDomain } from '@/utils'
+import { isConsumedMessageError } from '@/utils/resumability'
 import { logInfo, logError, DatadogUserAction } from '@/utils/datadog'
 
 export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
@@ -17,6 +18,17 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
   const walletAdapter = useWalletAdapter()
   const notify = useToast()
   const bridge = useBridge()
+  const queryClient = useQueryClient()
+
+  // The resume path never ran a balance invalidation, so a bridge finished via
+  // Resume left the L2 (cUSDC / Clean USDC) balance stuck at its pre-deposit
+  // value until a manual reload (#230b). Refresh on completion, retrying to
+  // outlast the PXE note-sync lag.
+  const refreshL2Balances = () => {
+    queryClient.invalidateQueries({ queryKey: ['l2TokenBalance', aztecAddress] })
+    queryClient.invalidateQueries({ queryKey: ['l2FeeJuiceBalance', aztecAddress] })
+    queryClient.invalidateQueries({ queryKey: ['l2PrivateFeeJuiceBalance', aztecAddress] })
+  }
 
   const mutationFn = async (claimData: RecoveryClaimData): Promise<string | undefined> => {
     if (!aztecAddress) throw new Error('Aztec wallet not connected')
@@ -104,7 +116,7 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
               l1Address,
               userAction: DatadogUserAction.RESUME_L1_TO_L2_SYNC_POLL,
             })
-            notify('info', `Waiting for L1→L2 message sync (${event.elapsedMinutes.toFixed(0)} min elapsed)...`, {
+            notify('info', `Syncing to Aztec (${event.elapsedMinutes.toFixed(0)} min elapsed).`, {
               toastId: 'resume-l1-to-l2-progress',
               autoClose: 15000,
             })
@@ -136,7 +148,7 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
             })
             notify(
               'info',
-              `L2 node hasn't synced this message yet. Retrying in ${Math.round(event.delayMs / 60_000)} min (${event.attempt}/${event.maxAttempts})...`,
+              `Not synced yet. Retrying in ${Math.round(event.delayMs / 60_000)} min (${event.attempt}/${event.maxAttempts}).`,
               { toastId: 'resume-l1-to-l2-progress', autoClose: 15000 },
             )
             break
@@ -153,6 +165,9 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
               const l2TxUrl = `${getAztecscanUrl(L2_CHAIN_ID)}/tx-effects/${event.l2TxHash}`
               setTransactionUrls(claimData.l1TxUrl ?? null, l2TxUrl)
             }
+            refreshL2Balances()
+            setTimeout(refreshL2Balances, 6000)
+            setTimeout(refreshL2Balances, 15000)
             break
           case BridgeEventType.ATTESTATION_FETCH:
             logInfo('Resume attestation fetch', {
@@ -183,15 +198,16 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
             notify(
               'warn',
               {
-                heading: 'Backup Warning',
-                message: `Could not save ${event.label} to server. Please do not close this page until the bridge completes.`,
+                heading: 'Backup warning',
+                message: `Could not save ${event.label}. Keep this page open.`,
               },
               { autoClose: false },
             )
             break
-          case BridgeEventType.ERROR:
+          case BridgeEventType.ERROR: {
+            const resumeErrorMsg = event.error?.message ?? ''
             logError(
-              event.error?.message ?? 'Resume error event',
+              resumeErrorMsg || 'Resume error event',
               {
                 direction: 'L1_TO_L2_RESUME',
                 fundsAtRisk: event.fundsAtRisk,
@@ -201,17 +217,24 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
               },
               event.error,
             )
-            if (event.fundsAtRisk) {
-              notify(
-                'error',
-                {
-                  heading: 'Resume Error — Funds Safe',
-                  message: 'Your deposit is safe on L1. Go to Activity to try again.',
-                },
-                { autoClose: false },
-              )
+            // Route resume errors through the Messages feed / peek bubble (default
+            // notify path) rather than a pinned corner toast. Omitting autoClose:false
+            // lets useToast mirror the event into the feed and suppress the corner copy.
+            if (isConsumedMessageError(resumeErrorMsg)) {
+              // "No non-nullified message" and friends: the claim already went through on a
+              // prior attempt. This is completion, not failure — point the user at their balance.
+              notify('info', {
+                heading: 'Deposit likely already completed',
+                message: 'Check your L2 balance.',
+              })
+            } else if (event.fundsAtRisk) {
+              notify('warn', {
+                heading: "Resume didn't finish",
+                message: 'Your funds are safe. Resume from Activity.',
+              })
             }
             break
+          }
         }
       },
     })
@@ -223,6 +246,7 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
   return useMutation({
     mutationFn,
     onSuccess: (txHash) => {
+      refreshL2Balances()
       if (onSuccess) onSuccess(txHash)
     },
   })

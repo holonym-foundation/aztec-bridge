@@ -4,7 +4,7 @@
 #   testnet → the `testnet` Vercel Custom Environment (--target=testnet), which
 #             scopes the deploy so it can never touch the mainnet production domain.
 # Per-job env blocks below supply the network-specific DATABASE_URL / JWT / RPC used
-# by the prisma migration and manual Next build; Vercel-side env vars (pulled by
+# by the prisma db push and manual Next build; Vercel-side env vars (pulled by
 # `vercel build`) drive the deployed artifact's network selection.
 name: Deploy Aztec Bridge to Vercel
 env:
@@ -46,9 +46,9 @@ jobs:
         working-directory: ./packages/sdk
         run: pnpm build
 
-      - name: Run DB migrations
+      - name: Sync DB schema
         working-directory: ./frontend
-        run: pnpm exec prisma migrate deploy
+        run: pnpm exec prisma db push --skip-generate
 
       - name: Install Vercel CLI
         run: pnpm add --global vercel@latest
@@ -89,9 +89,9 @@ jobs:
         working-directory: ./packages/sdk
         run: pnpm build
 
-      - name: Run DB migrations
+      - name: Sync DB schema
         working-directory: ./frontend
-        run: pnpm exec prisma migrate deploy
+        run: pnpm exec prisma db push --skip-generate
 
       - name: Install Vercel CLI
         run: pnpm add --global vercel@latest
@@ -129,9 +129,9 @@ jobs:
         working-directory: ./packages/sdk
         run: pnpm build
 
-      - name: Run DB migrations
+      - name: Sync DB schema
         working-directory: ./frontend
-        run: pnpm exec prisma migrate deploy
+        run: pnpm exec prisma db push --skip-generate
 
       - name: Install Vercel CLI
         run: pnpm add --global vercel@latest

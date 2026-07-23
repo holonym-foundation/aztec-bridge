@@ -14,7 +14,7 @@ import {
   usePortalFeeBps,
 } from '@/hooks/useL1Operations'
 import { useTokenPrices } from '@/utils/coinGeckoPrice'
-import { computePortalFee, getTokenPriceUsd } from '@/utils/fuelPricing'
+import { computePortalFee, getTokenPriceUsd, formatFjAmount } from '@/utils/fuelPricing'
 import { parseUnits, formatUnits } from 'viem'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import {
@@ -26,6 +26,7 @@ import {
   useL2WithdrawTokensToL1,
   useL1ContractAddresses,
   useL2NodeIsReady,
+  useClaimFeeEstimate,
 } from '@/hooks/useL2Operations'
 import { showToast, useToast } from '@/hooks/useToast'
 import { extractErrorMessage, truncateDecimals } from '@/utils'
@@ -34,12 +35,11 @@ import NetworkModal from '@/components/model/Network'
 import TokensModal from '@/components/model/TokensModal'
 import { BridgeDirection, BridgeState, Network as NetworkType, Token as TokenType } from '@/types/bridge'
 import BridgeSection from '@/components/BridgeSection'
+import { Icon } from '@iconify/react'
 import TransactionBreakdown from '@/components/TransactionBreakdown'
 import BridgeFooter from '@/components/BridgeFooter'
 import BridgeHeader from '@/components/BridgeHeader'
-import BridgeStepsRail from '@/components/BridgeStepsRail'
 import VerificationStep from '@/components/VerificationStep'
-import { motion, AnimatePresence } from 'framer-motion'
 import BridgeActionButton from '@/components/BridgeActionButton'
 import {
   L1_CHAIN_ID,
@@ -59,9 +59,12 @@ import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModal
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { pushNotification } from '@/stores/useNotificationsStore'
+import { useBindingStatus, describeConflict, shortAddr } from '@/hooks/useBindingStatus'
 import { useRouter } from 'next/navigation'
 import MaintenanceOverlay from '@/components/MaintenanceOverlay'
 import FuelToggle from '@/components/FuelToggle'
+import WithdrawFuelPanel from '@/components/WithdrawFuelPanel'
 import {
   BRIDGED_FPC_ADDRESS,
   MAINTENANCE_MODE,
@@ -69,12 +72,7 @@ import {
   MAINTENANCE_TITLE,
   SWAP_BRIDGE_ROUTER_ADDRESS,
 } from '@/config'
-
-const variants = {
-  hidden: { opacity: 0, y: 100 },
-  enter: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -100 },
-}
+import { BRIDGE_MAX_DEPOSIT_USD } from '@/config/env.config'
 
 export default function Home() {
   const router = useRouter()
@@ -84,9 +82,41 @@ export default function Home() {
   const [selectToken, setSelectToken] = useState<boolean>(false)
   const [isFromSection, setIsFromSection] = useState<boolean>(true)
   const [showBreakdown, setShowBreakdown] = useState(false)
+  // Lifted so the bridge card runs a single mutually-exclusive accordion: opening the
+  // Transaction breakdown collapses the fuel detail (and vice-versa), yielding space so the
+  // card fits within its no-scroll budget instead of scrolling internally.
+  const [fuelDetailOpen, setFuelDetailOpen] = useState(false)
+  // Live FJ output for the current fuel amount, surfaced by FuelToggle for the breakdown summary.
+  const [fuelFjOutput, setFuelFjOutput] = useState<bigint | null>(null)
   const [showVerification, setShowVerification] = useState(false)
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Bottom scroll cue for the card's internal scroll region: the transaction breakdown
+  // (and expanded accordions) can sit below the fold with no signal it's there. `canScrollDown`
+  // lights a faint bottom fade + chevron while there's content past the fold and clears once
+  // the region is scrolled to its end. Content-height driven (accordions animate open), so a
+  // ResizeObserver re-measures rather than a one-shot read that would miss the animation.
+  const scrollRegionRef = useRef<HTMLDivElement>(null)
+  const scrollContentRef = useRef<HTMLDivElement>(null)
+  const [canScrollDown, setCanScrollDown] = useState(false)
+  const updateScrollAffordance = useCallback(() => {
+    const el = scrollRegionRef.current
+    if (!el) return
+    // A few px of slack so sub-pixel rounding at the true bottom doesn't keep the cue lit.
+    setCanScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > 6)
+  }, [])
+  useEffect(() => {
+    const region = scrollRegionRef.current
+    if (!region || typeof ResizeObserver === 'undefined') {
+      updateScrollAffordance()
+      return
+    }
+    const ro = new ResizeObserver(() => updateScrollAffordance())
+    ro.observe(region)
+    if (scrollContentRef.current) ro.observe(scrollContentRef.current)
+    updateScrollAffordance()
+    return () => ro.disconnect()
+  }, [updateScrollAffordance])
   const [inputAmount, setInputAmount] = useState('')
   const [usdValue, setUsdValue] = useState('')
 
@@ -139,10 +169,11 @@ export default function Home() {
       return 0n
     }
   }
-  const { feeRaw: portalFeeRaw, receiveRaw: portalReceiveRaw } = computePortalFee({
+  const depositFuelEnabled = bridgeConfig.direction === BridgeDirection.L1_TO_L2 && fuelEnabled
+  const { baseRaw: portalBaseRaw, feeRaw: portalFeeRaw, receiveRaw: portalReceiveRaw } = computePortalFee({
     amount: parseTokenAmount(bridgeConfig.amount),
     fuelAmount: parseTokenAmount(fuelAmount),
-    fuelEnabled: bridgeConfig.direction === BridgeDirection.L1_TO_L2 && fuelEnabled,
+    fuelEnabled: depositFuelEnabled,
     feeBps: portalFeeBps ?? 0n,
   })
   const portalFeeKnown = portalFeeBps != null
@@ -150,7 +181,16 @@ export default function Home() {
   const portalFeeUsd = portalFeeKnown
     ? (Number(formatUnits(portalFeeRaw, feeTokenDecimals)) * getTokenPriceUsd(feeTokenSymbol, tokenPrices)).toFixed(2)
     : undefined
+  // Fee as a percentage of the fee base (amount net of any fuel carve-out) — computed from the
+  // actual fee, so integer-division rounding in the portal is reflected. e.g. 2.54 USDC / 100 → "2.54".
+  const bridgeFeePercent =
+    portalFeeKnown && portalBaseRaw > 0n
+      ? ((Number(portalFeeRaw) / Number(portalBaseRaw)) * 100).toFixed(2)
+      : undefined
   const youWillReceiveAmount = `${truncateDecimals(formatUnits(portalReceiveRaw, feeTokenDecimals), 6)}`
+  // Fee-juice carve summary for the breakdown (deposit + fuel only).
+  const fuelReserveToken = depositFuelEnabled && Number(fuelAmount) > 0 ? fuelAmount : undefined
+  const fuelReserveFj = fuelReserveToken && fuelFjOutput != null ? formatFjAmount(fuelFjOutput) : undefined
 
   // Get wallet state from useWalletStore. Modal-driving fields (walletConnectionPhase,
   // discoveredWallets, verificationEmojis, etc.) are consumed inside <AztecWalletConnectionModals />
@@ -160,8 +200,6 @@ export default function Home() {
     isAztecConnected,
     connectWaapWallet,
     connectAztecWallet,
-    disconnectWaapWallet,
-    disconnectAztecWallet,
     waapLoginMethod: loginMethod,
     waapWalletIcon: walletIcon,
     waapWalletProvider: walletProvider,
@@ -176,6 +214,39 @@ export default function Home() {
   // backup POST to /api/bridge/operations would 401, aborting before any
   // on-chain tx but only after the user clicked through. Block at the button.
   const authFailed = useAuthStore((s) => s.authFailed)
+
+  // Binding button guard (issues #98/#130): if the connected (L1, L2) pair is a
+  // CONFLICT (mismatch — the EVM wallet is bound to a different Aztec account, or
+  // vice-versa), block the primary action up-front and name the linked wallet, so
+  // the user can't start a bridge into a guaranteed-failing pair. Only 'conflict'
+  // yields a non-null result here — a matched 'bound' pair or a fresh 'unbound'
+  // pair does NOT block. The query key includes waapAddress + aztecAddress, so
+  // switching to the linked Aztec account re-runs it and clears this instantly.
+  const { data: pairBindingStatus } = useBindingStatus()
+  const bindingConflict = describeConflict(pairBindingStatus?.binding, waapAddress, aztecAddress)
+  const bindingBlockedLabel = !bindingConflict
+    ? undefined
+    : bindingConflict.kind === 'evm-linked-elsewhere'
+      ? `Switch to your linked Aztec wallet ${shortAddr(bindingConflict.counterpart)}`
+      : bindingConflict.kind === 'aztec-linked-elsewhere'
+        ? `Reconnect your linked EVM wallet ${shortAddr(bindingConflict.counterpart)}`
+        : `Switch to your linked wallet pair ${shortAddr(bindingConflict.counterpart)}`
+
+  // Specific reason the primary button is blocked by a deposit-side fuel/auth gate (the same
+  // condition that drives BridgeActionButton's isDisabled). Surfaced under the button so a
+  // disabled state never reads as a silent greyed control. These gates leave the label as the
+  // plain "Bridge Tokens", so the reason line is what tells the user what to fix.
+  const depositGateActive =
+    bridgeConfig.direction === BridgeDirection.L1_TO_L2 && isWaapConnected && isAztecConnected
+  const bridgeDisabledReason = authFailed
+    ? 'Session error. Reconnect your wallet to continue.'
+    : depositGateActive && !fuelAmountValid
+      ? 'Gas top-up must be less than the bridge amount.'
+      : depositGateActive && !fuelSufficient
+        ? 'Increase gas top-up to cover the L2 claim.'
+        : depositGateActive && !fuelRecipientValid
+          ? 'Check the fee juice recipient address.'
+          : undefined
 
   // Success callbacks
   const mintL1SBTOnSuccess = (_data: any) => {
@@ -254,22 +325,55 @@ export default function Home() {
   const { data: hasL2SBT } = useL2HasSoulboundToken()
   const { mutate: mintL2SBT, isPending: mintL2SBTPending } = useL2MintSoulboundToken(mintL2SBTOnSuccess)
 
+  // Claim-gas guard: the final L2 claim needs FeeJuice. It self-funds only when
+  // fuel is enabled and directed to the bridger; otherwise the claim is paid from
+  // the bridger's standing FJ. We can only *read* public FJ (claim_public), so we
+  // hard-block just the provable stuck case: public deposit, no self-directed
+  // fuel, zero FJ, then steer the user into enabling gas top-up.
+  const { data: claimFeeLimitWei } = useClaimFeeEstimate(fuelType)
+  const claimPaidFromStandingFj =
+    bridgeConfig.direction === BridgeDirection.L1_TO_L2 && (!fuelEnabled || !!fuelRecipientOverride)
+  const noClaimGas =
+    claimPaidFromStandingFj &&
+    !isPrivacyModeEnabled &&
+    Number(bridgeConfig.amount) > 0 &&
+    feeJuiceBalance != null &&
+    Number(feeJuiceBalance) === 0
+  // Auto-enable trigger: the balance for the active mode won't cover the claim estimate.
+  // Public mode reads the user's own FJ; private mode reads the BridgedFPC balance (the
+  // readable "can pay a private claim" figure), so this works with privacy on too.
+  const claimGasBalance = isPrivacyModeEnabled ? privateFeeJuiceBalance : feeJuiceBalance
+  const insufficientClaimGas =
+    claimPaidFromStandingFj &&
+    Number(bridgeConfig.amount) > 0 &&
+    claimGasBalance != null &&
+    claimFeeLimitWei != null &&
+    Number(claimGasBalance) < Number(claimFeeLimitWei) / 1e18
+
+  // Auto-enable gas top-up when the claim would be underfunded. One-time latch so we
+  // never re-flip it back on after the user deliberately turns it off.
+  const autoFuelRef = useRef(false)
+  useEffect(() => {
+    if (insufficientClaimGas && !fuelEnabled && !autoFuelRef.current) {
+      autoFuelRef.current = true
+      setFuelEnabled(true)
+    }
+  }, [insufficientClaimGas, fuelEnabled, setFuelEnabled])
+
   // Bridge success callback (runs after L1→L2 bridge or L2→L1 withdrawal)
   const handleBridgeSuccess = useCallback(
     (_data: any) => {
-      notify.promise(
-        Promise.all([
-          refetchL1Balance(),
-          refetchL2Balance(),
-          refetchFeeJuiceBalance(),
-          refetchPrivateFeeJuiceBalance(),
-        ]),
-        {
-          pending: 'Refreshing balances...',
-          success: 'Balances updated',
-          error: 'Failed to refresh balances',
-        },
-      )
+      // BridgeHeader now carries the live "Refreshing balances" status (it reads
+      // the same balance-query fetching flags), so the pending/success corner
+      // toast is gone. Only a genuine refresh failure is surfaced, via the feed.
+      Promise.all([
+        refetchL1Balance(),
+        refetchL2Balance(),
+        refetchFeeJuiceBalance(),
+        refetchPrivateFeeJuiceBalance(),
+      ]).catch(() => {
+        pushNotification({ type: 'error', title: 'Failed to refresh balances' })
+      })
       setBridgeConfig({
         ...bridgeConfig,
         amount: '',
@@ -287,7 +391,6 @@ export default function Home() {
       refetchPrivateFeeJuiceBalance,
       setBridgeConfig,
       bridgeConfig,
-      notify,
     ],
   )
 
@@ -465,7 +568,12 @@ export default function Home() {
 
   return (
     <>
-      <RootStyle aside={<BridgeStepsRail />}>
+      <RootStyle
+        // No-scroll budget: cap the card so it never grows the RootStyle region past
+        // its 90vh floor (min-h-[650px] would otherwise push card+py-10 over 90vh on
+        // short laptops). Content beyond the cap scrolls inside the card, never the page.
+        className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden"
+      >
         {/* Maintenance Overlay - blocks all interactions when enabled */}
         {MAINTENANCE_MODE && <MaintenanceOverlay title={MAINTENANCE_TITLE} message={MAINTENANCE_MESSAGE} />}
         <AztecWalletConnectionModals />
@@ -501,116 +609,164 @@ export default function Home() {
 
         {showVerification && <VerificationStep onClose={() => setShowVerification(false)} />}
 
+        {/* No-scroll budget: a flex column capped at the same 90vh-5rem viewport
+            floor as the card. Header + footer are shrink-0; only the middle region
+            flexes and scrolls. Flex (not grid `1fr`) is used deliberately: a grid
+            `1fr` track under an indefinite (max-height-only) container resolves to
+            its content height, so `overflow-y-auto` inside it never engages and the
+            taller withdraw content spills/clips instead of scrolling. Flex-shrink on
+            a `flex-1 min-h-0` child bounds it correctly, so withdraw scrolls INSIDE
+            the card and the page never grows. */}
         <div
-          className={`grid grid-rows-[max-content_1fr_max-content] h-full ${
+          className={`flex flex-col w-full max-h-[calc(90vh-5rem)] overflow-hidden ${
             MAINTENANCE_MODE ? 'pointer-events-none' : ''
           }`}
         >
-          <div className="p-5">
-            <BridgeHeader
-              onClick={async () => {
-                // Explicit reset only. Never blanket-clear localStorage — encrypted
-                // recovery data for pending transfers lives there.
-                if (!window.confirm('Disconnect your wallets and reset? Pending transfers stay recoverable from Activity.')) return
-                await disconnectWaapWallet()
-                await disconnectAztecWallet()
-                window.location.reload()
-              }}
+          <div className="shrink-0 px-5 pt-2 pb-1.5">
+            <BridgeHeader />
+          </div>
+
+          {/* Scrolls internally (never the page) if an expanded accordion can't fit.
+              A faint bottom fade + chevron signals there's more below the fold (e.g. the
+              transaction breakdown) and clears once scrolled to the end. */}
+          <div className="relative flex-1 min-h-0 flex flex-col">
+            <div
+              ref={scrollRegionRef}
+              onScroll={updateScrollAffordance}
+              className="min-h-0 flex-1 overflow-y-auto px-5 pb-5"
+            >
+            <div ref={scrollContentRef}>
+            <BridgeSection
+              bridgeConfig={bridgeConfig}
+              setIsFromSection={setIsFromSection}
+              setSelectNetwork={setSelectNetwork}
+              setSelectToken={setSelectToken}
+              inputAmount={bridgeConfig.amount}
+              setInputAmount={handleAmountChange}
+              l1NativeBalance={l1NativeBalance}
+              l1Balance={l1Balance}
+              l2Balance={l2Balance}
+              direction={bridgeConfig.direction}
+              inputRef={inputRef as React.RefObject<HTMLInputElement>}
+              onSwap={swapDirection}
+              isPrivacyModeEnabled={isPrivacyModeEnabled}
+              feeJuiceBalance={feeJuiceBalance}
+              feeJuiceLoading={feeJuiceBalanceLoading}
+              attestationMethod={attestationData?.method ?? null}
+              passportMaxAmount={attestationData?.passportMaxAmount}
+              remainingDepositUsd={attestationData?.remainingDepositUsd}
+              passportScore={attestationData?.passportScore}
+              passportThreshold={attestationData?.passportThreshold}
+              reservedDepositUsd={attestationData?.reservedDepositUsd}
+              pochDailyLimitUsd={Number(BRIDGE_MAX_DEPOSIT_USD)}
+              youWillReceive={youWillReceiveAmount}
+              // Space-yielding: when either detail accordion is expanded, collapse From/To to
+              // one-line summary rows so the expanded detail fits without scrolling the card.
+              compact={showBreakdown || fuelDetailOpen}
             />
-          </div>
-
-          <div className="px-5">
-            <AnimatePresence mode="popLayout">
-              {!showBreakdown ? (
-                <motion.div
-                  key="bridge"
-                  initial="hidden"
-                  animate="enter"
-                  exit="exit"
-                  variants={variants}
-                  transition={{ ease: 'easeInOut', duration: 0.5 }}
-                >
-                  <BridgeSection
-                    bridgeConfig={bridgeConfig}
-                    setIsFromSection={setIsFromSection}
-                    setSelectNetwork={setSelectNetwork}
-                    setSelectToken={setSelectToken}
-                    inputAmount={bridgeConfig.amount}
-                    setInputAmount={handleAmountChange}
-                    l1NativeBalance={l1NativeBalance}
-                    l1Balance={l1Balance}
-                    l2Balance={l2Balance}
-                    direction={bridgeConfig.direction}
-                    inputRef={inputRef as React.RefObject<HTMLInputElement>}
-                    onSwap={swapDirection}
-                    isPrivacyModeEnabled={isPrivacyModeEnabled}
-                    feeJuiceBalance={feeJuiceBalance}
-                    feeJuiceLoading={feeJuiceBalanceLoading}
-                    attestationMethod={attestationData?.method ?? null}
-                    passportMaxAmount={attestationData?.passportMaxAmount}
-                    youWillReceive={youWillReceiveAmount}
-                  />
-                  {bridgeConfig.direction === BridgeDirection.L1_TO_L2 &&
-                    !!SWAP_BRIDGE_ROUTER_ADDRESS &&
-                    (!isPrivacyModeEnabled || !!BRIDGED_FPC_ADDRESS) && (
-                      <FuelToggle
-                        fuelEnabled={fuelEnabled}
-                        fuelAmount={fuelAmount}
-                        bridgeAmount={bridgeConfig.amount}
-                        tokenSymbol={bridgeConfig.from.token?.symbol ?? 'USDC'}
-                        tokenDecimals={bridgeConfig.from.token?.decimals ?? 6}
-                        tokenAddress={bridgeConfig.from.token?.l1TokenContract ?? ''}
-                        onToggle={setFuelEnabled}
-                        onAmountChange={setFuelAmount}
-                        feeJuiceBalance={feeJuiceBalance}
-                        privateFeeJuiceBalance={privateFeeJuiceBalance}
-                        feeJuiceBalanceLoading={feeJuiceBalanceLoading}
-                        privateFeeJuiceBalanceLoading={privateFeeJuiceBalanceLoading}
-                        fuelType={fuelType}
-                        onFuelTypeChange={setFuelType}
-                        onSufficiencyChange={setFuelSufficient}
-                        onRecipientValidityChange={setFuelRecipientValid}
-                        onFuelAmountValidChange={setFuelAmountValid}
-                        isPrivacyModeEnabled={isPrivacyModeEnabled}
-                        selfAztecAddress={aztecAddress ?? ''}
-                        fuelRecipientOverride={fuelRecipientOverride}
-                        onFuelRecipientOverrideChange={setFuelRecipientOverride}
-                      />
-                    )}
-                  <TransactionBreakdown isOpen={false} onToggle={() => setShowBreakdown(true)} />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="breakdown"
-                  initial="hidden"
-                  animate="enter"
-                  exit="exit"
-                  variants={variants}
-                  transition={{ ease: 'easeInOut', duration: 0.5 }}
-                >
-                  <TransactionBreakdown
-                    isOpen={true}
-                    onToggle={() => setShowBreakdown(false)}
-                    bridgeFee={portalFeeToken}
-                    bridgeFeeUsd={portalFeeUsd}
-                    receiveAmount={youWillReceiveAmount}
-                    tokenSymbol={feeTokenSymbol}
-                  />
-                </motion.div>
+            {bridgeConfig.direction === BridgeDirection.L1_TO_L2 &&
+              !!SWAP_BRIDGE_ROUTER_ADDRESS &&
+              (!isPrivacyModeEnabled || !!BRIDGED_FPC_ADDRESS) && (
+                <FuelToggle
+                  fuelEnabled={fuelEnabled}
+                  fuelAmount={fuelAmount}
+                  bridgeAmount={bridgeConfig.amount}
+                  youWillReceive={youWillReceiveAmount}
+                  tokenSymbol={bridgeConfig.from.token?.symbol ?? 'USDC'}
+                  tokenDecimals={bridgeConfig.from.token?.decimals ?? 6}
+                  tokenAddress={bridgeConfig.from.token?.l1TokenContract ?? ''}
+                  onToggle={setFuelEnabled}
+                  onAmountChange={setFuelAmount}
+                  feeJuiceBalance={feeJuiceBalance}
+                  privateFeeJuiceBalance={privateFeeJuiceBalance}
+                  feeJuiceBalanceLoading={feeJuiceBalanceLoading}
+                  privateFeeJuiceBalanceLoading={privateFeeJuiceBalanceLoading}
+                  fuelType={fuelType}
+                  onFuelTypeChange={setFuelType}
+                  onSufficiencyChange={setFuelSufficient}
+                  onRecipientValidityChange={setFuelRecipientValid}
+                  onFuelAmountValidChange={setFuelAmountValid}
+                  isPrivacyModeEnabled={isPrivacyModeEnabled}
+                  selfAztecAddress={aztecAddress ?? ''}
+                  fuelRecipientOverride={fuelRecipientOverride}
+                  onFuelRecipientOverrideChange={setFuelRecipientOverride}
+                  detailOpen={fuelDetailOpen}
+                  onDetailOpenChange={(open) => {
+                    setFuelDetailOpen(open)
+                    // Mutual exclusivity: opening the fuel detail collapses the breakdown.
+                    if (open) setShowBreakdown(false)
+                  }}
+                  onFuelQuoteChange={setFuelFjOutput}
+                />
               )}
-            </AnimatePresence>
+            {bridgeConfig.direction === BridgeDirection.L2_TO_L1 && (
+              <WithdrawFuelPanel
+                feeJuiceBalance={feeJuiceBalance}
+                privateFeeJuiceBalance={privateFeeJuiceBalance}
+                feeJuiceBalanceLoading={feeJuiceBalanceLoading}
+                privateFeeJuiceBalanceLoading={privateFeeJuiceBalanceLoading}
+                isPrivacyModeEnabled={isPrivacyModeEnabled}
+                bridgeAmount={bridgeConfig.amount}
+              />
+            )}
+            <TransactionBreakdown
+              isOpen={showBreakdown}
+              onToggle={() =>
+                setShowBreakdown((prev) => {
+                  const next = !prev
+                  // Mutual exclusivity: opening the breakdown collapses the fuel detail so the
+                  // card yields space instead of scrolling.
+                  if (next) setFuelDetailOpen(false)
+                  return next
+                })
+              }
+              bridgeFee={portalFeeToken}
+              bridgeFeeUsd={portalFeeUsd}
+              bridgeFeePercent={bridgeFeePercent}
+              receiveAmount={youWillReceiveAmount}
+              tokenSymbol={feeTokenSymbol}
+              fuelReserveToken={fuelReserveToken}
+              fuelReserveFj={fuelReserveFj}
+            />
+            </div>
+            </div>
+            {/* Scroll cue: fades to the card's white base and holds a subtle chevron while
+                there's content below the fold. pointer-events-none so it never blocks taps;
+                fades out at the end of the scroll. White base reads in both light and Privacy
+                Mode since the card itself stays white in both. */}
+            <div
+              aria-hidden="true"
+              className={`pointer-events-none absolute inset-x-0 bottom-0 flex h-11 items-end justify-center pb-1.5 bg-gradient-to-t from-[#ffffff] via-[rgba(255,255,255,0.82)] to-[rgba(255,255,255,0)] transition-opacity duration-200 ${
+                canScrollDown ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
+              <Icon icon="ph:caret-down-bold" width={16} height={16} className="text-latest-grey-400" />
+            </div>
           </div>
 
-          <div className="self-end">
-            <div className="rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[16px] pt-[16px] pr-[10px] pb-0 pl-[10px] w-full">
+          <div className="shrink-0">
+            <div className="sticky bottom-0 rounded-[16px] border border-[#D4D4D4] bg-white shadow-[0px_0px_16px_0px_rgba(0,0,0,0.16)] flex flex-col items-center gap-[6px] pt-[8px] pr-[10px] pb-0 pl-[10px] w-full">
               <BridgeActionButton
-                // Fuel gating only applies once both wallets are connected — otherwise it
-                // disables the Connect CTAs the button itself drives.
+                // Fuel gating is a DEPOSIT-only concern (fuel is carved out of the L1→L2
+                // bridge amount; withdrawals have no fuel carve). The FuelToggle that
+                // computes these flags only mounts in the L1_TO_L2 direction, so applying
+                // them to a withdrawal would gate it on a stale deposit-side value — the
+                // flags stay at whatever FuelToggle last reported and are never refreshed
+                // for L2_TO_L1. Scope the term to L1_TO_L2 so withdraw is symmetric and
+                // enables on first valid load without needing a deposit-direction round-trip.
+                // Also only gate once both wallets are connected — otherwise it would
+                // disable the Connect CTAs the button itself drives.
                 isDisabled={
-                  (isWaapConnected && isAztecConnected &&
+                  (bridgeConfig.direction === BridgeDirection.L1_TO_L2 &&
+                    isWaapConnected && isAztecConnected &&
                     (!fuelSufficient || !fuelRecipientValid || !fuelAmountValid)) ||
                   authFailed
                 }
+                disabledReason={bridgeDisabledReason}
+                // Binding conflict guard — disable + name the linked wallet
+                // before bridging into a guaranteed-failing pair.
+                bindingBlocked={!!bindingConflict}
+                bindingBlockedLabel={bindingBlockedLabel}
                 // Connection states
                 isWaapConnected={isWaapConnected}
                 connectWaapWallet={connectWaapWallet}
@@ -652,6 +808,8 @@ export default function Home() {
                 setShowSBTModal={setShowSBTModal}
                 setCurrentSBTChain={setCurrentSBTChain}
                 // Compliance attestation
+                needsClaimGas={noClaimGas}
+                onAddClaimGas={() => setFuelEnabled(true)}
                 pochEligible={attestationData?.eligible}
                 pochLoading={attestationLoading}
                 pochReason={attestationData?.reason}
@@ -661,6 +819,7 @@ export default function Home() {
                 remainingDepositUsd={attestationData?.remainingDepositUsd}
                 travelRuleBlocked={attestationData?.travelRuleExceeded}
                 travelRuleRemainingUsd={attestationData?.travelRuleRemainingUsd}
+                reservedDepositUsd={attestationData?.reservedDepositUsd}
                 // Operation completion state
                 bridgeCompleted={bridgeCompleted}
                 // Disable if L2 node error

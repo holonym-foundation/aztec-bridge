@@ -13,11 +13,9 @@ import { useL1TokenBalances } from '@/hooks/useL1Operations'
 import { useResumeL1BridgeToL2 } from '@/hooks/useResumeL1BridgeToL2'
 import { useResumeL2WithdrawToL1 } from '@/hooks/useResumeL2WithdrawToL1'
 import { L1_TOKEN_METADATA, L2_TOKEN_METADATA, L1_NETWORKS, L2_NETWORKS } from '@/config'
-import { useToast } from '@/hooks/useToast'
 
 export default function ResumePage() {
   const router = useRouter()
-  const notify = useToast()
   const operationStarted = useRef(false)
 
   const {
@@ -30,9 +28,15 @@ export default function ResumePage() {
     l2TxUrl,
     recoveryClaimData,
     recoveryWithdrawalData,
+    isPrivacyModeEnabled,
   } = useBridgeStore()
 
   const isL2ToL1Recovery = !!recoveryWithdrawalData
+
+  // The badge/mismatch warning must reflect the OPERATION being resumed, not the live toggle —
+  // the whole point is to catch "resuming a public claim while Privacy Mode is on". Read the mode
+  // off the recovery payload the operation was created with.
+  const operationIsPrivate = recoveryClaimData?.isPrivacyModeEnabled ?? recoveryWithdrawalData?.isPrivacyModeEnabled
 
   // Refetch balances on success
   const { aztecAddress } = useWalletStore()
@@ -48,21 +52,21 @@ export default function ResumePage() {
     if (aztecAddress) {
       refetches.push(refetchL2Balance(), refetchFeeJuiceBalance())
     }
-    notify.promise(Promise.allSettled(refetches), {
-      pending: 'Refreshing balances...',
-      success: 'Balances updated',
-      error: 'Failed to refresh balances',
-    })
-  }, [notify, aztecAddress, refetchL1Balance, refetchL2Balance, refetchFeeJuiceBalance])
+    // BridgeHeader now surfaces the live "Refreshing balances" status from the
+    // shared balance-query fetching flags, so no corner toast is raised here.
+    void Promise.allSettled(refetches)
+  }, [aztecAddress, refetchL1Balance, refetchL2Balance, refetchFeeJuiceBalance])
 
   const {
     mutate: resumeL1ToL2,
     isError: isResumeL1ToL2Error,
+    error: resumeL1ToL2Err,
   } = useResumeL1BridgeToL2(handleResumeSuccess)
 
   const {
     mutate: resumeL2ToL1,
     isError: isResumeL2ToL1Error,
+    error: resumeL2ToL1Err,
   } = useResumeL2WithdrawToL1(handleResumeSuccess)
 
   // On mount: reset step state and set direction
@@ -141,6 +145,9 @@ export default function ResumePage() {
 
   const steps = getProgressSteps()
   const hasError = isResumeL1ToL2Error || isResumeL2ToL1Error
+  const errorMessage =
+    (resumeL1ToL2Err instanceof Error ? resumeL1ToL2Err.message : null) ??
+    (resumeL2ToL1Err instanceof Error ? resumeL2ToL1Err.message : null)
 
   // Compute amount display
   const recoveryAmount = recoveryClaimData?.amount ?? recoveryWithdrawalData?.amount ?? '0'
@@ -154,24 +161,33 @@ export default function ResumePage() {
   const toNetwork = isL2ToL1Recovery ? (L1_NETWORKS[0]?.title ?? 'Ethereum') : (L2_NETWORKS[0]?.title ?? 'Aztec')
 
   return (
-    <RootStyle className=''>
-      <div className='px-5 pt-5'>
-        <div className='flex items-center gap-4'>
-          <BridgeHeader />
+    // Same no-scroll shell as /progress: cap the card to the 90vh budget and let the card body
+    // scroll inside itself if it ever can't fit, so the page never scrolls and nothing clips.
+    <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
+      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden">
+        <div className="px-5 pt-5">
+          <div className="flex items-center gap-4">
+            <BridgeHeader />
+          </div>
         </div>
 
-        <ProgressCard
-          steps={steps}
-          progressStep={progressStep}
-          hasError={hasError}
-          l1TxUrl={l1TxUrl}
-          l2TxUrl={l2TxUrl}
-          estimatedTimeSeconds={15 * 60}
-          amountDisplay={amountDisplay}
-          fromNetwork={fromNetwork}
-          toNetwork={toNetwork}
-          direction={isL2ToL1Recovery ? 'L2_TO_L1' : 'L1_TO_L2'}
-        />
+        <div className="px-5 pb-5 min-h-0 flex-1 overflow-y-auto">
+          <ProgressCard
+            steps={steps}
+            progressStep={progressStep}
+            hasError={hasError}
+            l1TxUrl={l1TxUrl}
+            l2TxUrl={l2TxUrl}
+            estimatedTimeSeconds={15 * 60}
+            amountDisplay={amountDisplay}
+            fromNetwork={fromNetwork}
+            toNetwork={toNetwork}
+            direction={isL2ToL1Recovery ? 'L2_TO_L1' : 'L1_TO_L2'}
+            errorMessage={errorMessage}
+            isPrivate={operationIsPrivate}
+            currentPrivacyMode={isPrivacyModeEnabled}
+          />
+        </div>
       </div>
     </RootStyle>
   )

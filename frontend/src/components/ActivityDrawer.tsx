@@ -1,0 +1,587 @@
+'use client'
+
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Icon } from '@iconify/react'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
+import { formatUnits } from 'viem'
+import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
+import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
+import { useResumableCount } from '@/hooks/useResumableCount'
+import { useWalletStore } from '@/stores/walletStore'
+import { useBridgeStore } from '@/stores/bridgeStore'
+import { useToast } from '@/hooks/useToast'
+import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
+import { L1_TOKEN_METADATA, L1_NETWORKS, AZTEC_VERSION } from '@/config'
+import { BridgeDirection } from '@/types/bridge'
+import { LocalRecoveryPanel } from '@/components/LocalRecoveryPanel'
+import StyledImage from '@/components/StyledImage'
+
+// Motion values mirrored from the human-tech design system (docs/tokens.css):
+// --dur-enter / --ease-slide for the panel that slides out from the tab.
+const DS_DUR_ENTER = 0.32
+const DS_EASE_SLIDE: [number, number, number, number] = [0.32, 0.72, 0, 1]
+
+// Shared right-edge peek coordination (#160): each binder tab announces its open
+// state; a tab that sees another open closes itself, so only one peeks at a time.
+const PEEK_EVENT = 'shield:peek'
+type PeekSignal = { id: string; open: boolean }
+
+type StatusMeta = { label: string; className: string }
+
+const STATUS_META: Record<string, StatusMeta> = {
+  pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' },
+  deposited: { label: 'Deposited', className: 'bg-blue-100 text-blue-800' },
+  claimed: { label: 'Claimed', className: 'bg-purple-100 text-purple-800' },
+  submitted: { label: 'Submitted', className: 'bg-blue-100 text-blue-800' },
+  ready: { label: 'Ready', className: 'bg-indigo-100 text-indigo-800' },
+  pending_finalize: { label: 'Finalizing', className: 'bg-indigo-100 text-indigo-800' },
+  completed: { label: 'Completed', className: 'bg-green-100 text-green-800' },
+  failed: { label: 'Failed', className: 'bg-red-100 text-red-800' },
+}
+
+const MAX_VISIBLE_OPS = 5
+
+// Network/deployment this app instance runs against. The operation record does
+// not persist a per-op network or Aztec version, so we surface the current active
+// deployment. Same config-derived source and "vX Alpha" language the nav's
+// DeploymentSelector uses.
+const DEPLOYMENT_LABEL = [L1_NETWORKS[0]?.title, AZTEC_VERSION ? `v${AZTEC_VERSION} Alpha` : null]
+  .filter(Boolean)
+  .join(' · ')
+
+// Deposit = Ethereum (L1) to Aztec (L2); withdraw = Aztec (L2) to Ethereum (L1).
+// Same logo assets + arrow the ProgressCard from/to block uses. Visible text is
+// gone, so the group carries an aria-label/title announcing the direction.
+function DirectionLogos({ direction }: { direction: BridgeOperation['direction'] }) {
+  const isDeposit = direction === 'L1_TO_L2'
+  const eth = '/assets/svg/ethLogo.svg'
+  const aztec = '/assets/svg/aztec.svg'
+  const first = isDeposit ? eth : aztec
+  const second = isDeposit ? aztec : eth
+  const label = isDeposit ? 'L1 to L2' : 'L2 to L1'
+  return (
+    <span role="img" aria-label={label} title={label} className="inline-flex items-center gap-1">
+      <StyledImage src={first} alt="" className="h-[15px] w-[15px] shrink-0" />
+      <Icon icon="ph:arrow-right" width={11} height={11} className="text-[#989898]" aria-hidden="true" />
+      <StyledImage src={second} alt="" className="h-[15px] w-[15px] shrink-0" />
+    </span>
+  )
+}
+
+// Recent-bridge-operations peek, mirroring BridgeStepsRail's drawer pattern but
+// on the card's right edge. Reuses useBridgeOperations for data and duplicates
+// only the resume/decrypt flow from /activity — everything else (share fuel
+// claim links, full history) stays on the full Activity page we link out to.
+type ActivityDrawerProps = { variant?: 'rail' | 'dock' }
+
+const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => {
+  const isDock = variant === 'dock'
+  const router = useRouter()
+  const notify = useToast()
+  const panelId = useId()
+  const peekId = useId()
+  const prefersReducedMotion = useReducedMotion()
+
+  const { waapAddress: l1Address, signWaapMessage, isWaapConnected, connectWaapWallet } = useWalletStore()
+  const { setRecovery, setWithdrawalRecovery, setDirection } = useBridgeStore()
+  const { data: operations, isLoading } = useBridgeOperations()
+
+  // Hover previews the panel; a click pins it open. On touch (no hover) the tap
+  // toggles `pinned`, so the same handle works on every size.
+  const [hovered, setHovered] = useState(false)
+  const [pinned, setPinned] = useState(false)
+  const [resumingId, setResumingId] = useState<string | null>(null)
+  const [recoverOpen, setRecoverOpen] = useState(false)
+  // The panel is anchored to the tab's bottom and grows UPWARD (#229), so it
+  // never spills below the tab into the floating chat widget. Cap its height to
+  // the room actually above the tab's bottom edge so the header and the "View
+  // full activity" footer always stay on-screen no matter where the dock sits.
+  const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined)
+  const open = hovered || pinned
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const handleRef = useRef<HTMLButtonElement>(null)
+
+  const closeDesktop = () => {
+    setPinned(false)
+    setHovered(false)
+    handleRef.current?.focus()
+  }
+
+  // ── Peek coordination (#160): announce our open state; close on a sibling's.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent<PeekSignal>(PEEK_EVENT, { detail: { id: peekId, open } }))
+  }, [open, peekId])
+
+  useEffect(() => {
+    const onPeek = (e: Event) => {
+      const detail = (e as CustomEvent<PeekSignal>).detail
+      if (!detail || detail.id === peekId || !detail.open) return
+      setHovered(false)
+      setPinned(false)
+    }
+    window.addEventListener(PEEK_EVENT, onPeek)
+    return () => window.removeEventListener(PEEK_EVENT, onPeek)
+  }, [peekId])
+
+  // Esc + outside click close a pinned desktop drawer. Only wired up while
+  // pinned so hover-only previews don't pay for a global listener.
+  useEffect(() => {
+    if (!pinned) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setPinned(false)
+      setHovered(false)
+      handleRef.current?.focus()
+    }
+    const onPointerDown = (e: PointerEvent) => {
+      if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+        setPinned(false)
+        setHovered(false)
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [pinned])
+
+  // Measure the space above the tab's bottom edge and cap the panel to it, so the
+  // upward-growing panel is never clipped by the viewport top (or, on short
+  // screens, forced to overlap the chat widget below). Re-measures on resize.
+  useEffect(() => {
+    if (!open) return
+    const measure = () => {
+      const rect = handleRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - 12)))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [open])
+
+  // Esc closes the recovery overlay.
+  useEffect(() => {
+    if (!recoverOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setRecoverOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [recoverOpen])
+
+  const recentOps = useMemo(() => {
+    if (!operations) return []
+    return [...operations]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, MAX_VISIBLE_OPS)
+  }, [operations])
+
+  // Count across ALL operations (not just the visible 5), so the tab flags
+  // resumable work even when it has scrolled out of the recent peek.
+  const resumableCount = useResumableCount()
+
+  const handleResume = async (operation: BridgeOperation) => {
+    if (!l1Address) {
+      notify('error', 'Please connect your Ethereum wallet first')
+      return
+    }
+
+    setResumingId(operation.id)
+    try {
+      const decrypted = await decryptOperationPayload(operation, l1Address, signWaapMessage)
+
+      if (!decrypted) {
+        throw new Error(
+          'Could not decrypt operation data. Make sure you are using the same wallet that created this bridge.',
+        )
+      }
+
+      if (operation.direction === 'L2_TO_L1') {
+        const recoveryData: RecoveryWithdrawalData = {
+          operationId: operation.id,
+          amount: decrypted.amount ?? operation.amountL2 ?? operation.amountL1 ?? '0',
+          l1Address: decrypted.l1Address ?? l1Address,
+          l2Address: decrypted.l2Address ?? '',
+          l2TxHash: operation.l2TxHash,
+          l2TxUrl: operation.l2TxUrl,
+          l2BlockNumber: operation.l2BlockNumber,
+          l2BlockNumberBeforeTx: operation.l2BlockNumberBeforeTx,
+          l2ToL1MessageIndex: operation.l2ToL1MessageIndex,
+          siblingPath: operation.siblingPath,
+          epoch: operation.epoch,
+          numCheckpointsInEpoch: operation.numCheckpointsInEpoch,
+          recipientL1Address: operation.recipientL1Address ?? l1Address,
+          rollupVersion: operation.rollupVersion,
+          chainIdL1: operation.chainIdL1,
+          portalAddressL1: operation.portalAddressL1,
+          bridgeAddressL2: operation.bridgeAddressL2,
+          l1RollupAddress: operation.l1RollupAddress,
+          l1OutboxAddress: operation.l1OutboxAddress,
+          isPrivacyModeEnabled: operation.isPrivacyModeEnabled ?? false,
+          nodeInfo: operation.nodeInfo,
+          status: operation.status,
+          currentStep: operation.currentStep,
+        }
+
+        setDirection(BridgeDirection.L2_TO_L1)
+        setWithdrawalRecovery(operation.id, recoveryData)
+        router.push('/progress/resume')
+      } else {
+        if (!decrypted.claimSecret || !decrypted.claimSecretHash) {
+          throw new Error(
+            'Could not decrypt claim secret. Make sure you are using the same wallet that created this bridge.',
+          )
+        }
+
+        const recoveryData: RecoveryClaimData = {
+          operationId: operation.id,
+          claimSecret: decrypted.claimSecret,
+          claimSecretHash: decrypted.claimSecretHash,
+          messageHash: operation.messageHash,
+          messageLeafIndex: operation.messageLeafIndex,
+          amount: decrypted.amount ?? operation.amountL1 ?? '0',
+          claimAmount: operation.claimAmount ?? null,
+          l1Address: decrypted.l1Address ?? l1Address,
+          l2Address: decrypted.l2Address ?? '',
+          l1TxHash: operation.l1TxHash,
+          l1TxUrl: operation.l1TxUrl,
+          l1BlockNumberBeforeTx: operation.l1BlockNumberBeforeTx,
+          isPrivacyModeEnabled: operation.isPrivacyModeEnabled ?? false,
+          nodeInfo: operation.nodeInfo,
+          status: operation.status,
+          currentStep: operation.currentStep,
+          portalAddressL1: operation.portalAddressL1,
+          bridgeAddressL2: operation.bridgeAddressL2,
+          tokenAddressL1: operation.tokenAddressL1,
+          tokenAddressL2: operation.tokenAddressL2,
+          fuelSecret: decrypted.fuelSecret ?? null,
+          privateFuelSalt: decrypted.privateFuelSalt ?? null,
+          privateFuelSecret: decrypted.privateFuelSecret ?? null,
+          fuelMessageHash: operation.fuelMessageHash ?? null,
+          fuelMessageLeafIndex: operation.fuelMessageLeafIndex ?? null,
+          fuelAmount: operation.fuelAmount ?? null,
+        }
+
+        setDirection(BridgeDirection.L1_TO_L2)
+        setRecovery(operation.id, recoveryData)
+        router.push('/progress/resume')
+      }
+
+      setPinned(false)
+      setHovered(false)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to decrypt'
+      notify('error', msg)
+    } finally {
+      setResumingId(null)
+    }
+  }
+
+  const renderOp = (op: BridgeOperation) => {
+    const decimals = op.tokenDecimalsL1 ?? L1_TOKEN_METADATA.decimals
+    const tokenSymbol = op.tokenSymbol ?? op.tokenSymbolL1 ?? L1_TOKEN_METADATA.symbol
+    const amount = op.amountDisplayL1 ?? (op.amountL1 ? formatUnits(BigInt(op.amountL1), decimals) : '?')
+    const opDate = new Date(op.createdAt)
+    const date = `${opDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${opDate.toLocaleTimeString(
+      undefined,
+      { hour: 'numeric', minute: '2-digit' },
+    )}`
+    const meta = STATUS_META[op.status] ?? { label: op.status, className: 'bg-gray-100 text-gray-800' }
+    const showResume = isResumable(op) || hasPossibleLockedFunds(op)
+
+    return (
+      <li key={op.id} className="border-b border-[#F0F0F0] py-2.5 last:border-b-0 last:pb-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <DirectionLogos direction={op.direction} />
+            {/* Public (globe/navy) vs private (lock/maroon) — same language as ActivityCard (#230a). */}
+            {op.isPrivacyModeEnabled ? (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-[#FDE7F3] px-1.5 py-0.5 text-[9px] font-semibold text-[#81133B]">
+                <Icon icon="ph:lock-key-fill" width={9} height={9} />
+                Private
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-[#E5EFFF] px-1.5 py-0.5 text-[9px] font-semibold text-[#17235E]">
+                <Icon icon="ph:globe-hemisphere-west-fill" width={9} height={9} />
+                Public
+              </span>
+            )}
+          </div>
+          <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${meta.className}`}>
+            {meta.label}
+          </span>
+        </div>
+        <div className="mt-0.5 flex items-center justify-between gap-2">
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#0A0A0A]">
+            {amount} {tokenSymbol}
+          </span>
+          <span className="flex-shrink-0 text-[11px] text-[#989898]">{date}</span>
+        </div>
+        {DEPLOYMENT_LABEL && (
+          <p className="mt-0.5 truncate text-[10px] text-[#989898]">{DEPLOYMENT_LABEL}</p>
+        )}
+        {showResume && (
+          <button
+            onClick={() => handleResume(op)}
+            disabled={resumingId === op.id}
+            className="mt-1.5 rounded-md bg-[#17235E] px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-[#17235E]/90 disabled:opacity-50"
+          >
+            {resumingId === op.id ? 'Decrypting…' : 'Resume'}
+          </button>
+        )}
+      </li>
+    )
+  }
+
+  const panelBody = (onClose?: () => void) => (
+    <>
+      <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#989898]">Bridge activity</p>
+          {resumableCount > 0 && (
+            <span className="flex-shrink-0 rounded-full bg-[#FDE7F3] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.3px] text-[#81133B]">
+              {resumableCount} to finish
+            </span>
+          )}
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-0.5">
+          {/* Recover from local backup, reduced to a key icon (#179) so it no longer
+              eats a full row. Opens as an overlay over the current view (#195) rather
+              than navigating away. Tooltip explains the action on hover/focus. */}
+          <button
+            type="button"
+            onClick={() => {
+              setPinned(false)
+              setHovered(false)
+              setRecoverOpen(true)
+            }}
+            data-tooltip-id="activity-recover-tip"
+            data-tooltip-content="Restore a bridge from a local backup key if it is missing here."
+            aria-label="Recover from local backup"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-[#81133B] transition-colors hover:bg-[#FDE7F3] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#81133B]/40"
+          >
+            <Icon icon="ph:key" width={14} height={14} />
+          </button>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="-mr-1 flex h-6 w-6 items-center justify-center rounded-full text-[#989898] transition-colors hover:bg-[#F0F0F0] hover:text-[#0A0A0A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#17235E]/40"
+            >
+              <Icon icon="ph:x-bold" width={13} height={13} />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {isLoading && <p className="text-[12px] text-[#989898]">Loading…</p>}
+        {!isLoading &&
+          recentOps.length === 0 &&
+          (isWaapConnected ? (
+            // Connected but no operations yet — genuine empty state.
+            <p className="text-[12px] text-[#989898]">No bridge operations yet.</p>
+          ) : (
+            // Not connected — don't imply the history is empty (#163). Prompt to connect.
+            <div className="flex flex-col items-center gap-2 py-5 text-center">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E5EFFF] text-[#17235E]">
+                <Icon icon="ph:plugs" width={18} height={18} />
+              </span>
+              <p className="text-[12px] font-medium text-[#737373]">Connect your wallet to see your activity</p>
+              <button
+                type="button"
+                onClick={() => connectWaapWallet().catch(() => {})}
+                className="mt-0.5 inline-flex items-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#17235E]/90"
+              >
+                <Icon icon="ph:wallet" width={14} height={14} />
+                Connect wallet
+              </button>
+            </div>
+          ))}
+        {recentOps.length > 0 && <ul className="flex flex-col">{recentOps.map(renderOp)}</ul>}
+      </div>
+      <div className="mt-3 shrink-0 border-t border-[#F0F0F0] pt-3">
+        <button
+          onClick={() => router.push('/activity')}
+          className="flex items-center gap-1.5 text-[12px] font-medium text-[#737373] transition-colors hover:text-[#0A0A0A]"
+        >
+          <Icon icon="ph:clock-counter-clockwise" width={15} height={15} />
+          View full activity
+        </button>
+      </div>
+      <ReactTooltip id="activity-recover-tip" place="left" className="z-[100]" style={{ fontSize: '11px', maxWidth: '200px' }} />
+    </>
+  )
+
+  // A slim binder tab pinned to the viewport's right edge, stacked below the
+  // Tutorial tab by the dock in ClientLayout. Hover or click peeks the recent
+  // activity panel out to the LEFT of the tab — same direction as Tutorial, so
+  // the two read as one binder. The panel is absolutely positioned so opening it
+  // never reflows (splits apart) the sibling tabs (#114). The dock is fixed, so
+  // it never adds page scroll and persists across every app screen.
+  return (
+    <>
+    {isDock ? (
+      // Narrow-viewport dock (#243): a compact round icon button in the
+      // bottom-left mobile dock. Keeps the clock-counter-clockwise identity + the
+      // "transfers to finish" count badge and opens the same activity panel as a
+      // bottom-anchored sheet that stays on-screen on phones.
+      <div
+        ref={drawerRef}
+        className="pointer-events-auto relative"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key="panel"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+              className="fixed bottom-[76px] left-4 z-40 w-[300px] max-w-[calc(100vw-2rem)]"
+            >
+              <div
+                id={panelId}
+                className="flex max-h-[70dvh] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
+              >
+                {panelBody(closeDesktop)}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          ref={handleRef}
+          type="button"
+          aria-expanded={open}
+          aria-label={
+            resumableCount > 0
+              ? `Bridge activity, ${resumableCount} ${resumableCount === 1 ? 'transfer' : 'transfers'} to finish`
+              : 'Bridge activity'
+          }
+          aria-controls={panelId}
+          onClick={() => setPinned((p) => !p)}
+          className={`relative flex h-11 w-11 items-center justify-center rounded-full border bg-white shadow-[0px_6px_16px_0px_rgba(0,0,0,0.12)] transition-colors ${
+            open ? 'border-[#17235E]/40' : 'border-[#D4D4D4]'
+          }`}
+        >
+          <Icon icon="ph:clock-counter-clockwise" width={18} height={18} className="text-[#737373]" aria-hidden="true" />
+          {resumableCount > 0 ? (
+            <span
+              aria-hidden="true"
+              className="absolute -right-1 -top-1 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#81133B] px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white"
+            >
+              {resumableCount > 9 ? '9+' : resumableCount}
+            </span>
+          ) : (
+            <span aria-hidden="true" className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#17235E] ring-2 ring-white" />
+          )}
+        </button>
+      </div>
+    ) : (
+    <div
+      ref={drawerRef}
+      className="pointer-events-auto relative flex items-center justify-end"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="panel"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 280, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+            className="absolute bottom-0 right-[calc(100%_+_12px)] overflow-hidden"
+          >
+            <div
+              id={panelId}
+              style={{ maxHeight: maxPanelHeight }}
+              className="flex max-h-[calc(100dvh-1.5rem)] w-[280px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
+            >
+              {panelBody(closeDesktop)}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <button
+        ref={handleRef}
+        type="button"
+        aria-expanded={open}
+        aria-label={
+          resumableCount > 0
+            ? `Bridge activity, ${resumableCount} ${resumableCount === 1 ? 'transfer' : 'transfers'} to finish`
+            : 'Bridge activity'
+        }
+        aria-controls={panelId}
+        onClick={() => setPinned((p) => !p)}
+        className={`flex h-[120px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-[width,border-color] duration-200 ease-out ${
+          open ? 'border-[#17235E]/40' : 'border-[#D4D4D4] hover:border-[#17235E]/30'
+        } ${open && !prefersReducedMotion ? 'w-[42px]' : 'w-9'}`}
+      >
+        {resumableCount > 0 ? (
+          // Attention badge: a shield-pink count sits where the neutral status
+          // dot would, so the user sees "you have N transfers to finish"
+          // without opening the drawer. Ring keeps it legible against the tab
+          // on either theme. Static (no pulse) so it is reduced-motion safe.
+          <span
+            aria-hidden="true"
+            className="flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#81133B] px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white/90"
+          >
+            {resumableCount > 9 ? '9+' : resumableCount}
+          </span>
+        ) : (
+          <span className="h-1.5 w-1.5 rounded-full bg-[#17235E]" aria-hidden="true" />
+        )}
+        <Icon icon="ph:clock-counter-clockwise" width={15} height={15} className="text-[#737373]" aria-hidden="true" />
+        <span
+          className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
+          style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+        >
+          Activity
+        </span>
+      </button>
+    </div>
+    )}
+
+    {/* Recover-from-local-backup overlay (#195): opens OVER the current view
+        instead of navigating to a full page. */}
+    <AnimatePresence>
+      {recoverOpen && (
+        <motion.div
+          key="recover-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: prefersReducedMotion ? 0 : 0.18 }}
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4"
+          onClick={() => setRecoverOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Recover from local backup"
+        >
+          <div
+            className="w-[360px] max-w-full max-h-[calc(90vh-2rem)] min-h-[520px] overflow-hidden rounded-xl bg-white shadow-[0px_15px_34px_0px_rgba(0,0,0,0.20)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <LocalRecoveryPanel variant="modal" onClose={() => setRecoverOpen(false)} />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
+  )
+}
+
+export default ActivityDrawer

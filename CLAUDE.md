@@ -1,5 +1,17 @@
 # Aztec Bridge UI — Project Rules
 
+## Design & UX — read first
+
+**For ANY UI / UX / frontend / design work, read these two docs FIRST, before writing a component:**
+
+1. Parent brand principles — `assets/brand/brand-principles.md` (universal, app-agnostic)
+2. Shield product SOP — `products/shield/design-sop.md` (Shield-specific bindings + overrides)
+
+Both live in [`holonym-foundation/internal-docs`](https://github.com/holonym-foundation/internal-docs). Follow the inheritance chain top to bottom: **parent brand → design system ([`human-tech-design-system`](https://github.com/holonym-foundation/human-tech-design-system)) → Storybook (synced components) → product SOP.** A product SOP may tighten a universal rule but never loosen brand hygiene or contrast; if a mock and the SOP disagree, the SOP wins until it's updated.
+
+- **Before shipping / deploy:** run `cd frontend && pnpm design-lint` (the harness in `frontend/scripts/design-lint.mjs`). It is **advisory today, to become blocking** once the tree is clean — see the SOP §11. Every product build should include a design-linting step.
+- **If a rule is unclear, wrong, or you find yourself fighting it:** don't silently deviate. **PROPOSE an update to the SOP or RECORD the conflict** as a comment on [#1769](https://github.com/holonym-foundation/internal-docs/issues/1769) (or a new issue). The SOP is a living contract, not a frozen doc.
+
 ## Project Overview
 
 This is the **Aztec Token Bridge** — a full-stack system for bridging ERC-20 tokens from Ethereum L1 to Aztec L2 with optional atomic fuel swaps (swap a portion of bridged tokens into FeeJuice for L2 gas).

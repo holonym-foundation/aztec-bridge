@@ -5,10 +5,46 @@ interface ResumableFields {
   l1TxHash?: string | null
   l1BlockNumberBeforeTx?: string | null
   l2TxHash?: string | null
+  lastErrorMessage?: string | null
+}
+
+// The L1→L2 message was already spent — the claim actually went through on a prior attempt.
+// This is a "you're already done" signal, not a loss. "No non-nullified L1 to L2 message found"
+// (SDK #47) is the most common shape: the message was consumed by a prior successful claim, so a
+// re-run has nothing left to claim. Kept in sync with ProgressCard's CONSUMED_ERROR_NEEDLES.
+const CONSUMED_ERROR_NEEDLES = [
+  'already consumed',
+  'already claimed',
+  'already been claimed',
+  'nullifier already',
+  'existing nullifier',
+  'already been consumed',
+  'has already been',
+  'no non-nullified',
+  'non-nullified l1 to l2',
+]
+
+/** True when a stored operation error means the deposit's L1→L2 message was already consumed. */
+export function isConsumedMessageError(message?: string | null): boolean {
+  if (!message) return false
+  const m = message.toLowerCase()
+  return CONSUMED_ERROR_NEEDLES.some((needle) => m.includes(needle))
+}
+
+/**
+ * True when the operation most likely already completed: its stored error is a
+ * consumed / "no non-nullified" message, so a Resume would just re-fail. The UI
+ * treats these as "likely completed — check your L2 balance", never as resumable.
+ */
+export function isLikelyCompleted(op: { lastErrorMessage?: string | null }): boolean {
+  return isConsumedMessageError(op.lastErrorMessage)
 }
 
 /** True for statuses where the user's funds are locked and can be resumed */
 export function isResumable(op: ResumableFields): boolean {
+  // A consumed-message op has nothing left to claim — resuming only re-fails.
+  // Surface it as "likely completed" instead (see isLikelyCompleted), never resumable.
+  if (isConsumedMessageError(op.lastErrorMessage)) return false
   if (op.direction === 'L1_TO_L2') {
     return (
       (op.status === 'deposited' || op.status === 'claimed') &&
@@ -34,6 +70,8 @@ export function hasPossibleLockedFunds(op: {
   status: string
   l1TxHash?: string | null
   l2TxHash?: string | null
+  lastErrorMessage?: string | null
 }): boolean {
+  if (isConsumedMessageError(op.lastErrorMessage)) return false
   return op.status === 'pending' && (!!op.l1TxHash || !!op.l2TxHash)
 }

@@ -214,6 +214,41 @@ import { BRIDGED_FPC_DOMAIN_SEPARATOR } from '../contracts/constants'
 // ─── L2 Claim Execution ─────────────────────────────────────────────
 
 /**
+ * Resolve the fate of a claim tx that was submitted but whose inclusion wait
+ * expired. Polls the node receipt until the tx is mined, dropped, or the
+ * watch window closes. Without a node client we cannot verify, so report
+ * 'dropped' to preserve the legacy resubmit behavior (the nullifier makes a
+ * duplicate claim harmless on-chain).
+ */
+async function watchPendingClaimTx(
+  aztecNode: L2ClaimDeps['aztecNode'],
+  txHash: string,
+  opts: { pollIntervalMs: number; maxWaitMs: number },
+): Promise<{ outcome: 'success' | 'reverted' | 'dropped' | 'timeout'; receipt?: any }> {
+  if (!aztecNode) {
+    console.warn('[SDK Claim] no aztecNode in deps — cannot verify pending tx, will resubmit')
+    return { outcome: 'dropped' }
+  }
+  const start = Date.now()
+  do {
+    try {
+      const receipt = await aztecNode.getTxReceipt(txHash)
+      const status = receipt?.status != null ? String(receipt.status) : undefined
+      if (status === 'dropped') return { outcome: 'dropped', receipt }
+      if (status && status !== 'pending') {
+        const execution = receipt.executionResult != null ? String(receipt.executionResult) : undefined
+        if (!execution || execution === 'success') return { outcome: 'success', receipt }
+        return { outcome: 'reverted', receipt }
+      }
+    } catch (err) {
+      console.warn('[SDK Claim] getTxReceipt failed while watching pending tx (will retry):', err)
+    }
+    await wait(opts.pollIntervalMs)
+  } while (Date.now() - start < opts.maxWaitMs)
+  return { outcome: 'timeout' }
+}
+
+/**
  * Execute claim_public or claim_private on L2.
  *
  * If messageLeafIndex is provided: retry up to maxAttempts on "nonexistent message".
@@ -231,17 +266,21 @@ export async function executeL2Claim(
     retryDelayMs?: number
     bruteForceMaxIndex?: number
     walletTimeoutMs?: number
+    pendingPollIntervalMs?: number
+    pendingWatchMs?: number
     onAttempt?: (attempt: number, maxAttempts: number) => void
     onRetry?: (attempt: number, maxAttempts: number, retryDelayMs: number) => void
     feeOption?: { fee: { paymentMethod: any } }
   },
 ): Promise<L2ClaimResult> {
-  const { walletAdapter, aztecAddress, isPrivacyModeEnabled } = deps
+  const { walletAdapter, aztecAddress, isPrivacyModeEnabled, aztecNode } = deps
   const { amount, claimSecret, messageLeafIndex } = params
   const maxAttempts = options?.maxAttempts ?? 10
   const retryDelayMs = options?.retryDelayMs ?? 120_000
   const bruteForceMaxIndex = options?.bruteForceMaxIndex ?? 64
   const walletTimeoutMs = options?.walletTimeoutMs ?? 5 * 60_000 // 5 min default
+  const pendingPollIntervalMs = options?.pendingPollIntervalMs ?? 20_000
+  const pendingWatchMs = options?.pendingWatchMs ?? 10 * 60_000
 
   const method = isPrivacyModeEnabled ? 'claim_private' : 'claim_public'
 
@@ -264,7 +303,39 @@ export async function executeL2Claim(
 
   if (messageLeafIndex != null) {
     let result: { txHash: string } | undefined
+    let pendingTxHash: string | undefined
+    let messageGoneStreak = 0
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // A previous attempt submitted a tx whose inclusion wait expired.
+      // Resolve its fate before ever re-submitting: the tx may well have
+      // landed after the wallet gave up waiting, in which case the messages
+      // are nullified and any resubmission is guaranteed to fail.
+      if (pendingTxHash) {
+        console.log(`[SDK Claim] watching earlier submission ${pendingTxHash} instead of resubmitting`)
+        const fate = await watchPendingClaimTx(aztecNode, pendingTxHash, {
+          pollIntervalMs: pendingPollIntervalMs,
+          maxWaitMs: pendingWatchMs,
+        })
+        if (fate.outcome === 'success') {
+          console.log(`[SDK Claim] earlier submission ${pendingTxHash} was mined successfully`)
+          return { l2TxHash: pendingTxHash, usedBruteForce: false }
+        }
+        if (fate.outcome === 'reverted') {
+          throw new Error(
+            `The L2 claim transaction was included but reverted (${fate.receipt?.executionResult}). ` +
+              'Do not retry as-is: with bridged fuel, the fee-payment setup phase is non-revertible, so the ' +
+              `fuel message may already be consumed. Resume this deposit from the Activity page. (${pendingTxHash})`,
+          )
+        }
+        if (fate.outcome === 'timeout') {
+          throw new Error(
+            'The L2 claim transaction was submitted and is still pending. It may yet be included — ' +
+              `check the Activity page before retrying. (${pendingTxHash})`,
+          )
+        }
+        // dropped — the tx never made it into a block, safe to submit again
+        pendingTxHash = undefined
+      }
       try {
         options?.onAttempt?.(attempt, maxAttempts)
         result = await callWithTimeout(
@@ -295,10 +366,58 @@ export async function executeL2Claim(
           errLower.includes('user cancelled')
         if (isUserRejection) throw err
 
+        // The wallet submitted the tx but gave up waiting for inclusion.
+        // Switch to watching that tx (next loop iteration) instead of
+        // re-submitting a duplicate. Prefer the structured txHash the wallet
+        // adapter attaches; fall back to the hash embedded in the message.
+        if (errLower.includes('still pending and was not included')) {
+          const submittedHash =
+            (err as any)?.txHash ?? errMsg.match(/0x[0-9a-fA-F]{64}/)?.[0]
+          if (submittedHash && attempt < maxAttempts) {
+            pendingTxHash = String(submittedHash)
+            continue
+          }
+        }
+
         // Non-transient errors that should surface immediately rather than retry
-        if (errLower.includes('message already consumed') || errLower.includes('already been consumed')) {
+        if (
+          errLower.includes('message already consumed') ||
+          errLower.includes('already been consumed') ||
+          errLower.includes('message has already been nullified')
+        ) {
           throw new Error('This deposit has already been claimed.')
         }
+
+        // "No non-nullified L1 to L2 message found": the message is either
+        // nullified or gone. Callers verify message readiness right before
+        // claiming, so when this persists it means consumed — retrying can
+        // never succeed. Without fuel the only consumer is this claim, so it
+        // already happened. With fuel we cannot tell a fully-landed claim
+        // from a reverted one that only consumed the fuel message (setup
+        // phase is non-revertible), so surface that honestly instead of
+        // reporting success.
+        if (errLower.includes('no non-nullified l1 to l2 message')) {
+          messageGoneStreak++
+          if (messageGoneStreak >= 2) {
+            if (!options?.feeOption) {
+              throw new Error('This deposit has already been claimed.')
+            }
+            throw new Error(
+              'The L1→L2 message for this claim was consumed by an earlier attempt that most likely ' +
+                'succeeded. Check your L2 balance before retrying; if the tokens have not arrived, ' +
+                'resume this deposit from the Activity page.',
+            )
+          }
+          if (attempt < maxAttempts) {
+            const shortDelayMs = Math.min(retryDelayMs, 30_000)
+            options?.onRetry?.(attempt, maxAttempts, shortDelayMs)
+            await wait(shortDelayMs)
+            continue
+          }
+          throw err
+        }
+        messageGoneStreak = 0
+
         if (
           errLower.includes('capability scope') ||
           errLower.includes('not in capability') ||
@@ -358,6 +477,30 @@ export async function executeL2Claim(
       `Could not find correct messageLeafIndex after trying 0–${bruteForceMaxIndex - 1}. ` +
         'The L1→L2 message may not be synced to L2 yet. Try again later.',
     )
+  }
+}
+
+// A flat gas ceiling forces MetaMask to reserve `gasLimit × gasPrice` of ETH up
+// front for its pre-flight balance check, regardless of what the tx actually
+// burns — a 16M ceiling demanded ~0.03 ETH free balance and blocked users who
+// held enough for the real cost. Estimate against the node and buffer instead;
+// only fall back to a fixed (but far lower) ceiling if estimation reverts.
+async function estimateL1BridgeGas(
+  publicClient: ReturnType<typeof createL1PublicClient>,
+  tx: { from: string; to: string; data: string },
+  fallbackGas: bigint,
+): Promise<string> {
+  try {
+    const est = await publicClient.estimateGas({
+      account: tx.from as `0x${string}`,
+      to: tx.to as `0x${string}`,
+      data: tx.data as `0x${string}`,
+    })
+    // 1.5× buffer: multi-hop V4 swaps vary run-to-run and estimateGas can undershoot.
+    const buffered = (est * 3n) / 2n
+    return `0x${buffered.toString(16)}`
+  } catch {
+    return `0x${fallbackGas.toString(16)}`
   }
 }
 
@@ -731,9 +874,11 @@ export async function bridgeL1ToL2(
       }
     }
 
-    // Check and approve allowance for Permit2 (one-time per token).
-    // All deposits go through SwapBridgeRouter with Permit2 — approve the
-    // canonical Permit2 contract with max uint256 (one-time).
+    // Check and approve allowance for Permit2. All deposits go through
+    // SwapBridgeRouter with Permit2 — approve the canonical Permit2 contract for
+    // exactly this deposit's amount rather than max uint256, so a leaked/abused
+    // Permit2 allowance can't drain more than the current bridge. Consumed each
+    // deposit, so a fresh approval is sent whenever the remaining allowance is short.
     const spender = PERMIT2_ADDRESS
     const totalApprovalNeeded = amount
 
@@ -748,7 +893,7 @@ export async function bridgeL1ToL2(
       const approveData = encodeFunctionData({
         abi: TestERC20Abi,
         functionName: 'approve',
-        args: [spender as `0x${string}`, BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')],
+        args: [spender as `0x${string}`, totalApprovalNeeded],
       })
 
       const approveTxHash = await sendTransaction({
@@ -872,13 +1017,16 @@ export async function bridgeL1ToL2(
         ],
       })
 
-      txHash = await sendTransaction({
+      const fuelTx = {
         from: l1Address,
         to: config.swapBridgeRouterAddress,
         data: bridgeData,
-        // 16M — bridgeWithFuel is complex (Permit2 + V4 swap + 2 portal deposits).
-        // Wallet estimation is unreliable for multi-hop swaps with state writes.
-        gas: '0xF42400',
+      }
+      txHash = await sendTransaction({
+        ...fuelTx,
+        // bridgeWithFuel is heavy (Permit2 + V4 swap + 2 portal deposits); 5M is
+        // the fallback ceiling only if node estimation reverts.
+        gas: await estimateL1BridgeGas(publicClient, fuelTx, 5_000_000n),
       })
     } else {
       // ── Standard path: call SwapBridgeRouter.bridge via Permit2 ──
@@ -925,13 +1073,16 @@ export async function bridgeL1ToL2(
         ],
       })
 
-      txHash = await sendTransaction({
+      const bridgeTx = {
         from: l1Address,
         to: config.swapBridgeRouterAddress,
         data: bridgeData,
-        // 16M — bridge tx can be complex with Permit2 + portal deposit.
-        // Main sets this override on both bridge and bridgeWithFuel.
-        gas: '0xF42400',
+      }
+      txHash = await sendTransaction({
+        ...bridgeTx,
+        // Plain Permit2 bridge + single portal deposit; 1M is the fallback
+        // ceiling only if node estimation reverts.
+        gas: await estimateL1BridgeGas(publicClient, bridgeTx, 1_000_000n),
       })
     }
 
@@ -963,9 +1114,16 @@ export async function bridgeL1ToL2(
       },
     )
 
-    const l1TxPatchOk = await patchOperationWithRetry(apiClient, operationId, { l1TxHash, l1TxUrl }, { label: 'l1TxHash' })
+    const l1TxPatchData: Record<string, unknown> = { l1TxHash, l1TxUrl }
+    // Report the passport nonce this deposit consumed so the server stops
+    // double-counting its budget reservation once the deposit confirms. Only the
+    // passport path carries one (cleanHands/POCH deposits reserve no budget).
+    if (passportData.signature.length > 2) {
+      l1TxPatchData.attestationNonce = passportData.nonce.toString()
+    }
+    const l1TxPatchOk = await patchOperationWithRetry(apiClient, operationId, l1TxPatchData, { label: 'l1TxHash' })
     if (!l1TxPatchOk) {
-      emit({ type: BridgeEventType.PATCH_FAILED, operationId: operationId!, label: 'l1TxHash', data: { l1TxHash, l1TxUrl } })
+      emit({ type: BridgeEventType.PATCH_FAILED, operationId: operationId!, label: 'l1TxHash', data: l1TxPatchData })
     }
 
     // Wait for receipt — only AFTER receipt confirms do we know funds are locked.
@@ -1236,7 +1394,7 @@ export async function bridgeL1ToL2(
       // `fuelAmount >= maxGasCost`, so we need the fee-rate cap applied here
       // to match what checkFuelSufficiency('private') validated earlier.
       const { PrivateMintAndPayFeePaymentMethod, maxFeesPerGasFromBaseFees } =
-        await import('@alejoamiras/aztec-fee-payment')
+        await import('@alejoamiras/private-fee-juice')
       const { Gas, GasFees } = await import('@aztec/stdlib/gas')
       const baseFees = await aztecNode.getCurrentMinFees()
       const gasLimits = Gas.from({ l2Gas: 2_000_000, daGas: 50_000 })
@@ -1299,7 +1457,7 @@ export async function bridgeL1ToL2(
     const claimAmount = amountAfterFee ?? amount
 
     const claimResult = await executeL2Claim(
-      { walletAdapter, aztecAddress: l2Address, isPrivacyModeEnabled: isPrivate },
+      { walletAdapter, aztecAddress: l2Address, isPrivacyModeEnabled: isPrivate, aztecNode },
       { amount: claimAmount, claimSecret, messageLeafIndex: BigInt(messageLeafIndexStr) },
       {
         onAttempt: (attempt, maxAttempts) => {

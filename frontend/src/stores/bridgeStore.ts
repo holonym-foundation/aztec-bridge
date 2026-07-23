@@ -264,7 +264,7 @@ const initialState = {
   ...initialRecoveryState,
   ...initialCurrentOperationState,
   isPrivacyModeEnabled: getInitialPrivacyMode(),
-  fuelEnabled: false,
+  fuelEnabled: true,
   fuelAmount: '',
   fuelType: 'public' as const,
   fuelRecipientOverride: '',
@@ -288,7 +288,7 @@ const bridgeStore = create<BridgeStoreState>((set, get) => ({
   },
 
   // Fuel (gas funding) actions
-  fuelEnabled: false,
+  fuelEnabled: true,
   fuelAmount: '',
   fuelType: 'public' as const,
   fuelRecipientOverride: '',
@@ -440,7 +440,7 @@ const bridgeStore = create<BridgeStoreState>((set, get) => ({
       recoveryClaimData: null,
       recoveryWithdrawalData: null,
       currentOperationId: null,
-      fuelEnabled: false,
+      fuelEnabled: true,
       fuelAmount: '',
       fuelType: 'public' as const,
       fuelRecipientOverride: '',

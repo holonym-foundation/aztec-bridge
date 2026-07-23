@@ -1,5 +1,5 @@
 {
-  "id": "5.0.0_2026-07-17",
+  "id": "5.0.1_2026-07-17",
   "deployedAt": "2026-07-17T07:56:13.591Z",
   "network": {
     "name": "testnet",
@@ -7,7 +7,7 @@
     "l1RpcUrl": "",
     "l1ChainId": 11155111,
     "l2ChainId": 1816023401,
-    "aztecVersion": "5.0.0",
+    "aztecVersion": "5.0.1",
     "rollupVersion": 1821665230
   },
   "l1ContractAddresses": {

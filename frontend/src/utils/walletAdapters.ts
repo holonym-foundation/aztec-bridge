@@ -41,7 +41,7 @@ async function getContractArtifact(type: ContractType) {
     return loadContractArtifact(proxyJson.default ?? proxyJson)
   }
   if (type === 'bridged_fpc') {
-    const { PrivateFPCContractArtifact } = await import('@alejoamiras/aztec-fee-payment')
+    const { PrivateFPCContractArtifact } = await import('@alejoamiras/private-fee-juice')
     return PrivateFPCContractArtifact
   }
   if (type === 'fee_juice') {
@@ -66,14 +66,21 @@ function assertReceiptSuccess(receipt: {
   txHash: { toString(): string }
 }) {
   const hash = receipt.txHash.toString()
+  // The structured txHash lets the SDK's claim retry loop watch the submitted
+  // tx instead of parsing the hash back out of the message text.
+  const fail = (message: string): never => {
+    const err = new Error(message)
+    ;(err as any).txHash = hash
+    throw err
+  }
   if (receipt.status === 'dropped') {
-    throw new Error(`L2 transaction was dropped by the network (${hash}). ${receipt.error ?? 'Try again.'}`)
+    fail(`L2 transaction was dropped by the network (${hash}). ${receipt.error ?? 'Try again.'}`)
   }
   if (receipt.status === 'pending') {
-    throw new Error(`L2 transaction is still pending and was not included in a block (${hash}).`)
+    fail(`L2 transaction is still pending and was not included in a block (${hash}).`)
   }
   if (receipt.executionResult && receipt.executionResult !== 'success') {
-    throw new Error(`L2 transaction reverted (${receipt.executionResult}): ${receipt.error ?? hash}`)
+    fail(`L2 transaction reverted (${receipt.executionResult}): ${receipt.error ?? hash}`)
   }
 }
 
@@ -148,7 +155,7 @@ class WalletAdapter {
     // locally and register it with the wallet's PXE.
     if (BRIDGED_FPC_ADDRESS) {
       try {
-        const { registerPrivateContract } = await import('@alejoamiras/aztec-fee-payment')
+        const { registerPrivateContract } = await import('@alejoamiras/private-fee-juice')
         await registerPrivateContract(this.wallet, Fr.ZERO)
       } catch {
         // May already be registered
@@ -273,6 +280,55 @@ class WalletAdapter {
   }
 
   /**
+   * Build a fee option that pays L2 gas from the sender's private (BridgedFPC)
+   * balance via the FPC's pay_fee(), so a withdrawal doesn't need public
+   * FeeJuice and the FPC — not the user — is the on-chain fee payer.
+   *
+   * Gas limits are derived by SIMULATING the actual interaction (padded + clamped
+   * to the network's per-tx admission limit) — never hardcoded. `pay_fee()`
+   * deducts the full max gas cost with no refund, so we pass the sender's FPC
+   * balance as `maxAcceptableGasCost`: a client-side ceiling that refuses to
+   * declare a fee larger than the balance even if the node misreports base fees.
+   *
+   * `interaction` must already carry any required authWitnesses (via `.with(...)`)
+   * so the internal simulation authorizes the same way the final send will.
+   *
+   * Returns null when no BridgedFPC is configured, the balance is empty/short, or
+   * estimation fails; callers then fall back to native FJ payment. The balance is
+   * keyed to the tx sender (this.account), which is msg_sender inside pay_fee().
+   */
+  private async buildFpcFeeOption(
+    interaction: { simulate: (opts: any) => Promise<any> },
+  ): Promise<{ paymentMethod: any; gasSettings: any } | null> {
+    if (!BRIDGED_FPC_ADDRESS) return null
+    try {
+      const { FPCFeePaymentMethod } = await import('@alejoamiras/private-fee-juice')
+      const { estimateGasSettings, maxGasCostFor } = await import('@alejoamiras/private-fee-juice/utils')
+
+      const { result } = await this.simulateView(BRIDGED_FPC_ADDRESS, 'balance_of', [this.account])
+      const fpcBalance = BigInt(result.toString())
+      if (fpcBalance === 0n) return null
+
+      const paymentMethod = new FPCFeePaymentMethod(AztecAddress.fromStringUnsafe(BRIDGED_FPC_ADDRESS))
+      const gasSettings = await estimateGasSettings(interaction as any, {
+        aztecNode,
+        from: this.account,
+        paymentMethod,
+        maxAcceptableGasCost: fpcBalance,
+      })
+
+      // maxGasCostFor mirrors the Noir get_max_gas_cost the FPC deducts on-chain.
+      const maxGasCost = maxGasCostFor(gasSettings.maxFeesPerGas, gasSettings.gasLimits)
+      if (fpcBalance < maxGasCost) return null
+
+      return { paymentMethod, gasSettings }
+    } catch (err) {
+      console.warn('[walletAdapter] BridgedFPC fee option unavailable, falling back to native FJ:', err)
+      return null
+    }
+  }
+
+  /**
    * Public withdrawal to L1 — compliance-gated, batched into a single transaction:
    * 1. Set public authwit in AuthRegistry (set_authorized) so the proxy can burn_public on user's behalf
    * 2. Bridge.authorize_exit_to_l1_public (private entry) — verifies the POCH/Passport attestation
@@ -380,19 +436,24 @@ class WalletAdapter {
       call: burnCall, // consumer = call.to = tokenAddr
     })
 
-    const { receipt } = await bridge.methods
-      .exit_to_l1_private(
-        EthAddress.fromString(l1Address),
-        amount,
-        EthAddress.ZERO,
-        nonce,
-        cleanHandsData,
-        passportData,
-      )
-      .send({
-        from: this.account,
-        authWitnesses: [authWit],
-      })
+    // Bake the authwit into the interaction so both gas-estimation simulation and
+    // the final send authorize burn_private identically.
+    const interaction = bridge.methods
+      .exit_to_l1_private(EthAddress.fromString(l1Address), amount, EthAddress.ZERO, nonce, cleanHandsData, passportData)
+      .with({ authWitnesses: [authWit] })
+
+    // Pay L2 burn gas from the private (BridgedFPC) balance when it covers the
+    // cost — a privacy-mode user has topped up private fuel, not public FeeJuice.
+    // Falls back to native FJ (from: this.account) when no FPC balance is
+    // available, preserving the prior behavior for users with public FJ.
+    const feeOption = await this.buildFpcFeeOption(interaction)
+    const sendOpts: any = { from: this.account }
+    if (feeOption) {
+      sendOpts.fee = feeOption
+      sendOpts.skipFeeEnforcement = true
+    }
+
+    const { receipt } = await interaction.send(sendOpts)
     assertReceiptSuccess(receipt)
 
     return {

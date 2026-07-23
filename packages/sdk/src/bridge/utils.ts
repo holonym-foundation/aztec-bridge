@@ -252,6 +252,13 @@ export function assertValidEpoch(epoch: bigint | null | undefined, l2BlockNumber
  * and mark the operation as completed when funds never arrived.
  */
 export function isAlreadyConsumedError(errMsg: string): boolean {
+  // Aztec 5.0 splits the L1→L2 message errors into two shapes with OPPOSITE
+  // meanings: "No L1 to L2 message found" / "nonexistent L1-to-L2 message" /
+  // "l1_to_l2_msg_exists" mean NOT ANCHORED YET (keep waiting — the claim is
+  // still possible), while "No non-nullified L1 to L2 message found" means
+  // anchored AND nullified (consumed). Matching a not-ready shape here marks
+  // an unclaimed deposit as completed and strands the funds — never add the
+  // not-ready shapes to this list.
   const patterns = [
     /already\s*(nullified|consumed)/i,
     /nothing\s*to\s*consume/i,
@@ -259,10 +266,12 @@ export function isAlreadyConsumedError(errMsg: string): boolean {
     /AlreadyConsumed/i,
     /message.*already.*consumed/i,
     /note.*already.*consumed/i,
-    /nonexistent L1-to-L2 message/i,
-    /l1_to_l2_msg_exists/i,
+    /message has already been nullified/i,
     // NothingToConsumeAtBlock(uint256,uint256) = keccak256 selector 0x945d8c59
     /0x945d8c59/i,
+    // executeL2Claim's user-facing conversion of the consumed-message errors —
+    // resume must recognize it as completion, not failure
+    /deposit has already been claimed/i,
   ]
   return patterns.some((p) => p.test(errMsg))
 }

@@ -20,7 +20,11 @@ const sections: DocsSection[] = [
           transaction as final.
         </P>
         <UL>
-          <li>The software is experimental and unaudited.</li>
+          <li>
+            Shield&apos;s components are independently audited, each scoped to its component: the bridge contracts by
+            Nethermind Security, the Clean Hands ZK circuits by Hexens, and the Human Network cryptography by Halborn.
+            The Aztec network it runs on is still an early (alpha) network, so undiscovered bugs are still possible.
+          </li>
           <li>There are no warranties, refunds, or insurance.</li>
           <li>
             It is non-custodial: the protocol smart contracts hold your funds in transit, not Human Tech. No one can
@@ -161,6 +165,15 @@ const sections: DocsSection[] = [
           As you approach the cap, the action button shows how much you have left (e.g. &quot;Only $4.20 left (Alpha
           limit)&quot;) and then locks once the cap is reached.
         </P>
+        <Callout tone="info">
+          <strong>Pending-deposit holds (Human Passport).</strong> When you request a Human Passport attestation for a
+          deposit, that deposit&apos;s amount is briefly reserved against your limits so a signed authorization
+          can&apos;t be stockpiled and spent later to slip past the caps. The hold clears the moment the deposit
+          confirms on-chain, so successful deposits back-to-back are unaffected. If a deposit fails or is abandoned, its
+          hold releases automatically within 30 minutes — so a retry that would exceed your remaining budget may need to
+          wait for it to clear. The button shows &quot;Pending deposit — limit frees in ≤30 min&quot; while a hold is
+          blocking it.
+        </Callout>
       </>
     ),
   },
@@ -336,6 +349,13 @@ const sections: DocsSection[] = [
           <li>
             <strong>&quot;Alpha Deposit Limit Reached&quot;.</strong> You&apos;ve used the ${maxDepositUsd} per-user daily cap
             (rolling 24h). Budget frees up as your earlier deposits age past 24 hours.
+          </li>
+          <li>
+            <strong>&quot;Pending deposit — limit frees in ≤30 min&quot;.</strong> A Human Passport deposit you started
+            is still holding part of your limit (see{' '}
+            <a href="#limits" className="text-latest-blue-100 underline">Rate Limits &amp; Caps</a>). Once that deposit
+            confirms the hold clears immediately; if it failed or was abandoned, the hold releases on its own within 30
+            minutes and you can retry.
           </li>
           <li>
             <strong>An RPC/batch error toast.</strong> Some free RPC endpoints reject batched requests. Use a paid RPC

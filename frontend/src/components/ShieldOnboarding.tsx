@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useWalletStore } from '@/stores/walletStore'
+import { useOnboardingStore } from '@/stores/useOnboardingStore'
 
 const ONBOARDED_KEY = 'shield_onboarded'
 const BRAND = '#81133B'
-const CLEAN_SDK = 'https://www.npmjs.com/package/@human.tech/clean.sdk'
+const CLEAN_SDK = 'https://human.tech/clean-sdk'
 const DOCS_CLEAN_HANDS = '/docs/users'
 
 type Screen = {
@@ -21,7 +22,7 @@ type Screen = {
 const SCREENS: Screen[] = [
   {
     eyebrow: 'Private bridge\nEthereum ⇄ Aztec',
-    title: 'Private transactions have arrived for Ethereum funds',
+    title: 'Private Transactions for Ethereum Have Arrived',
     body: (
       <p>Move your funds between Ethereum and Aztec with privacy.</p>
     ),
@@ -32,10 +33,13 @@ const SCREENS: Screen[] = [
     eyebrow: 'Opt in to privacy',
     title: 'Shield your funds',
     body: (
-      <p>
-        On Ethereum every balance and transfer is public. Bridge into Aztec to make yours private,
-        screened on the way in so the pool stays clean.
-      </p>
+      <>
+        <p>
+          On Ethereum every balance and transfer is public. Bridge into Aztec to make yours private,
+          screened on the way in so the pool stays clean.
+        </p>
+        <BridgePreview />
+      </>
     ),
     cta: 'Next',
     visual: 'shield',
@@ -64,12 +68,31 @@ const SCREENS: Screen[] = [
               <strong>Above $1,000</strong>
               <span>
                 Prove your hands are clean.{' '}
-                <InfoTooltip href="https://human.tech/shield" label="Learn more about Proof of Clean Hands">
-                  Above $1,000 you verify a government ID in zero knowledge. Learn more at human.tech/shield.
+                <InfoTooltip label="Learn more about Proof of Clean Hands" align="right">
+                  Above $1,000 you verify a government ID in zero knowledge.{' '}
+                  <a href="https://human.tech/shield" target="_blank" rel="noopener noreferrer">Learn more</a>.
                 </InfoTooltip>
               </span>
             </div>
           </div>
+        </div>
+        <div className="ob-tier-ctas">
+          <a
+            href="https://app.passport.xyz/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ob-pill ob-pill-primary"
+          >
+            Human Passport
+          </a>
+          <a
+            href="https://id.human.tech/clean-hands"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ob-pill ob-pill-outline"
+          >
+            Proof of Clean Hands
+          </a>
         </div>
       </>
     ),
@@ -89,9 +112,9 @@ const SCREENS: Screen[] = [
         </p>
         <p>
           <strong>2M+ users</strong> and <strong>44M+ credentials</strong> already run on
-          human.tech&apos;s ZK stack. It follows a strict data minimization standard. We verify
-          what&apos;s needed and store nothing more.
+          human.tech&apos;s ZK stack.
         </p>
+        <ZkPulse />
       </>
     ),
     cta: 'Connect wallet',
@@ -112,6 +135,65 @@ function usePrefersDark() {
     return () => mq.removeEventListener('change', onChange)
   }, [])
   return dark
+}
+
+/* Alphanet caution badge — sits above the hero eyebrow. Amber (not brand pink) so it
+   reads as a warning, with a hover/focus tooltip so users know this is an early network
+   before they bridge real value. */
+function AlphanetBadge() {
+  const [open, setOpen] = useState(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimer.current = setTimeout(() => setOpen(false), 240)
+  }
+  return (
+    <span
+      className="ob-alpha"
+      onMouseEnter={() => {
+        cancelClose()
+        setOpen(true)
+      }}
+      onMouseLeave={scheduleClose}
+    >
+      <span
+        className="ob-alpha-pill"
+        tabIndex={0}
+        role="note"
+        aria-label="Alphanet release warning"
+        onFocus={() => setOpen(true)}
+        onBlur={scheduleClose}
+      >
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" />
+        </svg>
+        Alphanet
+      </span>
+      <AnimatePresence>
+        {open && (
+          <motion.span
+            className="ob-tooltip-bubble ob-alpha-bubble"
+            role="tooltip"
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+          >
+            Shield runs on Aztec Alphanet, an early-stage network. Treat every transaction as final and bridge only what you can afford to lose.{' '}
+            <a href="https://aztec.network/blog/introducing-alpha-v5" target="_blank" rel="noopener noreferrer">Learn about Alpha v5</a>.
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </span>
+  )
 }
 
 /* Paper-shader field: real @paper-design MeshGradient in Shield tones, softened by a
@@ -145,11 +227,14 @@ const CX_CORE = 30
 const CX_STEPS = 48
 const CX_SPIRAL_TURNS = 3 // integer turns so the point ends exactly where it began (seamless loop)
 
+// `dashMini` is a coarser dash pattern for the minimized mark: literally scaling the hero's
+// 1.4/320-viewBox stroke down to a ~60px mark would put the ring under a physical pixel wide
+// (invisible). Small marks need their linework re-weighted, not just shrunk, to stay legible.
 const CX_RINGS = [
-  { r: 148, dash: '1.5 15', duration: 46, dir: 1 },
-  { r: 114, dash: '1.5 12', duration: 34, dir: -1 },
-  { r: 80, dash: '1.5 10', duration: 26, dir: 1 },
-  { r: 48, dash: '1.5 8', duration: 19, dir: -1 },
+  { r: 148, dash: '1.5 15', dashMini: '7 22', duration: 46, dir: 1 },
+  { r: 114, dash: '1.5 12', dashMini: '6 18', duration: 34, dir: -1 },
+  { r: 80, dash: '1.5 10', dashMini: '5 15', duration: 26, dir: 1 },
+  { r: 48, dash: '1.5 8', dashMini: '4 12', duration: 19, dir: -1 },
 ]
 
 function cxPoint(radius: number, angleDeg: number) {
@@ -183,9 +268,13 @@ const CX_X = CX_SPIRAL.map((p) => p.x)
 const CX_Y = CX_SPIRAL.map((p) => p.y)
 const CX_FILL = CX_SPIRAL.map((p) => p.fill)
 const CX_OPACITY = CX_SPIRAL.map((p) => p.opacity)
+const CX_OPACITY_MINI = CX_OPACITY.map((o) => o * 0.72)
 const CX_GLOW = CX_SPIRAL.map((p) => p.glow)
 
-function CryptexVisual({ still }: { still: boolean }) {
+// `mini` dials back stroke/point opacity and drops the blurred outer glow point (its blur
+// radius is a fixed px value that dominates at small sizes) so the mark reads as a subtle,
+// quiet echo once it's minimized into the eyebrow rather than competing with the copy.
+function CryptexVisual({ still, mini = false }: { still: boolean; mini?: boolean }) {
   return (
     <svg className="ob-cryptex-svg" viewBox={`0 0 ${CX_SIZE} ${CX_SIZE}`} aria-hidden="true">
       <defs>
@@ -206,9 +295,9 @@ function CryptexVisual({ still }: { still: boolean }) {
             r={ring.r}
             fill="none"
             stroke={i === 0 ? '#e79cbe' : i === CX_RINGS.length - 1 ? '#5a1f36' : '#c96f97'}
-            strokeWidth={1.4}
-            strokeDasharray={ring.dash}
-            opacity={0.5}
+            strokeWidth={mini ? 6 : 1.4}
+            strokeDasharray={mini ? ring.dashMini : ring.dash}
+            opacity={mini ? 0.5 : 0.5}
           />
         ) : (
           <motion.g
@@ -222,11 +311,11 @@ function CryptexVisual({ still }: { still: boolean }) {
               cy={CX_CENTER}
               r={ring.r}
               fill="none"
-              strokeWidth={1.4}
-              strokeDasharray={ring.dash}
+              strokeWidth={mini ? 6 : 1.4}
+              strokeDasharray={mini ? ring.dashMini : ring.dash}
               animate={{
                 stroke: ['#f2b7d3', '#5a1f36', '#f2b7d3'],
-                opacity: [0.28, 0.72, 0.28],
+                opacity: mini ? [0.2, 0.5, 0.2] : [0.28, 0.72, 0.28],
               }}
               transition={{
                 duration: 9,
@@ -241,15 +330,17 @@ function CryptexVisual({ still }: { still: boolean }) {
 
       {!still && (
         <>
+          {!mini && (
+            <motion.circle
+              r={11}
+              animate={{ cx: CX_X, cy: CX_Y, fill: CX_FILL, opacity: CX_GLOW }}
+              transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
+              style={{ filter: 'blur(5px)' }}
+            />
+          )}
           <motion.circle
-            r={11}
-            animate={{ cx: CX_X, cy: CX_Y, fill: CX_FILL, opacity: CX_GLOW }}
-            transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
-            style={{ filter: 'blur(5px)' }}
-          />
-          <motion.circle
-            r={4}
-            animate={{ cx: CX_X, cy: CX_Y, fill: CX_FILL, opacity: CX_OPACITY }}
+            r={mini ? 9 : 4}
+            animate={{ cx: CX_X, cy: CX_Y, fill: CX_FILL, opacity: mini ? CX_OPACITY_MINI : CX_OPACITY }}
             transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
           />
         </>
@@ -257,25 +348,49 @@ function CryptexVisual({ still }: { still: boolean }) {
 
       {still && (
         <>
-          <circle cx={cxPoint(CX_OUTER, 40).x} cy={cxPoint(CX_OUTER, 40).y} r={4.5} fill="#f462a6" />
-          <circle cx={cxPoint(CX_CORE + 4, 220).x} cy={cxPoint(CX_CORE + 4, 220).y} r={3.5} fill="#3d0e21" opacity={0.7} />
+          <circle cx={cxPoint(CX_OUTER, 40).x} cy={cxPoint(CX_OUTER, 40).y} r={mini ? 9 : 4.5} fill="#f462a6" />
+          <circle cx={cxPoint(CX_CORE + 4, 220).x} cy={cxPoint(CX_CORE + 4, 220).y} r={mini ? 7 : 3.5} fill="#3d0e21" opacity={0.7} />
         </>
       )}
     </svg>
   )
 }
 
-/* A quiet echo of the cryptex mark — a faint dashed ring behind the glyph, no motion. */
-function StaticGlyph({ kind }: { kind: 'shield' | 'identity' | 'zk' }) {
-  const label = kind === 'shield' ? 'Private on Aztec' : kind === 'identity' ? 'Human · verified' : 'Zero knowledge'
+// Shared layoutId used only within the multi-screen flow, so Framer Motion morphs the same
+// element between its hero size (screen 0) and its mini size (screens 1-3) instead of
+// cross-fading two different nodes — this is what produces the "minimize into the eyebrow"
+// motion. The splash (`shared` unset) always shows the plain hero, no shared transition needed.
+const CRYPTEX_LAYOUT_ID = 'ob-cryptex-shell'
+
+function CryptexMark({ reduce, mini = false, shared = false }: { reduce: boolean; mini?: boolean; shared?: boolean }) {
+  const shellClass = `ob-cryptex-shell${mini ? ' ob-cryptex-shell-mini' : ''}`
+
+  if (reduce) {
+    return (
+      <div className={shellClass}>
+        <CryptexVisual still mini={mini} />
+      </div>
+    )
+  }
+
   return (
-    <div className={`ob-glyph ob-glyph-${kind}`}>
-      <svg className="ob-glyph-ring" viewBox="0 0 120 120" aria-hidden="true">
-        <circle cx="60" cy="60" r="52" fill="none" stroke="#e79cbe" strokeWidth="1.2" strokeDasharray="1.5 11" opacity="0.55" />
-      </svg>
-      <img src="/assets/svg/shield-symbol-maroon.svg" alt="" width={64} height={80} />
-      <span>{label}</span>
-    </div>
+    <motion.div
+      layout
+      layoutId={shared ? CRYPTEX_LAYOUT_ID : undefined}
+      className={shellClass}
+      transition={{ layout: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } }}
+    >
+      <CryptexVisual still={false} mini={mini} />
+      {!mini && (
+        <div className="ob-epicenter" aria-hidden="true">
+          <MeshGradient
+            colors={['#f462a6', '#b23a72', '#4d051f', '#81133b']}
+            speed={0.32}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+          />
+        </div>
+      )}
+    </motion.div>
   )
 }
 
@@ -303,9 +418,22 @@ function TierIcon({ kind }: { kind: 'unique' | 'clean' }) {
    hover or keyboard focus. No external positioning library, no portal, just a relatively
    positioned bubble anchored to the trigger. The trigger sits inline with the sentence
    and never forces a line break. */
-function InfoTooltip({ label, children, href }: { label: string; children: ReactNode; href?: string }) {
+function InfoTooltip({ label, children, align = 'center' }: { label: string; children: ReactNode; align?: 'center' | 'right' }) {
   const [open, setOpen] = useState(false)
   const tooltipId = useId()
+  // Small close delay so the pointer can travel from the icon into the bubble
+  // (to click the link inside) without the bubble vanishing mid-move.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimer.current = setTimeout(() => setOpen(false), 240)
+  }
   const icon = (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.3" />
@@ -314,43 +442,30 @@ function InfoTooltip({ label, children, href }: { label: string; children: React
     </svg>
   )
   return (
-    <span className="ob-tooltip" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      {href ? (
-        <a
-          className="ob-tooltip-trigger"
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={label}
-          aria-describedby={tooltipId}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
-        >
-          {icon}
-        </a>
-      ) : (
-        <button
-          type="button"
-          className="ob-tooltip-trigger"
-          aria-label={label}
-          aria-describedby={tooltipId}
-          aria-expanded={open}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
-          onClick={() => setOpen((o) => !o)}
-        >
-          {icon}
-        </button>
-      )}
+    <span className="ob-tooltip" onMouseEnter={() => { cancelClose(); setOpen(true) }} onMouseLeave={scheduleClose}>
+      <button
+        type="button"
+        className="ob-tooltip-trigger"
+        aria-label={label}
+        aria-describedby={tooltipId}
+        aria-expanded={open}
+        onFocus={() => setOpen(true)}
+        onBlur={scheduleClose}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {icon}
+      </button>
       <AnimatePresence>
         {open && (
           <motion.span
             id={tooltipId}
             role="tooltip"
-            className="ob-tooltip-bubble"
-            initial={{ opacity: 0, y: 4, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
+            className={`ob-tooltip-bubble${align === 'right' ? ' ob-tooltip-bubble-right' : ''}`}
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
           >
             {children}
@@ -361,10 +476,95 @@ function InfoTooltip({ label, children, href }: { label: string; children: React
   )
 }
 
+/* Screen-2 bridge preview: a small mock of the bridge itself — a public balance on
+   Ethereum, a shield, and the resulting private balance on Aztec. Line art holds still at
+   rest; a soft dot travels the path on a loop to suggest funds moving through the shield. */
+function BridgePreview() {
+  const reduce = useReducedMotion() ?? false
+  return (
+    <div className="ob-bp" aria-hidden="true">
+      <div className="ob-bp-col">
+        <span className="ob-bp-chain">Ethereum</span>
+        <span className="ob-bp-amount ob-bp-amount-public">1,000 USDC</span>
+      </div>
+      <div className="ob-bp-track">
+        <span className="ob-bp-line" />
+        {!reduce && (
+          <motion.span
+            className="ob-bp-dot"
+            animate={{ left: ['4%', '96%'], opacity: [0, 1, 1, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+          />
+        )}
+        <span className="ob-bp-lock">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="5.5" y="11" width="13" height="9.5" rx="2.4" stroke={BRAND} strokeWidth="1.5" />
+            <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round" />
+            <circle cx="12" cy="15.4" r="1.3" fill={BRAND} />
+          </svg>
+          {!reduce && (
+            <motion.span
+              className="ob-bp-lock-glow"
+              animate={{ opacity: [0.15, 0.5, 0.15] }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          )}
+        </span>
+      </div>
+      <div className="ob-bp-col">
+        <span className="ob-bp-chain">Aztec · private</span>
+        <span className="ob-bp-amount ob-bp-amount-private">•••• USDC</span>
+      </div>
+    </div>
+  )
+}
+
+/* Screen-4 proof animation: three source nodes settle into a single verified check, on a
+   slow loop. Purely decorative and low-key — a quiet pulse, not a focal point. */
+const ZK_NODES: [number, number][] = [
+  [14, 26],
+  [64, 10],
+  [64, 42],
+]
+
+function ZkPulse() {
+  const items = [
+    'Proofs are generated locally on your device',
+    'Only what a rule requires is ever checked',
+    'Nothing else is seen or stored',
+  ]
+  return (
+    <ul
+      style={{
+        listStyle: 'none',
+        margin: '20px auto 0',
+        padding: 0,
+        maxWidth: 400,
+        textAlign: 'left',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 11,
+      }}
+    >
+      {items.map((t) => (
+        <li key={t} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14.5, lineHeight: 1.4, color: '#5a4650' }}>
+          <svg viewBox="0 0 20 20" width={20} height={20} style={{ flex: 'none', marginTop: 1 }} aria-hidden="true">
+            <circle cx="10" cy="10" r="9" fill={BRAND} opacity="0.12" />
+            <path d="M6 10.5l2.5 2.5L14.5 7" fill="none" stroke={BRAND} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>{t}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export default function ShieldOnboarding() {
   const reduce = useReducedMotion() ?? false
   const connectWaapWallet = useWalletStore((s) => s.connectWaapWallet)
   const isWaapConnected = useWalletStore((s) => s.isWaapConnected)
+  const setSplashActive = useOnboardingStore((s) => s.setSplashActive)
+  const showSplashNonce = useOnboardingStore((s) => s.showSplashNonce)
   // Start in 'loading': the shader shell renders immediately (covering the bridge from
   // the first paint) while we read localStorage / wallet state, then we resolve to the
   // real mode and the inner content fades in over the same, never-remounted shader.
@@ -373,19 +573,74 @@ export default function ShieldOnboarding() {
   const [leaving, setLeaving] = useState(false)
 
   useEffect(() => {
-    // First visit runs the full flow. A returning visitor who isn't connected yet
-    // gets the branded splash with a connect CTA. A connected visitor drops straight
-    // into the bridge. Reacting to isWaapConnected also auto-dismisses the splash the
-    // moment the wallet connects.
+    // "Back to main screen" from the progress/activity flow appends ?app=1 so a
+    // returning user lands on the bridge shell directly instead of the splash gate,
+    // even when that navigation re-mounts this component (a fresh page load). The
+    // marker is honored once and immediately stripped from the URL, so a later reload
+    // of the bare route still shows the splash for onboarded users — the Shield brand
+    // click (issue #103) stays the only other way back to it.
+    let returnToApp = false
+    try {
+      const params = new URLSearchParams(window.location.search)
+      returnToApp = params.get('app') === '1'
+      if (returnToApp) {
+        params.delete('app')
+        const qs = params.toString()
+        window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash)
+      }
+    } catch {
+      returnToApp = false
+    }
+
+    // First visit runs the full flow (once). Every subsequent page load — including a
+    // refresh by a connected user — lands on the branded splash; the user explicitly
+    // re-enters the bridge from there. Decided once on mount so a wallet reconnecting
+    // mid-session doesn't tear the splash down underneath the user.
     let onboarded = false
     try {
       onboarded = !!localStorage.getItem(ONBOARDED_KEY)
     } catch {
       onboarded = false
     }
-    if (!onboarded) setMode('flow')
-    else setMode(isWaapConnected ? 'hidden' : 'splash')
-  }, [isWaapConnected])
+    setMode(returnToApp ? 'hidden' : onboarded ? 'splash' : 'flow')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Signal the splash state to the app chrome via a root attribute. When the splash is
+  // up for a *connected* user, ClientLayout lifts the real nav bar above the overlay so
+  // they keep their account/nav; otherwise the splash covers everything.
+  useEffect(() => {
+    const root = document.documentElement
+    if (mode === 'splash') {
+      root.setAttribute('data-ob-splash', isWaapConnected ? 'connected' : 'active')
+    } else {
+      root.removeAttribute('data-ob-splash')
+    }
+    return () => root.removeAttribute('data-ob-splash')
+  }, [mode, isWaapConnected])
+
+  // Publish "splash is up" so the elevated nav (which sits ABOVE this overlay
+  // on the light paper field) can drop its dark Privacy-Mode styling while the
+  // splash covers the dark background it would otherwise read against (#94).
+  useEffect(() => {
+    setSplashActive(mode === 'splash')
+    return () => setSplashActive(false)
+  }, [mode, setSplashActive])
+
+  // Clicking the Shield brand returns the user to the splash (#103). The brand
+  // link's own in-progress-transfer guard runs first (see Header), so by the
+  // time the nonce bumps here it's already confirmed. Skip the initial mount
+  // value so this only fires on an actual request.
+  const didMountSplashRequest = useRef(false)
+  useEffect(() => {
+    if (!didMountSplashRequest.current) {
+      didMountSplashRequest.current = true
+      return
+    }
+    setLeaving(false)
+    setIndex(0)
+    setMode('splash')
+  }, [showSplashNonce])
 
   const markOnboarded = () => {
     try {
@@ -416,7 +671,8 @@ export default function ShieldOnboarding() {
   }
 
   const connectFromSplash = () => {
-    connectWallet()
+    // Already-connected returning users just re-enter the bridge; otherwise open WaaP.
+    if (!isWaapConnected) connectWallet()
     setMode('hidden')
   }
 
@@ -447,28 +703,34 @@ export default function ShieldOnboarding() {
       <div className="ob-stage">
         <div className="ob-stage-inner">
           <div className="ob-card-region">
+            {/* Minimized cryptex lives OUTSIDE the fading card so it stays pinned (never
+                re-fades) as you move between screens 1-3; the layoutId still morphs it in
+                from the screen-0 hero. */}
+            {index > 0 && (
+              <div className="ob-mini-pin">
+                <CryptexMark reduce={reduce} mini shared />
+              </div>
+            )}
             <AnimatePresence mode="wait">
               <motion.div
                 key={index}
-                className="ob-card"
+                className={`ob-card${index === 0 ? '' : ' ob-card-top'}`}
                 initial={{ opacity: 0, y: 22 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -22 }}
                 transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
               >
                 {screen.visual === 'cryptex' ? (
-                  <div className="ob-cryptex-frame">
-                    <CryptexVisual still={reduce} />
+                  <div className="ob-cryptex-hero">
+                    <CryptexMark reduce={reduce} shared />
                     <div className="ob-headline">
+                      <AlphanetBadge />
                       <p className="ob-eyebrow">{screen.eyebrow}</p>
                       <h1 className="ob-title">{screen.title}</h1>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <div className="ob-visual">
-                      <StaticGlyph kind={screen.visual} />
-                    </div>
                     <p className="ob-eyebrow">{screen.eyebrow}</p>
                     <h1 className={`ob-title ob-title-${screen.visual}`}>{screen.title}</h1>
                   </>
@@ -484,7 +746,7 @@ export default function ShieldOnboarding() {
               <button className="ob-next" onClick={advance}>{screen.cta}</button>
             </div>
             <p className="ob-secured">
-              Secured by <strong>human.tech</strong>
+              Secured by <strong className="ob-htmark" role="img" aria-label="human.tech" />
               <span className="ob-dot">·</span>
               Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
             </p>
@@ -507,9 +769,10 @@ export default function ShieldOnboarding() {
         <div className="ob-stage-inner">
           <div className="ob-card-region">
             <div className="ob-card">
-              <div className="ob-cryptex-frame">
-                <CryptexVisual still={reduce} />
+              <div className="ob-cryptex-hero">
+                <CryptexMark reduce={reduce} />
                 <div className="ob-headline">
+                  <AlphanetBadge />
                   <p className="ob-eyebrow">{SCREENS[0].eyebrow}</p>
                   <h1 className="ob-title">{SCREENS[0].title}</h1>
                 </div>
@@ -521,16 +784,27 @@ export default function ShieldOnboarding() {
           </div>
           <div className="ob-controls">
             <div className="ob-btns">
-              <button className="ob-next" onClick={connectFromSplash}>Connect wallet</button>
+              <button className="ob-next" onClick={connectFromSplash}>{isWaapConnected ? 'Enter app' : 'Connect wallet'}</button>
             </div>
-            <p className="ob-secured">
-              Secured by <strong>human.tech</strong>
-              <span className="ob-dot">·</span>
-              Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
-            </p>
+            <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-dev-cta">
+              Build your own App with Programmable Privacy
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="m13 6 6 6-6 6" />
+              </svg>
+            </a>
           </div>
         </div>
       </div>
+      {/* #157: the "Secured by human.tech · Built on Clean SDK" trust line sits
+          in the splash's bottom footer now, not tucked under the developer CTA. */}
+      <footer className="ob-splash-footer">
+        <p className="ob-secured">
+          Secured by <strong className="ob-htmark" role="img" aria-label="human.tech" />
+          <span className="ob-dot">·</span>
+          Built on <a href={CLEAN_SDK} target="_blank" rel="noopener noreferrer" className="ob-link">Clean SDK</a>
+        </p>
+      </footer>
     </motion.div>
   )
 
@@ -543,7 +817,7 @@ export default function ShieldOnboarding() {
       {mode !== 'hidden' && !leaving && (
         <motion.div
           key="ob-root"
-          className="ob-root"
+          className={`ob-root${mode === 'splash' ? ' ob-splash' : ''}`}
           initial={false}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -584,6 +858,17 @@ export default function ShieldOnboarding() {
         .ob-root { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column;
           overflow: hidden; font-family: 'Suisse Intl', system-ui, sans-serif;
           background: #fff6fa; color: #1c1116; }
+        /* Connected user on the splash: lift the real app nav bar above this overlay so
+           it stays usable. Toggled by data-ob-splash="connected" on <html>. */
+        html[data-ob-splash="connected"] .ob-header-elevate { z-index: 130 !important; }
+        /* The top-nav wallet "Connect" pill(s) live in the Header, not this component, and
+           carry no meaning while the splash gate is up — the splash's own CTA is the way in.
+           Rather than leave a dead button, neutralize them through the same data-ob-splash
+           hook: non-interactive, no hover affordance, visibly dimmed. Cleared the instant the
+           splash dismisses (attribute removed), so the real nav is fully live in-app. */
+        html[data-ob-splash] .ob-header-elevate button[title*="Connect" i] {
+          pointer-events: none; cursor: default; opacity: 0.5;
+        }
         /* Inner content overlay: fades in over the persistent shader shell. */
         .ob-inner { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; }
         .ob-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
@@ -606,7 +891,21 @@ export default function ShieldOnboarding() {
         .ob-card-region { position: relative; width: 100%; height: clamp(430px, 60vh, 540px); }
         .ob-card { position: absolute; inset: 0; width: 100%; text-align: center; display: flex;
           flex-direction: column; align-items: center; justify-content: center; }
-        .ob-visual { height: 168px; display: flex; align-items: center; justify-content: center; margin-bottom: 26px; width: 100%; }
+        /* Non-hero screens top-align and reserve space for the pinned cryptex above, so the
+           mark sits at the same Y on every screen and the copy never overlaps it. */
+        .ob-card-top { justify-content: flex-start; padding-top: 108px; }
+        .ob-mini-pin { position: absolute; top: 24px; left: 0; right: 0; height: 72px; z-index: 2;
+          display: flex; align-items: center; justify-content: center; }
+        .ob-visual { height: 72px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; width: 100%; }
+        .ob-alpha { position: relative; display: inline-flex; margin: 0 auto 10px; }
+        .ob-alpha-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+          background: rgba(255,255,255,0.55); color: #9a6512; border: 1px solid rgba(176,120,31,0.45);
+          -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+          font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; cursor: default; outline: none; }
+        .ob-alpha-pill:focus-visible { outline: 2px solid #b06f16; outline-offset: 2px; }
+        /* #156: pin the Alphanet tooltip ABOVE its badge (never below, where the
+           top nav could clip it) and lift its z above the elevated nav. */
+        .ob-alpha-bubble { width: 250px; bottom: calc(100% + 10px); top: auto; z-index: 140; }
         .ob-eyebrow { font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: ${BRAND};
           font-weight: 600; margin: 0 0 14px; white-space: pre-line; line-height: 1.7; }
         .ob-title { font-size: clamp(26px, 5vw, 40px); line-height: 1.08; letter-spacing: -0.02em; font-weight: 640;
@@ -638,10 +937,49 @@ export default function ShieldOnboarding() {
         .ob-tooltip-trigger:focus-visible { outline: 2px solid ${BRAND}; outline-offset: 2px; }
         .ob-tooltip-bubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
           width: 240px; max-width: 76vw; padding: 12px 14px; border-radius: 12px; background: #1c1116; color: #fdf0f6;
-          font-size: 13px; line-height: 1.45; text-align: left; box-shadow: 0 12px 30px rgba(0,0,0,0.22); z-index: 5;
-          pointer-events: none; }
+          font-size: 13px; line-height: 1.45; text-align: left; box-shadow: 0 12px 30px rgba(0,0,0,0.22); z-index: 5; }
+        .ob-tooltip-bubble a { color: #f9b9d6; text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }
+        .ob-tooltip-bubble a:hover { color: #fff; }
         .ob-tooltip-bubble::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
           border: 6px solid transparent; border-top-color: #1c1116; }
+        /* Edge-anchored variant: for triggers near the right edge (e.g. page-3 tiers),
+           pin the bubble's right edge to the trigger so it can't overflow the viewport. */
+        .ob-tooltip-bubble-right { left: calc(100% + 12px); right: auto; bottom: auto; top: 50%; transform: translateY(-50%); }
+        .ob-tooltip-bubble-right::after { top: 50%; left: -6px; right: auto; transform: translateY(-50%);
+          border-width: 6px 6px 6px 0; border-color: transparent #1c1116 transparent transparent; }
+        /* tier CTAs (page 3): map straight onto the two rows above */
+        .ob-tier-ctas { display: flex; gap: 12px; width: 100%; max-width: 460px; margin: 16px auto 0; }
+        .ob-pill { flex: 1; display: flex; align-items: center; justify-content: center; height: 44px;
+          border-radius: 999px; font-size: 14px; font-weight: 610; text-decoration: none; white-space: nowrap;
+          transition: transform .15s ease, filter .15s ease, background-color .15s ease; }
+        .ob-pill-primary { background: ${BRAND}; color: #fff; }
+        .ob-pill-primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
+        .ob-pill-outline { background: transparent; border: 1px solid #eccfdc; color: ${BRAND}; }
+        .ob-pill-outline:hover { background: rgba(129,19,59,0.06); }
+        /* bridge preview card (page 2) */
+        .ob-bp { display: flex; align-items: center; width: 100%; max-width: 420px; margin: 22px auto 0;
+          padding: 16px 18px; border: 1px solid #f0d3e0; border-radius: 16px; background: rgba(255,255,255,0.55); }
+        .ob-bp-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .ob-bp-chain { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #987f8a;
+          font-weight: 620; white-space: nowrap; }
+        .ob-bp-amount { font-size: 13.5px; font-weight: 640; padding: 5px 10px; border-radius: 999px;
+          border: 1px solid #f0d3e0; background: #fff; white-space: nowrap; }
+        .ob-bp-amount-public { color: ${BRAND}; border-color: rgba(129,19,59,0.25); }
+        .ob-bp-amount-private { color: #5a4650; border-style: dashed; letter-spacing: 0.1em; }
+        .ob-bp-track { flex: none; width: 72px; height: 32px; position: relative; display: flex;
+          align-items: center; justify-content: center; }
+        .ob-bp-line { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(129,19,59,0.22); }
+        .ob-bp-dot { position: absolute; top: 50%; width: 6px; height: 6px; border-radius: 50%; background: ${BRAND};
+          transform: translate(-50%, -50%); box-shadow: 0 0 8px rgba(129,19,59,0.45); }
+        .ob-bp-lock { position: relative; z-index: 1; width: 32px; height: 32px; border-radius: 10px;
+          background: rgba(129,19,59,0.08); display: flex; align-items: center; justify-content: center; }
+        .ob-bp-lock svg { width: 18px; height: 18px; }
+        .ob-bp-lock-glow { position: absolute; inset: -6px; border-radius: 14px; z-index: -1;
+          background: radial-gradient(circle, rgba(129,19,59,0.35), transparent 70%); filter: blur(6px); }
+        /* zk proof pulse (page 4) */
+        .ob-zk { margin: 20px auto 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .ob-zk-svg { display: block; }
+        .ob-zk-caption { font-size: 12px; color: #987f8a; letter-spacing: 0.01em; }
         .ob-controls { position: relative; z-index: 3; width: 100%; display: flex; flex-direction: column;
           align-items: center; gap: 16px; }
         .ob-btns { width: 100%; max-width: 420px; display: flex; gap: 12px; }
@@ -651,24 +989,44 @@ export default function ShieldOnboarding() {
         .ob-back { height: 54px; padding: 0 22px; border: 1px solid #eccfdc; border-radius: 14px; background: transparent;
           color: #5a4650; font-size: 16px; font-weight: 560; cursor: pointer; }
         .ob-back:hover { background: rgba(129,19,59,0.05); }
-        .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
-        .ob-secured strong { color: #5a4650; font-weight: 620; }
+        .ob-secured { font-size: 12.5px; color: #987f8a; margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; justify-content: center; }
+        .ob-secured strong { color: #5a4650; font-family: 'PP Hatton', 'Suisse Intl', sans-serif; font-weight: 600; }
+        /* human.tech icon + wordmark, painted from the shared SVG via mask so it inherits the
+           .ob-secured strong colour rules (light / dark / splash) instead of a fixed black.
+           align-self centres the mark on the line under the container's baseline alignment. */
+        .ob-htmark { display: inline-block; width: 61px; height: 15px; align-self: center; background-color: currentColor;
+          -webkit-mask: url(/assets/svg/human.tech.logo.svg) no-repeat center / contain;
+          mask: url(/assets/svg/human.tech.logo.svg) no-repeat center / contain; }
         .ob-dot { opacity: 0.5; }
+        /* #157: splash trust-line footer, pinned to the bottom of the splash. */
+        .ob-splash-footer { position: relative; z-index: 3; padding: 0 24px 20px; display: flex; justify-content: center; }
+        /* Secondary, subordinate developer CTA on the splash — a quiet text link beneath the
+           primary "Enter app" button, deliberately far lighter than the solid maroon CTA. */
+        .ob-dev-cta { display: inline-flex; align-items: center; gap: 6px; margin: -2px auto 0; color: ${BRAND};
+          font-size: 13.5px; font-weight: 550; text-decoration: none; opacity: 0.85;
+          transition: opacity .15s ease, gap .15s ease; }
+        .ob-dev-cta:hover { opacity: 1; gap: 8px; text-decoration: underline; text-underline-offset: 3px; }
+        .ob-dev-cta svg { flex: none; }
         /* cryptex hero — concentric dial rings framing the headline. max-height keeps the
            full-size mark from overflowing the fixed region on short viewports (it scales
            down with the region rather than being clipped or shrunk at its base size). */
-        .ob-cryptex-frame { position: relative; width: 100%; max-width: 500px; max-height: calc(100% - 40px);
+        .ob-cryptex-hero { position: relative; width: 100%; max-width: 500px; max-height: calc(100% - 40px);
           aspect-ratio: 1 / 1; margin: 4px auto 4px; display: flex; align-items: center; justify-content: center; }
+        /* The shared shell: fills the hero frame on screen 0, shrinks to a small fixed square
+           for the minimized mark on screens 1-3. Framer Motion's shared layoutId animates the
+           box between these two states as the user advances/goes back. */
+        .ob-cryptex-shell { position: absolute; inset: 0; }
+        .ob-cryptex-shell-mini { position: relative; inset: auto; width: 68px; height: 68px; }
         .ob-cryptex-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+        /* Amorphous epicenter glow: a real MeshGradient (shader) blob, blurred and radially
+           masked so it reads as an organic ripple of light breathing behind the headline. */
+        .ob-epicenter { position: absolute; top: 47%; left: 50%; width: 360px; height: 360px;
+          transform: translate(-50%, -50%); z-index: 0; border-radius: 50%; overflow: hidden;
+          opacity: 0.44; filter: blur(28px); pointer-events: none;
+          -webkit-mask: radial-gradient(circle, #000 22%, transparent 66%);
+          mask: radial-gradient(circle, #000 22%, transparent 66%); }
         .ob-headline { position: relative; z-index: 1; padding: 0 28px; text-align: center; }
         .ob-headline .ob-title { max-width: 17ch; }
-        /* static glyphs */
-        .ob-glyph { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
-        .ob-glyph-ring { position: absolute; top: 50%; left: 50%; width: 132px; height: 132px;
-          transform: translate(-50%, -50%); z-index: 0; }
-        .ob-glyph img, .ob-glyph span { position: relative; z-index: 1; }
-        .ob-glyph span { font-size: 13px; color: ${BRAND}; font-weight: 600; letter-spacing: 0.02em; }
-        .ob-glyph img { filter: drop-shadow(0 8px 24px rgba(129,19,59,0.22)); }
         /* handoff splash */
         .ob-handoff { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center;
           background: radial-gradient(#FDE7F3, #ffffff); }
@@ -679,8 +1037,11 @@ export default function ShieldOnboarding() {
           /* On mobile the cryptex is narrower, so a text-heavy screen (page 4) is tallest;
              size the region to fit it, page 1 then centers with room to spare. */
           .ob-card-region { height: clamp(420px, 66vh, 470px); }
-          .ob-visual { height: 140px; margin-bottom: 20px; }
-          .ob-cryptex-frame { max-width: 300px; }
+          .ob-visual { height: 62px; margin-bottom: 14px; }
+          .ob-mini-pin { height: 60px; top: 18px; }
+          .ob-card-top { padding-top: 90px; }
+          .ob-cryptex-hero { max-width: 300px; }
+          .ob-cryptex-shell-mini { width: 58px; height: 58px; }
           .ob-headline { padding: 0 20px; }
           .ob-title { font-size: 27px; }
           .ob-title-zk { max-width: none; }
@@ -688,6 +1049,15 @@ export default function ShieldOnboarding() {
           .ob-tiers { max-width: 100%; }
           .ob-tier-row { padding: 14px 16px; gap: 12px; }
           .ob-tooltip-bubble { width: 210px; }
+          .ob-tier-ctas { max-width: 100%; margin-top: 12px; }
+          .ob-pill { height: 40px; font-size: 13px; }
+          .ob-bp { max-width: 100%; margin-top: 16px; padding: 13px 12px; }
+          .ob-bp-chain { font-size: 10px; }
+          .ob-bp-amount { font-size: 12.5px; padding: 4px 8px; }
+          .ob-bp-track { width: 52px; }
+          .ob-zk { margin-top: 14px; }
+          .ob-zk-svg { width: 120px; height: 44px; }
+          .ob-splash-footer { padding: 0 20px 16px; }
         }
         @media (prefers-color-scheme: dark) {
           .ob-root { background: #150a0f; color: #f6ecf1; }
@@ -699,6 +1069,8 @@ export default function ShieldOnboarding() {
           .ob-back { color: #cba7b6; border-color: #3a2530; }
           .ob-skip { color: #c9adb9; } .ob-skip:hover { color: #f0dbe6; }
           .ob-secured { color: #b89aa6; } .ob-secured strong { color: #e6d0dc; }
+          /* #81133B is too close to the dark maroon field to read; use the palette's pink accent. */
+          .ob-dev-cta { color: #f2b7d3; }
           .ob-tiers { border-color: #3a2530; background: rgba(255,255,255,0.03); }
           .ob-tier-row + .ob-tier-row { border-top-color: #3a2530; }
           .ob-tier-icon { background: rgba(246,236,241,0.08); }
@@ -706,8 +1078,37 @@ export default function ShieldOnboarding() {
           .ob-tier-copy span { color: #cba7b6; }
           .ob-tooltip-bubble { background: #f6ecf1; color: #1c1116; }
           .ob-tooltip-bubble::after { border-top-color: #f6ecf1; }
+          .ob-tooltip-bubble-right::after { border-color: transparent #f6ecf1 transparent transparent; }
+          .ob-tooltip-bubble a { color: ${BRAND}; }
+          .ob-tooltip-bubble a:hover { color: #4d051f; }
           .ob-handoff { background: radial-gradient(#2a141f, #150a0f); }
+          .ob-pill-outline { border-color: #3a2530; color: #f2b7d3; }
+          .ob-pill-outline:hover { background: rgba(246,236,241,0.06); }
+          .ob-bp { border-color: #3a2530; background: rgba(255,255,255,0.03); }
+          .ob-bp-chain { color: #cba7b6; }
+          .ob-bp-amount { border-color: #3a2530; background: rgba(246,236,241,0.04); color: #f6ecf1; }
+          .ob-bp-amount-public { color: #f2b7d3; border-color: rgba(242,183,211,0.3); }
+          .ob-bp-amount-private { color: #cba7b6; }
+          .ob-bp-line { background: rgba(242,183,211,0.22); }
+          .ob-bp-lock { background: rgba(246,236,241,0.08); }
+          .ob-zk-caption { color: #cba7b6; }
         }
+        /* The splash is the pre-app marketing screen: it must always read as the light
+           pink branded field — same look whether Privacy Mode is default-on or off, and
+           regardless of the OS colour scheme. The privacy dark background lives at z-0,
+           far below this z-100 opaque overlay, so it can't bleed through; the darkening
+           came from the splash's OWN dark-scheme styling above. Pin every splash surface
+           to its light values (these beat the dark-scheme rules on specificity, in both
+           schemes) so the splash and its light-styled nav (#94) stay consistent and
+           readable. The first-visit flow keeps its dark-scheme support (it's fully
+           covered by this overlay, never shown against the lifted nav). */
+        .ob-root.ob-splash { background: #fff6fa; color: #1c1116; }
+        .ob-root.ob-splash .ob-veil { background: linear-gradient(180deg, rgba(255,246,250,0.38), rgba(255,246,250,0.78)); }
+        .ob-root.ob-splash .ob-grain { mix-blend-mode: multiply; opacity: 0.05; }
+        .ob-root.ob-splash .ob-body { color: #5a4650; }
+        .ob-root.ob-splash .ob-body strong { color: #1c1116; }
+        .ob-root.ob-splash .ob-secured strong { color: #5a4650; }
+        .ob-root.ob-splash .ob-dev-cta { color: ${BRAND}; }
       `}</style>
     </AnimatePresence>
   )

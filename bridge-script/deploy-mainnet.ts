@@ -78,7 +78,7 @@ import { Schnorr } from '@aztec/foundation/crypto/schnorr'
 // 5.0.0 dropped the deriveSigningKey export; it was an alias for the IVSK_M derivation,
 // so keep using that exact function to preserve previously-derived L2 account addresses.
 import { deriveMasterIncomingViewingSecretKey as deriveSigningKey } from '@aztec/stdlib/keys'
-import { registerPrivateContract } from '@alejoamiras/aztec-fee-payment/utils'
+import { registerPrivateContract } from '@alejoamiras/private-fee-juice/utils'
 import { getContract, keccak256, encodeAbiParameters, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { existsSync, readFileSync, writeFileSync } from 'fs'

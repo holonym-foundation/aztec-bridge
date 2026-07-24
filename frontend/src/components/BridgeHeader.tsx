@@ -1,5 +1,5 @@
 import React from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import LoadingBar from './LoadingBar'
 import { useBridgeStore } from '@/stores/bridgeStore'
@@ -22,6 +22,18 @@ const ALERT_META: Record<'warning' | 'error', { icon: string; className: string 
   warning: { icon: 'ph:warning-circle-fill', className: 'text-[#7A4A00] bg-[#FFF1D6]' },
   error: { icon: 'ph:x-circle-fill', className: 'text-[#831816] bg-[#FFEBEB]' },
 }
+
+// Transient "keep this page open so your funds stay recoverable" safety banners,
+// keyed by their stable feed key. These are only meaningful while a transfer is
+// genuinely mid-flight — a state that only ever exists on the progress screens,
+// never on the idle bridge form (the flow navigates to /progress before the SDK
+// emits DO_NOT_RELOAD). The feed is now persisted, so a banner from a prior
+// transfer can survive a reload; gating it out of the ticker on the idle bridge
+// keeps a stale one from lingering there while still letting it show in-context.
+const SAFETY_BANNER_KEYS = new Set(['l1-to-l2-do-not-reload', 'l2-to-l1-do-not-reload'])
+
+// The single route where no transfer can be in progress: the bridge form itself.
+const IDLE_BRIDGE_PATH = '/'
 
 // Marquee travels one full copy (translateX(-50%) across two stacked copies), so
 // the loop is seamless. Slower is calmer; px/sec keeps long and short alerts at a
@@ -51,6 +63,7 @@ const openMessages = () => {
 
 const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
   const router = useRouter()
+  const pathname = usePathname()
   const {
     getHeaderSteps,
     headerStep,
@@ -103,8 +116,19 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
   // (the store prepends), and `dismiss` removes rows, so the first warning/error
   // still in the list is the current alert. The found object reference is stable
   // across renders until it changes, so this selector doesn't churn.
+  //
+  // On the idle bridge form a transient "Do not reload" safety banner is out of
+  // context (no transfer is in flight here), so skip those keyed rows and let the
+  // ticker fall through to the next genuine alert — or to nothing. Genuine
+  // warnings/errors still surface everywhere; only the in-progress-only safety
+  // banners are gated. On the progress screens they show normally.
+  const isIdleBridge = pathname === IDLE_BRIDGE_PATH
   const currentAlert = useNotificationsStore((s) =>
-    s.notifications.find((n) => n.type === 'warning' || n.type === 'error'),
+    s.notifications.find(
+      (n) =>
+        (n.type === 'warning' || n.type === 'error') &&
+        !(isIdleBridge && n.key !== undefined && SAFETY_BANNER_KEYS.has(n.key)),
+    ),
   )
   const alertMeta = currentAlert ? ALERT_META[currentAlert.type as 'warning' | 'error'] : null
   const isAlertActive = !!(currentAlert && alertMeta)

@@ -37,16 +37,23 @@ const DEPLOYMENT_LABEL = [L1_NETWORKS[0]?.title, AZTEC_VERSION ? `v${AZTEC_VERSI
 // gone, so the group carries an aria-label/title announcing the direction.
 function DirectionLogos({ direction }: { direction: BridgeOperation['direction'] }) {
   const isDeposit = direction === 'L1_TO_L2'
-  const eth = '/assets/svg/ethLogo.svg'
-  const aztec = '/assets/svg/aztec.svg'
-  const first = isDeposit ? eth : aztec
-  const second = isDeposit ? aztec : eth
   const label = isDeposit ? 'L1 to L2' : 'L2 to L1'
+  // The Ethereum glyph is a self-contained dark circle, but the Aztec mark is a
+  // bare light-green diamond that washes out on a light surface. It gets a dark
+  // circular chip so it stays legible; both glyphs stay h-4 w-4 so the row aligns.
+  const ethGlyph = <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-4 w-4 shrink-0" />
+  const aztecGlyph = (
+    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]">
+      <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-3 w-3" />
+    </span>
+  )
+  const first = isDeposit ? ethGlyph : aztecGlyph
+  const second = isDeposit ? aztecGlyph : ethGlyph
   return (
     <span role="img" aria-label={label} title={label} className="inline-flex items-center gap-1">
-      <StyledImage src={first} alt="" className="h-4 w-4 shrink-0" />
+      {first}
       <Icon icon="ph:arrow-right" width={12} height={12} className="text-gray-400" aria-hidden="true" />
-      <StyledImage src={second} alt="" className="h-4 w-4 shrink-0" />
+      {second}
     </span>
   )
 }

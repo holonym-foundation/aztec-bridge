@@ -57,6 +57,40 @@ export function openSupport(): boolean {
   return false
 }
 
+// Whether the support widget can be opened programmatically RIGHT NOW, decided
+// WITHOUT opening it. Mirrors the reachable paths openSupport() would take: a
+// callable global control method, a launcher the widget left in the light DOM, or
+// an OPEN shadow root on the host. Used to decide whether it's safe to hide the
+// native floating launcher — we only hide it when support stays reachable through
+// the Support tab (shield.human.tech#86). SSR-guarded.
+export function isSupportOpenable(): boolean {
+  if (typeof window === 'undefined') return false
+
+  // 1. A callable control method on the global (future widget build).
+  const globals = [
+    (window as any).Iris,
+    (window as any).IrisWidget,
+    (window as any).iris,
+  ]
+  for (const g of globals) {
+    const fn = g?.open ?? g?.show ?? g?.toggle
+    if (typeof fn === 'function') return true
+  }
+
+  try {
+    // 2. A launcher the widget injected into the light DOM is clickable now.
+    if (document.querySelector('.iris-bubble, [data-iris-launcher], [aria-label="Open chat"]')) return true
+
+    // 3. An OPEN shadow root on the host exposes a reachable launcher.
+    const host = document.getElementById('iris-widget-host') as (HTMLElement & { shadowRoot: ShadowRoot | null }) | null
+    if (host?.shadowRoot) return true
+  } catch {
+    return false
+  }
+
+  return false
+}
+
 /** Stable feed key for the "transfer stuck" escalation, one per operation. */
 export function stuckNotificationKey(opId: string): string {
   return `stuck-${opId}`

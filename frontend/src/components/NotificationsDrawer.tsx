@@ -4,8 +4,10 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { useNotificationsStore, type AppNotification, type NotificationType } from '@/stores/useNotificationsStore'
+import { STORAGE_KEYS } from '@human.tech/clean.sdk'
+import { pushNotification, useNotificationsStore, type AppNotification, type NotificationType } from '@/stores/useNotificationsStore'
 import { useWalletStore } from '@/stores/walletStore'
+import { exportClaimData, exportWithdrawalData } from '@/utils'
 
 // Motion values mirrored from the human-tech design system (docs/tokens.css):
 // --dur-enter / --ease-slide for the panel that slides out from the tab.
@@ -20,6 +22,12 @@ const PEEK_EVENT = 'shield:peek'
 type PeekSignal = { id: string; open: boolean }
 
 const PANEL_WIDTH = 300
+
+// The top nav row (banners + Header) sits at the viewport top. The upward-growing
+// panel must stop BELOW it, so reserve this much space from the viewport top; the
+// panel's top edge lands here and never crosses into the nav (#318). Mirrors the
+// same NAV_SAFE_TOP reservation BridgeStepsRail uses for its rail panel (#316).
+const NAV_SAFE_TOP = 72
 // Fixed page size. The panel paginates rather than scrolls, matching the app's
 // no-scroll direction. Kept small (3) so the taller, roomier rows plus header and
 // pager fit inside the viewport-capped panel height without clipping (#208/#229).
@@ -39,6 +47,37 @@ const PANEL_SECTION_GAP = 'mb-4'
 const PANEL_FOOTER_GAP = 'mt-4 pt-4'
 const ROW_LAYOUT = 'flex gap-3.5 py-4 border-b border-[#F0F0F0] last:border-b-0 last:pb-0'
 const ROW_STACK = 'min-w-0 flex-1 flex flex-col gap-2'
+
+// The "Do not reload" message is pushed under a stable toastId/key that also
+// encodes its bridge direction (#322). Map that key to the direction so the
+// message can surface a real recovery-backup download.
+const DO_NOT_RELOAD_DIRECTION: Record<string, 'L1_TO_L2' | 'L2_TO_L1'> = {
+  'l1-to-l2-do-not-reload': 'L1_TO_L2',
+  'l2-to-l1-do-not-reload': 'L2_TO_L1',
+}
+
+// Export a manual copy of the encrypted recovery data behind a "Do not reload"
+// message so the user can back up their funds off this tab (#322). Mirrors
+// ProgressCard's handleExportBackup: reads the latest unfinished entry the SDK
+// persisted to localStorage and triggers the same JSON download via the shared
+// export utilities. Returns whether a download was triggered so the caller can
+// avoid a silent no-op.
+const backupRecoveryData = (direction: 'L1_TO_L2' | 'L2_TO_L1'): boolean => {
+  try {
+    const storeKey = direction === 'L1_TO_L2' ? STORAGE_KEYS.deposits : STORAGE_KEYS.withdrawals
+    const raw = typeof window !== 'undefined' ? window.localStorage.getItem(storeKey) : null
+    if (!raw) return false
+    const entries = JSON.parse(raw)
+    const latest = Array.isArray(entries) ? entries.filter((e: { success?: boolean }) => !e.success).pop() : null
+    if (!latest) return false
+    if (direction === 'L1_TO_L2') exportClaimData(latest)
+    else exportWithdrawalData(latest)
+    return true
+  } catch (e) {
+    console.error('[NotificationsDrawer] Recovery export failed:', e)
+    return false
+  }
+}
 
 const ICON_FOR: Record<NotificationType, string> = {
   signature: 'ph:pen-nib',
@@ -141,8 +180,9 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
   const [page, setPage] = useState(0)
   // The panel's bottom is anchored to the tab and it grows UPWARD (#229), so it
   // never spills below the tab into the floating chat widget. This caps its
-  // height to the room actually above the tab's bottom edge, so the top row and
-  // the pager always stay on-screen no matter where the tab dock sits.
+  // height to the room between the nav bar (NAV_SAFE_TOP) and the tab's bottom
+  // edge, so the header and pager always stay on-screen and the top edge never
+  // rises over the nav no matter where the tab dock sits (#318).
   const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined)
   // Tracks whether one of the SIBLING tabs is open, so the message peek bubble
   // never pops out over an open Tutorial/Activity panel (#160/#181).
@@ -238,14 +278,16 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
   }, [open, markAllRead])
 
   // Measure the space above the tab's bottom edge and cap the panel to it, so the
-  // upward-growing panel is never clipped by the viewport top (or, on short
-  // screens, forced to overlap the chat widget below). Re-measures on resize.
+  // upward-growing panel is never clipped by the viewport top and never crosses
+  // into the top nav bar (#318). Reserving NAV_SAFE_TOP lands the panel's top edge
+  // just below the nav so the feed scrolls internally instead of growing over the
+  // account/points chip. Re-measures on resize.
   useEffect(() => {
     if (!open) return
     const measure = () => {
       const rect = handleRef.current?.getBoundingClientRect()
       if (!rect) return
-      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - 12)))
+      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - NAV_SAFE_TOP)))
     }
     measure()
     window.addEventListener('resize', measure)
@@ -297,6 +339,9 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
   const renderItem = (n: AppNotification) => {
     const state = stateById.get(n.id) ?? 'plain'
     const meta = state === 'plain' ? null : STATE_META[state]
+    // "Do not reload" carries a download affordance so the user can back up their
+    // recovery data off this tab before closing it (#322).
+    const recoveryDirection = n.key ? DO_NOT_RELOAD_DIRECTION[n.key] : undefined
     return (
       <li key={n.id} className={`${ROW_LAYOUT} ${state === 'stale' ? 'opacity-55' : ''}`}>
         <span
@@ -345,6 +390,26 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
             >
               <Icon icon="ph:key" width={12} height={12} />
               {n.action.label}
+            </button>
+          )}
+          {recoveryDirection && (
+            <button
+              type="button"
+              onClick={() => {
+                const ok = backupRecoveryData(recoveryDirection)
+                if (!ok) {
+                  pushNotification({
+                    type: 'error',
+                    title: 'Nothing to back up yet',
+                    message: 'Recovery data is not ready. Keep this page open and try again.',
+                  })
+                }
+              }}
+              aria-label="Back up recovery data"
+              className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-[#E5EFFF] px-2.5 py-1.5 text-[11px] font-semibold text-[#17235E] transition-colors hover:bg-[#17235E]/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#17235E]/40"
+            >
+              <Icon icon="ph:download-simple" width={12} height={12} />
+              Back up recovery data
             </button>
           )}
           <div className="flex items-center gap-1.5">

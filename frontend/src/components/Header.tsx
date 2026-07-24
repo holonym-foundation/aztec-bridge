@@ -44,6 +44,7 @@ if (typeof window !== 'undefined') {
     'ph:x',
     'ph:book-open',
     'ph:gas-pump',
+    'ph:globe-hemisphere-west',
     'ph:link-simple',
     'ph:check',
     'ph:warning-circle',
@@ -153,6 +154,107 @@ interface HeaderProps {
   credentials?: React.ReactNode
   /** Live points balance. Defaults to a stubbed placeholder — see PLACEHOLDER_POINTS. */
   points?: number
+}
+
+/**
+ * External ecosystem destinations shown in the "Ecosystem" nav dropdown. Kept
+ * as a plain array so new entries are a one-line add (no JSX edits): drop in
+ * another { label, href } and it renders with the same row treatment.
+ */
+const ECOSYSTEM_LINKS: { label: string; href: string }[] = [
+  { label: 'Azguard', href: 'https://azguardwallet.io' },
+  { label: 'Aztecscan', href: 'https://aztecscan.xyz' },
+  { label: 'Nyx', href: 'https://www.nyx.money' },
+]
+
+/**
+ * "Ecosystem" nav item — a click-to-open dropdown of external ecosystem links.
+ * Rendered inside the shared secondaryNav (desktop pill + mobile panel), so it
+ * owns its own open/close state, click-outside, and Escape handling here rather
+ * than in Header (secondaryNav is inline JSX and can't hold hooks). The trigger
+ * and every row reuse the exact same nav-link treatment as How it works / Docs
+ * / Fee Juice; the open panel reuses panelSurface, matching the mobile nav
+ * panel. It opens BELOW the trigger (top-full) so it never overlaps the nav row.
+ */
+const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void }> = ({ isDark, onNavigate }) => {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+      >
+        <Icon
+          icon="ph:globe-hemisphere-west"
+          width={16}
+          height={16}
+          className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'}
+        />
+        Ecosystem
+        <Icon
+          icon="ph:caret-down"
+          width={12}
+          height={12}
+          className={`${isDark ? 'text-white/[0.50]' : 'text-[#737373]'} transition-transform duration-200 motion-reduce:transition-none ${
+            open ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Ecosystem"
+          className={`absolute top-full left-0 mt-2 z-50 min-w-[180px] ${panelSurface(isDark)} rounded-2xl shadow-lg py-2 px-2 flex flex-col items-stretch gap-1`}
+        >
+          {ECOSYSTEM_LINKS.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                onNavigate?.()
+              }}
+              className={`flex items-center justify-between gap-3 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+            >
+              {link.label}
+              <Icon
+                icon="majesticons:open"
+                width={14}
+                height={14}
+                className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'}
+              />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINTS }) => {
@@ -464,6 +566,10 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         <Icon icon="ph:gas-pump" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
         Fee Juice
       </Link>
+      {/* Ecosystem — click-to-open dropdown of external ecosystem links. Shares
+          the sibling links' pill/hover/typography treatment; opens below the
+          trigger so it clears the nav row. */}
+      <EcosystemNav isDark={isDark} onNavigate={() => setMobileMenuOpen(false)} />
     </>
   )
 

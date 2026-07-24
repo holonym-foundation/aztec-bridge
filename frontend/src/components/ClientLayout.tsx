@@ -8,11 +8,14 @@ import ShieldOnboarding from '@/components/ShieldOnboarding'
 import BridgeStepsRail from '@/components/BridgeStepsRail'
 import ActivityDrawer from '@/components/ActivityDrawer'
 import NotificationsDrawer from '@/components/NotificationsDrawer'
+import SupportTab from '@/components/SupportTab'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
 import { useBridgeStore } from '@/stores/bridgeStore'
+import { isSupportOpenable } from '@/utils/support'
 import { motion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 export default function ClientLayout({
   children,
 }: {
@@ -30,6 +33,32 @@ export default function ClientLayout({
   // up into the card region's bottom padding). Other routes (docs, activity) scroll normally,
   // so the footer keeps its default position there.
   const isNoScrollRoute = pathname === '/' || pathname === '/progress'
+
+  // See shield.human.tech#86 — never hide the native Iris launcher while it's the
+  // only way to reach support. The Iris widget mounts client-side after hydration,
+  // so poll briefly and only flip this on once the widget reports it's openable
+  // (i.e. the Support tab can actually reach it). If it never becomes openable, the
+  // native bubble stays visible as the working fallback.
+  const [hideNativeBubble, setHideNativeBubble] = useState(false)
+  useEffect(() => {
+    if (isSupportOpenable()) {
+      setHideNativeBubble(true)
+      return
+    }
+    const id = window.setInterval(() => {
+      if (isSupportOpenable()) {
+        setHideNativeBubble(true)
+        window.clearInterval(id)
+      }
+    }, 500)
+    // Stop probing after a while; a widget that never reports openable keeps its bubble.
+    const stop = window.setTimeout(() => window.clearInterval(id), 15000)
+    return () => {
+      window.clearInterval(id)
+      window.clearTimeout(stop)
+    }
+  }, [])
+
   return (
     <div
       className={`relative flex flex-col w-full min-w-0 overflow-x-hidden ${isNoScrollRoute ? 'h-screen overflow-y-hidden' : 'min-h-screen'}`}
@@ -79,8 +108,11 @@ export default function ClientLayout({
         }}
       /> */}
       {/* Header — kept in its own stacking wrapper so it can be lifted above the
-          onboarding splash overlay (z-100) for connected users. See data-ob-splash. */}
-      <div className="ob-header-elevate relative z-30 flex flex-col">
+          onboarding splash overlay (z-100) for connected users. See data-ob-splash.
+          z-50 keeps the nav (banners + Header) ABOVE the binder dock (z-40) and its
+          drawer panels, so an open drawer can never occlude the top nav (#318). The
+          connected-splash elevation to z-130 still wins via `!important`. */}
+      <div className="ob-header-elevate relative z-50 flex flex-col">
         <BannerAztecTestnet />
         <BannerAztecNodeError />
         <Header />
@@ -109,6 +141,7 @@ export default function ClientLayout({
         <BridgeStepsRail />
         <ActivityDrawer />
         <NotificationsDrawer />
+        <SupportTab />
       </div>
       {/* Below md the centered card leaves no right gutter, so the right-edge
           binder tabs would sit off-screen (#243). Relocate them to a compact,
@@ -119,7 +152,14 @@ export default function ClientLayout({
         <BridgeStepsRail variant="dock" />
         <ActivityDrawer variant="dock" />
         <NotificationsDrawer variant="dock" />
+        <SupportTab variant="dock" />
       </div>
+      {/* See shield.human.tech#86 — hide the native Iris floating bubble ONLY once
+          it's programmatically openable, so the Support tab replaces it without ever
+          leaving support unreachable. Until then the native launcher stays visible. */}
+      {hideNativeBubble && (
+        <style dangerouslySetInnerHTML={{ __html: '#iris-widget-host { display: none !important }' }} />
+      )}
       <HowItWorksModal />
     </div>
   )

@@ -43,6 +43,12 @@ const STATUS_META: Record<string, StatusMeta> = {
 
 const MAX_VISIBLE_OPS = 5
 
+// The top nav row (banners + Header) sits at the viewport top. The upward-growing
+// panel must stop BELOW it, so reserve this much space from the viewport top; the
+// panel's top edge lands here and never crosses into the nav (#318). Mirrors the
+// same NAV_SAFE_TOP reservation BridgeStepsRail uses for its rail panel (#316).
+const NAV_SAFE_TOP = 72
+
 // Network/deployment this app instance runs against. The operation record does
 // not persist a per-op network or Aztec version, so we surface the current active
 // deployment. Same config-derived source and "vX Alpha" language the nav's
@@ -61,11 +67,22 @@ function DirectionLogos({ direction }: { direction: BridgeOperation['direction']
   const first = isDeposit ? eth : aztec
   const second = isDeposit ? aztec : eth
   const label = isDeposit ? 'L1 to L2' : 'L2 to L1'
+  // The Aztec mark is a bare light-green diamond that washes out on the light card
+  // surface, so sit it inside a dark circular chip (the Ethereum glyph is already a
+  // self-contained dark circle and needs none). Matches ActivityCard's DirectionLogos.
+  const renderMark = (src: string) =>
+    src === aztec ? (
+      <span className="inline-flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]">
+        <StyledImage src={src} alt="" className="h-[11px] w-[11px]" />
+      </span>
+    ) : (
+      <StyledImage src={src} alt="" className="h-[15px] w-[15px] shrink-0" />
+    )
   return (
     <span role="img" aria-label={label} title={label} className="inline-flex items-center gap-1">
-      <StyledImage src={first} alt="" className="h-[15px] w-[15px] shrink-0" />
+      {renderMark(first)}
       <Icon icon="ph:arrow-right" width={11} height={11} className="text-[#989898]" aria-hidden="true" />
-      <StyledImage src={second} alt="" className="h-[15px] w-[15px] shrink-0" />
+      {renderMark(second)}
     </span>
   )
 }
@@ -96,8 +113,9 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
   const [recoverOpen, setRecoverOpen] = useState(false)
   // The panel is anchored to the tab's bottom and grows UPWARD (#229), so it
   // never spills below the tab into the floating chat widget. Cap its height to
-  // the room actually above the tab's bottom edge so the header and the "View
-  // full activity" footer always stay on-screen no matter where the dock sits.
+  // the room between the nav bar (NAV_SAFE_TOP) and the tab's bottom edge so the
+  // header and the "View full activity" footer always stay on-screen and the top
+  // edge never rises over the nav no matter where the dock sits (#318).
   const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined)
   const open = hovered || pinned
   const drawerRef = useRef<HTMLDivElement>(null)
@@ -152,14 +170,16 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
   }, [pinned])
 
   // Measure the space above the tab's bottom edge and cap the panel to it, so the
-  // upward-growing panel is never clipped by the viewport top (or, on short
-  // screens, forced to overlap the chat widget below). Re-measures on resize.
+  // upward-growing panel is never clipped by the viewport top and never crosses
+  // into the top nav bar (#318). Reserving NAV_SAFE_TOP lands the panel's top edge
+  // just below the nav so the list scrolls internally instead of growing over the
+  // account/points chip. Re-measures on resize.
   useEffect(() => {
     if (!open) return
     const measure = () => {
       const rect = handleRef.current?.getBoundingClientRect()
       if (!rect) return
-      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - 12)))
+      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - NAV_SAFE_TOP)))
     }
     measure()
     window.addEventListener('resize', measure)

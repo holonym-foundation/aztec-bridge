@@ -1,6 +1,15 @@
 'use client'
 
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
+
+// SSR-safe storage: the store module is evaluated on the server too (client
+// components still render on the server), where localStorage doesn't exist.
+const safeStorage = createJSONStorage(() =>
+  typeof window !== 'undefined'
+    ? window.localStorage
+    : { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+)
 
 // Persistent, in-app feed of the events that used to live only in transient
 // toasts. Toasts stay for momentary confirmations; anything the user may want
@@ -21,8 +30,11 @@ export type NotificationType =
 // An optional inline action carried by a message. Rendered as a small
 // button inside the feed row so an interactive notification (e.g. "Deposit
 // confirmed" offering a recovery-backup export) can be acted on straight from
-// Messages, now that no corner toast exists to click. Held in memory only —
-// the store isn't persisted, so the handler stays a live function.
+// Messages, now that no corner toast exists to click. The onClick is a live
+// function, so it is NOT persisted (partialize strips `action`); a message
+// restored from storage keeps its text but loses its button. Actions that must
+// survive a reload are reconstructed at render time from the message `key`
+// (see NotificationsDrawer's recovery-backup download).
 export interface NotificationAction {
   label: string
   onClick: () => void
@@ -92,7 +104,9 @@ const unread = (list: AppNotification[]) => list.filter((n) => !n.read).length
 
 const makeId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
-export const useNotificationsStore = create<NotificationsState>((set, get) => ({
+export const useNotificationsStore = create<NotificationsState>()(
+  persist(
+    (set, get) => ({
   notifications: [],
   unreadCount: 0,
   lastGenie: null,
@@ -177,7 +191,24 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
         unreadCount: 0,
       }
     }),
-}))
+    }),
+    {
+      name: 'shield:notifications',
+      storage: safeStorage,
+      version: 1,
+      // Rehydrated explicitly from a client effect (see ClientLayout) so the
+      // server and first client render both start empty — no hydration mismatch
+      // on the unread badge or feed.
+      skipHydration: true,
+      // Persist only serializable fields: drop the live `action` onClick (a
+      // function) and never persist the one-shot genie animation signal.
+      partialize: (state) => ({
+        notifications: state.notifications.map(({ action: _action, ...rest }) => rest),
+        unreadCount: state.unreadCount,
+      }),
+    },
+  ),
+)
 
 // Convenience for non-React call sites (zustand stores, event callbacks) that
 // shouldn't subscribe — mirrors how showToast is used across the app.

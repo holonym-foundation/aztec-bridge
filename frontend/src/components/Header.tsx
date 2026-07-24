@@ -159,22 +159,49 @@ interface HeaderProps {
 /**
  * External ecosystem destinations shown in the "Ecosystem" nav dropdown. Kept
  * as a plain array so new entries are a one-line add (no JSX edits): drop in
- * another { label, href } and it renders with the same row treatment.
+ * another { label, href, icon } and it renders with the same row treatment. The
+ * `icon` is a LOCAL asset path (the runtime CSP blocks remote images) holding
+ * the destination's real brand logo; omit it and the row falls back to a neutral
+ * glyph rather than a broken image.
  */
-const ECOSYSTEM_LINKS: { label: string; href: string }[] = [
-  { label: 'Azguard', href: 'https://azguardwallet.io' },
-  { label: 'Aztecscan', href: 'https://aztecscan.xyz' },
-  { label: 'Nyx', href: 'https://www.nyx.money' },
+const ECOSYSTEM_LINKS: { label: string; href: string; icon?: string }[] = [
+  { label: 'Azguard', href: 'https://azguardwallet.io', icon: '/assets/svg/ecosystem/azguard.svg' },
+  { label: 'Aztecscan', href: 'https://aztecscan.xyz', icon: '/assets/svg/ecosystem/aztecscan.svg' },
+  { label: 'Nyx', href: 'https://www.nyx.money', icon: '/assets/svg/ecosystem/nyx.svg' },
 ]
+
+/**
+ * Dropdown surface for the Ecosystem menu — deliberately a byte-for-byte match
+ * of the account dropdown's `panelSurface` (see AccountChip.tsx), so the two
+ * menus read as ONE component we can later lift into a shared Storybook
+ * dropdown. It is intentionally NOT the Header `panelSurface` above: that one is
+ * shared with the mobile nav panel and sits at 0.95 opacity, whereas the account
+ * dropdown (our reference chrome) sits at 0.97. Keeping this local keeps the two
+ * consumers from drifting.
+ */
+function ecosystemPanelSurface(isDark: boolean): string {
+  return isDark
+    ? 'bg-[#2A0E1C]/[0.97] backdrop-blur-md border border-white/[0.12]'
+    : 'bg-white/[0.97] backdrop-blur-md border border-[#E5E5E5]/80'
+}
 
 /**
  * "Ecosystem" nav item — a click-to-open dropdown of external ecosystem links.
  * Rendered inside the shared secondaryNav (desktop pill + mobile panel), so it
  * owns its own open/close state, click-outside, and Escape handling here rather
- * than in Header (secondaryNav is inline JSX and can't hold hooks). The trigger
- * and every row reuse the exact same nav-link treatment as How it works / Docs
- * / Fee Juice; the open panel reuses panelSurface, matching the mobile nav
- * panel. It opens BELOW the trigger (top-full) so it never overlaps the nav row.
+ * than in Header (secondaryNav is inline JSX and can't hold hooks). The TRIGGER
+ * reuses the exact nav-link treatment of How it works / Docs / Fee Juice.
+ *
+ * The open PANEL is deliberately aligned to the account dropdown (AccountChip's
+ * portaled menu) — the reference chrome for this app — rather than the mobile
+ * nav panel: same surface (ecosystemPanelSurface == account panelSurface), the
+ * same rounded-[16px] corner + shadow-lg, the same py-2 container with a top
+ * SectionLabel, and menu-item rows (mx-2 px-2 py-1.5 rounded-lg, hoverTint,
+ * text-xs font-medium) instead of full-round pills. Each row carries the
+ * destination's real brand logo on a neutral tile at the left, its label, and
+ * the external-link affordance at the right. The goal is a single coherent
+ * dropdown look liftable into a shared Storybook component later. It opens BELOW
+ * the trigger (top-full) so it never overlaps the nav row.
  */
 const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void }> = ({ isDark, onNavigate }) => {
   const [open, setOpen] = useState(false)
@@ -218,7 +245,7 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void }> = ({ 
           icon="ph:caret-down"
           width={12}
           height={12}
-          className={`${isDark ? 'text-white/[0.50]' : 'text-[#737373]'} transition-transform duration-200 motion-reduce:transition-none ${
+          className={`${isDark ? 'text-white/[0.50]' : 'text-[#737373]'} transition-transform duration-150 motion-reduce:transition-none ${
             open ? 'rotate-180' : ''
           }`}
         />
@@ -227,8 +254,13 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void }> = ({ 
         <div
           role="menu"
           aria-label="Ecosystem"
-          className={`absolute top-full left-0 mt-2 z-50 min-w-[180px] ${panelSurface(isDark)} rounded-2xl shadow-lg py-2 px-2 flex flex-col items-stretch gap-1`}
+          className={`absolute top-full left-0 mt-2 z-50 w-[240px] max-w-[calc(100vw-1.5rem)] ${ecosystemPanelSurface(isDark)} ${navText(isDark)} rounded-[16px] shadow-lg py-2 flex flex-col`}
         >
+          {/* Section label — mirrors the account dropdown's Wallets / Identity
+              group headers so the two menus share one structural vocabulary. */}
+          <div className={`px-4 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${mutedIconText(isDark)}`}>
+            Ecosystem
+          </div>
           {ECOSYSTEM_LINKS.map((link) => (
             <a
               key={link.href}
@@ -240,14 +272,30 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void }> = ({ 
                 setOpen(false)
                 onNavigate?.()
               }}
-              className={`flex items-center justify-between gap-3 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+              className={`flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-left transition-colors duration-150 motion-reduce:transition-none ${hoverTint(isDark)} cursor-pointer`}
             >
-              {link.label}
+              {/* Brand logo on a neutral tile so differently-shaped logos (square
+                  Azguard, transparent Aztecscan, circular Nyx) all align at one
+                  size — the same 24px avatar slot the account dropdown uses for
+                  wallet rows. Falls back to a neutral globe glyph if a logo asset
+                  is missing, never a broken image. */}
+              <span
+                className={`flex w-6 h-6 items-center justify-center rounded-[7px] flex-shrink-0 ${
+                  isDark ? 'bg-white/[0.06]' : 'bg-black/[0.04]'
+                }`}
+              >
+                {link.icon ? (
+                  <Image src={link.icon} alt="" width={16} height={16} className="object-contain" />
+                ) : (
+                  <Icon icon="ph:globe-hemisphere-west" width={14} height={14} className={mutedIconText(isDark)} />
+                )}
+              </span>
+              <span className={`flex-1 min-w-0 truncate text-xs font-medium ${navText(isDark)}`}>{link.label}</span>
               <Icon
                 icon="majesticons:open"
                 width={14}
                 height={14}
-                className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'}
+                className={`flex-shrink-0 ${mutedIconText(isDark)}`}
               />
             </a>
           ))}

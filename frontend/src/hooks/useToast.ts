@@ -53,7 +53,13 @@ type ToastMessageInput = string | { message: string | React.ReactNode; heading?:
 // lands there. Set `feed: false` only when a richer, semantic pushNotification
 // is issued for the same event at the call site (so the event isn't recorded
 // twice).
-type FeedOption = { feed?: boolean }
+//
+// `transient` is stronger: the message is momentary and MUST NOT be recorded in
+// the persistent feed at all (it never lands in localStorage, so it can't feel
+// un-dismissable after a reload). Use it for form-validation nudges and other
+// throwaway feedback whose real home is an inline field error. A transient error
+// also auto-closes rather than pinning, so it never lingers.
+type FeedOption = { feed?: boolean; transient?: boolean }
 
 type ToastOptionsWithFeed = ToastOptions & FeedOption
 
@@ -308,6 +314,8 @@ const createToast = (
   heading?: string,
   options: ToastOptionsWithFeed = {},
 ) => {
+  const isTransient = options.transient === true
+
   // #202/#207. Record the event in the Messages feed first. When it lands
   // there, the feed row plus the peek-from-tab bubble ARE the surfacing, so the
   // corner toast is always redundant and is suppressed — including pinned
@@ -315,8 +323,11 @@ const createToast = (
   // (with an inline action where one is needed) plus the peek bubble only.
   // Persistent safety text that must stay on-screen lives in its own page
   // component (e.g. ProgressCard's "keep this page open" banner), not a toast.
-  const mirrored = mirrorToFeed(type, message, heading, options)
-  if (mirrored) return null
+  // A transient message skips the feed entirely so it is never persisted.
+  if (!isTransient) {
+    const mirrored = mirrorToFeed(type, message, heading, options)
+    if (mirrored) return null
+  }
 
   // For error toasts, check if this exact message is already active
   // Use only the heading for de-dupe when message is non-string (JSX),
@@ -342,8 +353,11 @@ const createToast = (
   }
 
   const Component = TOAST_COMPONENTS[type]
-  const { feed: _feed, ...toastableOptions } = options
-  const toastOptions = createMergedOptions({}, { ...typeOverrides(type), ...toastableOptions })
+  const { feed: _feed, transient: _transient, ...toastableOptions } = options
+  // Errors normally stay pinned until dismissed; a transient error auto-closes so a
+  // one-off validation nudge is never sticky.
+  const perTypeOverrides = isTransient ? { autoClose: 3000, closeOnClick: true } : typeOverrides(type)
+  const toastOptions = createMergedOptions({}, { ...perTypeOverrides, ...toastableOptions })
 
   const finalOptions = {
     className: `${type}-toast`,
@@ -395,14 +409,19 @@ const updateToastState = (
   heading?: string,
   options: ToastOptionsWithFeed = {},
 ) => {
+  const isTransient = options.transient === true
+
   // #202/#207. Mirror the resolved state into the feed. When it lands there it
   // surfaces via the peek bubble plus feed, so always retire the transient
   // loading toast rather than morphing it into a redundant corner success/error
   // — even when the caller pinned the resolved state open (autoClose:false).
-  const mirrored = mirrorToFeed(type, message, heading, options)
-  if (mirrored) {
-    toast.dismiss(toastId)
-    return
+  // A transient resolution skips the feed so it is never persisted.
+  if (!isTransient) {
+    const mirrored = mirrorToFeed(type, message, heading, options)
+    if (mirrored) {
+      toast.dismiss(toastId)
+      return
+    }
   }
 
   // For error toasts, check if this exact message is already active.
@@ -429,8 +448,9 @@ const updateToastState = (
   }
 
   const Component = TOAST_COMPONENTS[type]
-  const { feed: _feed, ...toastableOptions } = options
-  const mergedOptions = createMergedOptions({}, { ...typeOverrides(type), ...toastableOptions })
+  const { feed: _feed, transient: _transient, ...toastableOptions } = options
+  const perTypeOverrides = isTransient ? { autoClose: 3000, closeOnClick: true } : typeOverrides(type)
+  const mergedOptions = createMergedOptions({}, { ...perTypeOverrides, ...toastableOptions })
 
   toast.update(toastId, {
     // `message` widened to ReactNode for ErrorToast; the other toast
@@ -512,6 +532,13 @@ export const useToast = () => {
   const showToast = (type: ToastType, input: ToastMessageInput, options?: CustomToastOptions) => {
     const { message, heading } = normalizeMessage(input)
     createToast(type, message, heading, options)
+  }
+
+  // Momentary, NON-persisted message (never mirrored into the Messages feed).
+  // For form-validation nudges whose real home is an inline field error.
+  showToast.transient = (type: ToastType, input: ToastMessageInput, options?: CustomToastOptions) => {
+    const { message, heading } = normalizeMessage(input)
+    createToast(type, message, heading, { ...options, transient: true })
   }
 
   showToast.promise = handlePromiseToast
@@ -663,6 +690,11 @@ export function useToastMutation<TData = unknown, TError = unknown, TVariables =
 export const showToast = (type: ToastType, input: ToastMessageInput, options?: ToastOptionsWithFeed) => {
   const { message, heading } = normalizeMessage(input)
   createToast(type, message, heading, options)
+}
+
+showToast.transient = (type: ToastType, input: ToastMessageInput, options?: ToastOptionsWithFeed) => {
+  const { message, heading } = normalizeMessage(input)
+  createToast(type, message, heading, { ...options, transient: true })
 }
 
 showToast.promise = handlePromiseToast

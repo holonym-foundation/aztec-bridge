@@ -8,7 +8,8 @@ import { STORAGE_KEYS } from '@human.tech/clean.sdk'
 import { formatUnits } from 'viem'
 import { L1_TOKEN_METADATA, L1_NETWORKS, AZTEC_VERSION } from '@/config'
 import StyledImage from '@/components/StyledImage'
-import { isResumable, hasPossibleLockedFunds, isLikelyCompleted } from '@/utils/resumability'
+import { canResumeOp, hasPossibleLockedFunds, isLikelyCompleted } from '@/utils/resumability'
+import { formatFjAmount } from '@/utils/fuelPricing'
 import { copyToClipboard } from '@/utils'
 import { useToast } from '@/hooks/useToast'
 
@@ -151,6 +152,28 @@ function hasFuelClaimData(op: BridgeOperation): boolean {
   return !!op.fuelMessageHash && !!op.fuelMessageLeafIndex && !!op.fuelAmount && !!op.l1TxHash
 }
 
+// TODO(#331): "Fee Juice used" (L2 gas consumption) cannot be surfaced from this
+// data source. useBridgeOperations() -> bridge.getOperations() -> GET
+// /api/bridge/operations returns only BridgeOperation rows (L1->L2 deposits and
+// L2->L1 withdrawals). Fuel appears ONLY as the top-up leg of a deposit
+// (op.fuelAmount / fuelMessageHash), surfaced below. Nothing in this source, or
+// any client store, records FeeJuice spent paying for L2 transactions, so usage
+// needs backend/indexer support emitting fuel-consumption events before it can
+// render here.
+//
+// Human-readable Fee Juice top-up for a deposit that carved part of the bridged
+// token into FeeJuice. op.fuelAmount is the FeeJuice received (18-dec) — the same
+// value the claim flow and FuelClaimLinkPanel treat as the claim amount.
+// Withdrawals never carry a fuel leg, so this is L1->L2 only.
+function fuelTopUpFj(op: BridgeOperation): string | null {
+  if (op.direction !== 'L1_TO_L2' || !op.fuelAmount) return null
+  try {
+    return formatFjAmount(BigInt(op.fuelAmount))
+  } catch {
+    return null
+  }
+}
+
 /**
  * Whether the fuel from this bridge is genuinely shareable (went to someone ELSE, who needs a
  * claim link) versus the bridger's own L2 account (theirs already, nothing to share).
@@ -213,9 +236,13 @@ export default function ActivityCard({
   // claimed on a prior attempt — resuming just re-fails. Surface it as a calm "likely completed"
   // state and never offer Resume for it (isResumable already excludes it).
   const likelyCompleted = isLikelyCompleted(operation)
-  const resumable = isResumable(operation)
   const lockedFunds = hasPossibleLockedFunds(operation)
-  const showResume = resumable || lockedFunds
+  // Resume covers every still-in-flight operation, not only the SDK-classified
+  // resumable/locked states. A bare 'pending' (the session dropped before any tx
+  // landed, so no hash exists yet) still needs a route back into the flow.
+  // Terminal (completed/failed) and likely-completed rows never resume.
+  const showResume = canResumeOp(operation)
+  const fuelTopUp = fuelTopUpFj(operation)
 
   // Unique per card so multiple cards' tooltips don't collide.
   const fuelTipId = `share-fuel-${useId()}`
@@ -256,6 +283,12 @@ export default function ActivityCard({
         {amount} {tokenSymbol}
       </p>
       {DEPLOYMENT_LABEL && <p className="mt-1 text-[11px] text-gray-400">{DEPLOYMENT_LABEL}</p>}
+      {fuelTopUp && (
+        <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-700">
+          <Icon icon="ph:gas-pump" width={12} height={12} className="flex-shrink-0" />
+          Fee Juice top up · {fuelTopUp} FJ
+        </p>
+      )}
 
       {likelyCompleted ? (
         <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-emerald-700">

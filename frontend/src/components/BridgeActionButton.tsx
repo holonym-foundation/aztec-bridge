@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import TextButton from './TextButton'
 import StyledImage from './StyledImage'
 import { BridgeDirection } from '@/types/bridge'
@@ -164,7 +164,23 @@ function BridgeActionButton({
 }: BridgeActionButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isOperationPending, setIsOperationPending] = useState(false)
+  // Transient amount-validation error, rendered inline under the button only. It is
+  // NEVER pushed into the persistent Messages feed (that made it feel un-dismissable,
+  // #332/#333) and it auto-clears the moment the amount becomes valid or is cleared.
+  const [amountError, setAmountError] = useState<string | null>(null)
   const notify = useToast()
+
+  useEffect(() => {
+    if (!inputAmount || parseFloat(inputAmount) > 0) setAmountError(null)
+  }, [inputAmount])
+
+  // Flag an empty/zero amount: inline field error (primary) plus a momentary, non-persisted
+  // toast. Focus returns to the amount input so the fix is one keystroke away.
+  const flagInvalidAmount = () => {
+    setAmountError('Please enter a valid amount')
+    notify.transient('error', 'Please enter a valid amount')
+    inputRef.current?.focus()
+  }
   const [showCongestionWarning, setShowCongestionWarning] = useState(false)
   const { data: pendingTxCount } = useL2PendingTxCount()
   const isCongested = pendingTxCount && pendingTxCount > 40
@@ -186,8 +202,7 @@ function BridgeActionButton({
   // Process operations for bridging or withdrawing
   const processBridgeOperation = async () => {
     if (!inputAmount || parseFloat(inputAmount) <= 0) {
-      notify('error', 'Please enter a valid amount')
-      inputRef.current?.focus()
+      flagInvalidAmount()
       return
     }
 
@@ -352,8 +367,7 @@ function BridgeActionButton({
       }
     }
     if (!inputAmount || parseFloat(inputAmount) <= 0) {
-      notify('error', 'Please enter a valid amount')
-      inputRef.current?.focus()
+      flagInvalidAmount()
       return
     }
 
@@ -461,7 +475,7 @@ function BridgeActionButton({
     // Temporary reservation hold: a signed-but-unconfirmed deposit is holding the user's
     // budget. Distinct from a permanent cap — say it clears itself so they wait, not verify.
     if (pendingHoldBlocked) {
-      return 'Pending deposit — limit frees in ≤30 min'
+      return 'Pending deposit, limit frees in under 30 min'
     }
 
     // Travel Rule: passport tier exhausted, POCH required (deposits only)
@@ -529,6 +543,11 @@ function BridgeActionButton({
         {showDisabledReason && (
           <p className="mt-1 text-center text-[11px] leading-[15px] font-medium text-[#B54708]">
             {effectiveDisabledReason}
+          </p>
+        )}
+        {amountError && !showLoadingSpinner && !bridgeCompleted && (
+          <p className="mt-1 text-center text-[11px] leading-[15px] font-medium text-[#D92D20]">
+            {amountError}
           </p>
         )}
       </div>

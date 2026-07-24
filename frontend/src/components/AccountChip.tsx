@@ -41,6 +41,11 @@ if (typeof window !== 'undefined') {
 const EVM_NETWORK_ICON = '/assets/svg/network-logo.svg'
 const AZTEC_ICON = '/assets/svg/aztec.svg'
 const EVM_WALLET_FALLBACK = '/assets/wallets/wally-dark.svg'
+// WaaP embedded wallet brand mark. The WaaP wallet IS human.tech's Silk wallet
+// (the "Open Wallet" action opens the Silk UI at silkUrl), so its own product
+// logo is the correct identity for the row — never the generic/injected icon
+// (Rabby/MetaMask) that waapWalletIcon may carry for a browser-extension login.
+const WAAP_WALLET_ICON = '/assets/svg/silk-logo.svg'
 
 // Compliance figures surfaced in the account dropdown. Both come from env
 // (BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD) — never hardcoded — so
@@ -362,6 +367,16 @@ const AccountChip: React.FC<AccountChipProps> = ({
     setTimeout(() => setCopiedKey((k) => (k === addr ? null : k)), 1500)
   }
 
+  // #335: single disconnect path reused by the header affordance and the bottom
+  // menu item, so the fund-loss hard-lock (actionsLocked) is enforced once and
+  // the handler logic is never duplicated.
+  const handleDisconnect = () => {
+    if (actionsLocked) return
+    if (isAztecConnected) void disconnectAztecWallet()
+    if (isWaapConnected) void disconnectWaapWallet()
+    setOpen(false)
+  }
+
   // ── State 1: nothing connected → a compact "Connect wallet" chip. ──
   if (!isWaapConnected && !isAztecConnected) {
     return (
@@ -384,6 +399,9 @@ const AccountChip: React.FC<AccountChipProps> = ({
   }
 
   const evmIcon = waapWalletIcon || EVM_WALLET_FALLBACK
+  // The primary EVM wallet is an embedded WaaP/Silk wallet only for the WAAP
+  // login method; an injected login (Rabby/MetaMask) keeps its real icon.
+  const isWaapEmbedded = loginMethod === LOGIN_METHODS.WAAP
   const bothConnected = isWaapConnected && isAztecConnected
 
   const label = bothConnected ? 'Account' : waapAddress ? shortAddr(waapAddress) : 'Wallet'
@@ -392,6 +410,16 @@ const AccountChip: React.FC<AccountChipProps> = ({
     <span className="flex w-6 h-6 p-[2px] justify-center items-center rounded-full bg-[#FDE7F3] flex-shrink-0">
       <Image src={evmIcon} alt="" width={18} height={18} />
     </span>
+  )
+  // #333: the WALLETS-section row for the primary wallet shows the WaaP/Silk
+  // brand mark when the login is the embedded WaaP wallet, so the row reads
+  // clearly as a WaaP wallet instead of the generic/injected (Rabby) icon.
+  const WaapRowAvatar = isWaapEmbedded ? (
+    <span className="flex w-6 h-6 p-[2px] justify-center items-center rounded-full bg-[#FDE7F3] flex-shrink-0">
+      <Image src={WAAP_WALLET_ICON} alt="" width={18} height={18} />
+    </span>
+  ) : (
+    EvmAvatar
   )
   const AztecAvatar = (
     <span className="flex w-6 h-6 p-[3px] justify-center items-center rounded-full bg-[#FDE7F3] flex-shrink-0">
@@ -536,33 +564,63 @@ const AccountChip: React.FC<AccountChipProps> = ({
           )}
 
           {/* ── Wallets ── */}
-          <SectionLabel isDark={isDark}>Wallets</SectionLabel>
+          {/* #335: Disconnect was buried at the very bottom of the dropdown. A
+              small, secondary Disconnect affordance is surfaced here on the
+              Wallets header too (a fresh user's first eye-line), reusing the same
+              handler + the same fund-loss hard-lock as the bottom item. */}
+          <div className="flex items-center justify-between pr-2">
+            <SectionLabel isDark={isDark}>Wallets</SectionLabel>
+            <button
+              type="button"
+              disabled={actionsLocked}
+              title={actionsLocked ? 'Locked during transfer to protect your funds.' : 'Disconnect'}
+              onClick={handleDisconnect}
+              className={`flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full text-[11px] font-medium ${
+                actionsLocked ? 'opacity-40 cursor-not-allowed' : `cursor-pointer ${hoverTint(isDark)}`
+              } ${isDark ? 'text-[#FF6B6B]' : 'text-red'}`}
+            >
+              <Icon icon="ph:sign-out" width={13} height={13} />
+              Disconnect
+            </button>
+          </div>
 
           {isWaapConnected && (
+            // #333: this is the embedded WaaP (email) wallet. It PRIMARILY shows
+            // the address for now; hover reveals the copy control (WalletRow's
+            // group-hover pattern). The friendlier WaaP email/username is NOT in
+            // walletStore state — the only source is the async provider method
+            // window.waap.requestEmail() (SilkEthereumProviderInterface), which
+            // isn't surfaced into the store, so it can't be read here without new
+            // store plumbing (out of scope for this component-only change).
+            // TODO(#333): show WaaP email/username as primary (hover -> address +
+            // copy) once the store exposes it, e.g. a `waapEmail` field populated
+            // from `window.waap.requestEmail()` at connect time.
             <WalletRow
               isDark={isDark}
-              avatar={EvmAvatar}
+              avatar={WaapRowAvatar}
               networkIcon={EVM_NETWORK_ICON}
               primary={waapAddress ? shortAddr(waapAddress) : 'EVM wallet'}
               secondary={l1NativeBalance ? `${l1NativeBalance} ETH` : 'Ethereum'}
               fullAddress={waapAddress || undefined}
               copied={!!waapAddress && copiedKey === waapAddress}
               onCopy={() => handleCopy(waapAddress || undefined)}
-              onSwitch={onConnectWallet}
+              // #335: re-calling window.waap.login() only re-selects an account
+              // for an INJECTED login (it re-requests wallet permissions). For the
+              // embedded WaaP wallet the SDK exposes NO account-switcher (only
+              // login/logout/getLoginMethod), and login() is a no-op once a
+              // session exists — that made "Switch" a dead button. So Switch is
+              // shown only for injected logins; embedded-wallet account switching
+              // lives inside the WaaP wallet UI, reached via "Open Wallet" below.
+              // TODO(#335): wire a real embedded account switch if the WaaP SDK
+              // ever exposes one from current state.
+              onSwitch={isWaapEmbedded ? undefined : onConnectWallet}
               switchTitle="Re-open the wallet login to switch EVM account"
+              // #333: for the embedded WaaP login, "Open Wallet" is a small
+              // secondary action tucked onto this row (beside Switch/Copy) —
+              // not a full-width button that reads as a primary action.
+              onOpenWallet={isWaapEmbedded ? () => window.open(silkUrl, '_blank', 'noopener,noreferrer') : undefined}
+              openWalletTitle="Open your WaaP wallet"
             />
-          )}
-
-          {/* Open Wallet — only for the embedded WAAP login (opens the Silk UI). */}
-          {loginMethod === LOGIN_METHODS.WAAP && (
-            <button
-              type="button"
-              onClick={() => window.open(silkUrl, '_blank', 'noopener,noreferrer')}
-              className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg text-left transition-colors duration-150 ${menuItemHover(isDark)} cursor-pointer`}
-            >
-              <Icon icon="majesticons:open" width={16} height={16} className={mutedIconText(isDark)} />
-              <span className={`text-xs font-medium ${navText(isDark)}`}>Open Wallet</span>
-            </button>
           )}
 
           {isAztecConnected && (
@@ -789,12 +847,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
             type="button"
             disabled={actionsLocked}
             title={actionsLocked ? 'Locked during transfer to protect your funds.' : undefined}
-            onClick={() => {
-              if (actionsLocked) return
-              if (isAztecConnected) void disconnectAztecWallet()
-              if (isWaapConnected) void disconnectWaapWallet()
-              setOpen(false)
-            }}
+            onClick={handleDisconnect}
             className={`flex items-center gap-2 mx-2 px-2 py-2 rounded-lg transition-colors duration-150 ${
               actionsLocked
                 ? 'opacity-40 cursor-not-allowed'
@@ -846,9 +899,12 @@ const WalletRow: React.FC<{
   onSwitch?: () => void
   switchTitle?: string
   switchActive?: boolean
+  /** #333: small secondary "Open Wallet" action tucked beside Switch/Copy. */
+  onOpenWallet?: () => void
+  openWalletTitle?: string
   /** #297a: show a "Linked" badge — set ONLY for the server-bound account. */
   linked?: boolean
-}> = ({ isDark, avatar, networkIcon, primary, secondary, fullAddress, copied, onCopy, onSwitch, switchTitle, switchActive, linked }) => (
+}> = ({ isDark, avatar, networkIcon, primary, secondary, fullAddress, copied, onCopy, onSwitch, switchTitle, switchActive, onOpenWallet, openWalletTitle, linked }) => (
   // #275: `group` lets hover/focus reveal the copy control. This is a div (not a
   // button) so the copy/switch buttons aren't nested inside a button.
   <div className="group flex items-center gap-2 px-4 py-1.5">
@@ -902,6 +958,19 @@ const WalletRow: React.FC<{
       >
         <Icon icon="ph:arrows-left-right" width={13} height={13} />
         Switch
+      </button>
+    )}
+    {onOpenWallet && (
+      // #333: Open Wallet as a small secondary text/icon action on the row —
+      // same secondary weight as Switch, never a full-width primary button.
+      <button
+        type="button"
+        onClick={onOpenWallet}
+        title={openWalletTitle}
+        className={`flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full text-[11px] font-medium ${hoverTint(isDark)} ${subtleText(isDark)}`}
+      >
+        <Icon icon="majesticons:open" width={13} height={13} />
+        Open
       </button>
     )}
   </div>

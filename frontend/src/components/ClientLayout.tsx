@@ -29,11 +29,6 @@ export default function ClientLayout({
   const isDocs = pathname?.startsWith('/docs') ?? false
   // Docs is a neutral reading view — keep the light background even when privacy mode is on.
   const showPrivacyBackground = isPrivacyModeEnabled && !isDocs
-  // The bridge page (root route) and the transaction-progress screen both enforce the
-  // no-scroll viewport budget (card capped at 90vh-5rem with internal scroll; footer nested
-  // up into the card region's bottom padding). Other routes (docs, activity) scroll normally,
-  // so the footer keeps its default position there.
-  const isNoScrollRoute = pathname === '/' || pathname === '/progress'
 
   // See shield.human.tech#86 — never hide the native Iris launcher while it's the
   // only way to reach support. The Iris widget mounts client-side after hydration,
@@ -69,8 +64,15 @@ export default function ClientLayout({
 
   return (
     <div
-      className={`relative flex flex-col w-full min-w-0 overflow-x-hidden ${isNoScrollRoute ? 'h-screen overflow-y-hidden' : 'min-h-screen'}`}
-      style={isNoScrollRoute ? { height: '100vh', minWidth: 0 } : { minHeight: '100vh', minWidth: 0 }}
+      // The bridge (/) and progress screens target a single-viewport, no-scroll fit
+      // (card capped at 90vh-5rem, footer nested up into the card region). But that fit
+      // is only achievable at comfortable heights. Clamp with min-height, never a fixed
+      // height + overflow-hidden: at 720/800/900 the content fits and the container is
+      // exactly 100vh so nothing scrolls, while on short viewports (or with an extra
+      // banner / wallet-discovery modal present) the container grows past 100vh and the
+      // document scrolls to reveal the footer instead of clipping it (#328).
+      className="relative flex flex-col w-full min-w-0 overflow-x-hidden min-h-screen"
+      style={{ minHeight: '100vh', minWidth: 0 }}
     >
       {/* Onboarding is skipped on docs so the guides render without connecting a wallet. */}
       {!isDocs && <ShieldOnboarding />}
@@ -128,10 +130,12 @@ export default function ClientLayout({
       {/* Main content */}
       <div className="relative z-20 flex flex-col flex-grow min-h-0">
         <div className='flex-grow'>{children}</div>
-        {/* On the no-scroll routes the outer container is pinned to exactly 100vh and clips
-            overflow, so the footer sits flush at the bottom edge — the flex-grow content
-            region above absorbs the slack. A negative top-margin here would instead lift the
-            footer off the bottom and expose a dead strip beneath it. */}
+        {/* When content fits, the outer container sits at exactly 100vh (min-height) and the
+            flex-grow region above absorbs the slack, so the footer rests flush at the bottom
+            edge with no dead strip beneath it. When content exceeds the viewport the container
+            grows past 100vh and the document scrolls, keeping the footer reachable rather than
+            clipped. A negative top-margin here would instead lift the footer off the bottom
+            and expose a dead strip. */}
         <Footer />
       </div>
       {/* Persistent binder dock: app-shell chrome mounted once, so the Tutorial /

@@ -112,7 +112,7 @@ function useV4FuelQuote(
         setFjOutput(null)
         const errMsg = err instanceof Error ? err.message : String(err)
         const isRevert = errMsg.includes('reverted') || errMsg.includes('execution reverted')
-        setError(isRevert ? 'Swap amount exceeds pool liquidity — try a smaller amount' : 'Quote failed')
+        setError(isRevert ? 'Swap amount exceeds pool liquidity, try a smaller amount' : 'Quote failed')
       } finally {
         setLoading(false)
       }
@@ -792,7 +792,7 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
                   </div>
                 )}
               </div>
-              {pricesError && <p className="text-xs text-amber-600">Live prices unavailable — using fallback prices</p>}
+              {pricesError && <p className="text-xs text-amber-600">Live prices unavailable, using fallback prices</p>}
 
               <div className="flex items-center gap-1.5 max-w-full">
                 <input

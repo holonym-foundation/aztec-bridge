@@ -5,7 +5,6 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useWalletStore } from '@/stores/walletStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
-import DeploymentSelector from '@/components/DeploymentSelector'
 
 const ONBOARDED_KEY = 'shield_onboarded'
 const BRAND = '#81133B'
@@ -54,7 +53,7 @@ const SCREENS: Screen[] = [
         <div className="ob-tiers" role="table" aria-label="Verification tiers">
           <div className="ob-tier-row" role="row">
             <div className="ob-tier-icon" role="cell">
-              <TierIcon kind="unique" />
+              <span className="ob-brandlogo ob-logo-passport" aria-hidden="true" />
             </div>
             <div className="ob-tier-copy" role="cell">
               <strong>Up to $1,000</strong>
@@ -63,7 +62,7 @@ const SCREENS: Screen[] = [
           </div>
           <div className="ob-tier-row" role="row">
             <div className="ob-tier-icon" role="cell">
-              <TierIcon kind="clean" />
+              <span className="ob-brandlogo ob-logo-clean" aria-hidden="true" />
             </div>
             <div className="ob-tier-copy" role="cell">
               <strong>Above $1,000</strong>
@@ -84,6 +83,7 @@ const SCREENS: Screen[] = [
             rel="noopener noreferrer"
             className="ob-pill ob-pill-primary"
           >
+            <span className="ob-brandlogo ob-pill-ico ob-logo-passport" aria-hidden="true" />
             Human Passport
           </a>
           <a
@@ -92,6 +92,7 @@ const SCREENS: Screen[] = [
             rel="noopener noreferrer"
             className="ob-pill ob-pill-outline"
           >
+            <span className="ob-brandlogo ob-pill-ico ob-logo-clean" aria-hidden="true" />
             Proof of Clean Hands
           </a>
         </div>
@@ -102,13 +103,13 @@ const SCREENS: Screen[] = [
   },
   {
     eyebrow: 'Zero knowledge by design',
-    title: 'Private by default, accountable by design',
+    title: 'Private by default, transparent accountability',
     body: (
       <>
         <p>
           Your privacy is enforced by zero knowledge proofs, not promises.
           <InfoTooltip label="Learn more about the privacy guarantee">
-            Your proofs are generated locally. Shield checks only what a rule requires and stores nothing else.
+            A zero knowledge proof confirms a fact is true without revealing the data behind it.
           </InfoTooltip>
         </p>
         <p>
@@ -395,26 +396,6 @@ function CryptexMark({ reduce, mini = false, shared = false }: { reduce: boolean
   )
 }
 
-/* Simple inline line icons for the verification tiers grid, drawn in the Shield pink.
-   "unique" reads as a fingerprint mark (proof of a unique human), "clean" reads as a
-   shield with a check mark (proof of clean hands). */
-function TierIcon({ kind }: { kind: 'unique' | 'clean' }) {
-  return kind === 'unique' ? (
-    <svg viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 3.5a5 5 0 0 0-5 5v1.8c0 3.7-1 5.9-2.1 7.6" />
-      <path d="M12 3.5a5 5 0 0 1 5 5v1.3" />
-      <path d="M8.3 8.5a3.8 3.8 0 0 1 7.6 0v2.8c0 4.1-1.4 6.7-3 8.4" />
-      <path d="M9.4 17.6c1.1-1.5 1.8-3.3 1.8-5.6V8.5a0.9 0.9 0 1 1 1.8 0v3.8" />
-      <path d="M14 12.3v1.4c0 1.9-.5 3.4-1.4 4.8" />
-    </svg>
-  ) : (
-    <svg viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 3.2l6.5 2.6v4.6c0 4.4-2.7 7.9-6.5 9.4c-3.8-1.5-6.5-5-6.5-9.4V5.8L12 3.2z" />
-      <path d="M8.7 12.3l2.2 2.2l4.4-4.7" />
-    </svg>
-  )
-}
-
 /* Minimal accessible tooltip: a small inline info glyph that reveals a short blurb on
    hover or keyboard focus. No external positioning library, no portal, just a relatively
    positioned bubble anchored to the trigger. The trigger sits inline with the sentence
@@ -530,9 +511,9 @@ const ZK_NODES: [number, number][] = [
 
 function ZkPulse() {
   const items = [
-    'Proofs are generated locally on your device',
-    'Only what a rule requires is ever checked',
-    'Nothing else is seen or stored',
+    'Private by default. Your identity and activity stay yours.',
+    'Disclosure happens only by rule. Only the exact fact a check requires is shared. Over 18. Not sanctioned.',
+    'Proven with zero knowledge. You share that a fact is true, never the data behind it.',
   ]
   return (
     <ul
@@ -672,9 +653,16 @@ export default function ShieldOnboarding() {
   }
 
   const connectFromSplash = () => {
-    // Already-connected returning users just re-enter the bridge; otherwise open WaaP.
-    if (!isWaapConnected) connectWallet()
-    setMode('hidden')
+    // Already connected in the background: skip straight into the bridge. Not
+    // connected yet: start the same WaaP connect flow the app uses and only enter
+    // once it resolves, so the splash stays put if the user cancels the login.
+    if (isWaapConnected) {
+      setMode('hidden')
+      return
+    }
+    connectWaapWallet()
+      .then(() => setMode('hidden'))
+      .catch(() => {})
   }
 
   const back = () => setIndex((i) => Math.max(0, i - 1))
@@ -766,14 +754,9 @@ export default function ShieldOnboarding() {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.5, ease: 'easeInOut' }}
     >
-      {/* #301: the version/network chip is a real, interactive DeploymentSelector
-          here, not a static label. On the splash a non-connected user has no
-          elevated nav (that only lifts above this overlay when connected), so
-          without this the dropdown would sit behind the opaque overlay and never
-          open. Rendered inside .ob-inner so its menu layers above the splash field. */}
-      <div className="ob-splash-top">
-        <DeploymentSelector />
-      </div>
+      {/* The version/network selector is NOT re-rendered here: the real app nav bar is
+          now lifted above this overlay in every splash state (see data-ob-splash), so its
+          own DeploymentSelector is live and a second one here would just duplicate it. */}
       <div className="ob-stage">
         <div className="ob-stage-inner">
           <div className="ob-card-region">
@@ -867,17 +850,19 @@ export default function ShieldOnboarding() {
         .ob-root { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column;
           overflow: hidden; font-family: 'Suisse Intl', system-ui, sans-serif;
           background: #fff6fa; color: #1c1116; }
-        /* Connected user on the splash: lift the real app nav bar above this overlay so
-           it stays usable. Toggled by data-ob-splash="connected" on <html>. */
-        html[data-ob-splash="connected"] .ob-header-elevate { z-index: 130 !important; }
-        /* The top-nav wallet "Connect" pill(s) live in the Header, not this component, and
-           carry no meaning while the splash gate is up — the splash's own CTA is the way in.
-           Rather than leave a dead button, neutralize them through the same data-ob-splash
-           hook: non-interactive, no hover affordance, visibly dimmed. Cleared the instant the
-           splash dismisses (attribute removed), so the real nav is fully live in-app. */
-        html[data-ob-splash] .ob-header-elevate button[title*="Connect" i] {
-          pointer-events: none; cursor: default; opacity: 0.5;
-        }
+        /* On the splash (connected OR not) the whole real app nav bar is lifted above
+           this overlay so every control stays live — the account chip + its dropdown,
+           the Privacy toggle, Ecosystem / Docs, and the version selector. Toggled by
+           data-ob-splash on <html>; the attribute is removed the instant the splash
+           dismisses, dropping the nav back to its normal in-app stacking. */
+        html[data-ob-splash] .ob-header-elevate { z-index: 130 !important; }
+        /* The account dropdown is PORTALED to <body> (a direct child, at z-[60]) so it
+           escapes the Header's stacking context. On the splash the z-100 overlay would
+           otherwise paint over it and swallow its clicks, so lift the portaled menu above
+           both the overlay and the elevated header while the splash is up. Scoped to a
+           direct body child so it only targets the portaled menu, never the Header's own
+           in-flow Ecosystem menu. */
+        html[data-ob-splash] body > [role="menu"] { z-index: 140 !important; }
         /* Inner content overlay: fades in over the persistent shader shell. */
         .ob-inner { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; }
         .ob-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
@@ -932,6 +917,20 @@ export default function ShieldOnboarding() {
         .ob-tier-icon { flex: none; width: 40px; height: 40px; border-radius: 12px; background: rgba(129,19,59,0.08);
           display: flex; align-items: center; justify-content: center; }
         .ob-tier-icon svg { width: 20px; height: 20px; }
+        /* Real shipped brand marks (passport.svg / clean-hands.svg), tinted via CSS mask
+           the same way the human.tech wordmark is (.ob-htmark) so they inherit the local
+           text colour instead of a baked-in fill. background-color: currentColor means the
+           mark takes the maroon accent on the light tier chip and the pill's own text
+           colour inside the toggle pills below (white on the solid pill, maroon on the
+           outline pill), staying legible on each. */
+        .ob-brandlogo { display: inline-block; flex: none; background-color: currentColor;
+          -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+          -webkit-mask-position: center; mask-position: center;
+          -webkit-mask-size: contain; mask-size: contain; }
+        .ob-logo-passport { -webkit-mask-image: url(/assets/svg/passport.svg); mask-image: url(/assets/svg/passport.svg); }
+        .ob-logo-clean { -webkit-mask-image: url(/assets/svg/clean-hands.svg); mask-image: url(/assets/svg/clean-hands.svg); }
+        .ob-tier-icon .ob-brandlogo { width: 22px; height: 22px; color: ${BRAND}; }
+        .ob-pill-ico { width: 16px; height: 16px; }
         .ob-tier-copy { display: flex; flex-direction: column; gap: 2px; }
         .ob-tier-copy strong { font-size: 15.5px; color: #1c1116; font-weight: 640; }
         .ob-tier-copy span { font-size: 14px; line-height: 1.4; color: #5a4650; }
@@ -958,7 +957,7 @@ export default function ShieldOnboarding() {
           border-width: 6px 6px 6px 0; border-color: transparent #1c1116 transparent transparent; }
         /* tier CTAs (page 3): map straight onto the two rows above */
         .ob-tier-ctas { display: flex; gap: 12px; width: 100%; max-width: 460px; margin: 16px auto 0; }
-        .ob-pill { flex: 1; display: flex; align-items: center; justify-content: center; height: 44px;
+        .ob-pill { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px;
           border-radius: 999px; font-size: 14px; font-weight: 610; text-decoration: none; white-space: nowrap;
           transition: transform .15s ease, filter .15s ease, background-color .15s ease; }
         .ob-pill-primary { background: ${BRAND}; color: #fff; }
@@ -1007,10 +1006,6 @@ export default function ShieldOnboarding() {
           -webkit-mask: url(/assets/svg/human.tech.logo.svg) no-repeat center / contain;
           mask: url(/assets/svg/human.tech.logo.svg) no-repeat center / contain; }
         .ob-dot { opacity: 0.5; }
-        /* #301: splash version/network chip row. z-4 keeps the chip (and its
-           open dropdown, which lifts to its own higher stacking level) above the
-           splash card/field below it so the menu is fully clickable on the splash. */
-        .ob-splash-top { position: relative; z-index: 4; display: flex; justify-content: center; padding: 20px 24px 0; }
         /* #157: splash trust-line footer, pinned to the bottom of the splash. */
         .ob-splash-footer { position: relative; z-index: 3; padding: 0 24px 20px; display: flex; justify-content: center; }
         /* Secondary, subordinate developer CTA on the splash — a quiet text link beneath the
@@ -1087,6 +1082,7 @@ export default function ShieldOnboarding() {
           .ob-tiers { border-color: #3a2530; background: rgba(255,255,255,0.03); }
           .ob-tier-row + .ob-tier-row { border-top-color: #3a2530; }
           .ob-tier-icon { background: rgba(246,236,241,0.08); }
+          .ob-tier-icon .ob-brandlogo { color: #f2b7d3; }
           .ob-tier-copy strong { color: #f6ecf1; }
           .ob-tier-copy span { color: #cba7b6; }
           .ob-tooltip-bubble { background: #f6ecf1; color: #1c1116; }

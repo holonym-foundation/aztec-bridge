@@ -129,6 +129,20 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
     return () => mq.removeEventListener('change', update)
   }, [])
 
+  // Live remaining-time for an in-progress transfer, streamed from ProgressCard via a window
+  // event. ProgressCard is a sibling (not a parent) and the shared store is off-limits, so the
+  // countdown crosses over here. When a countdown is live it takes the left slot in place of the
+  // decorative glyph; otherwise the glyph returns. The progress screen clears it on unmount.
+  const [remainingTime, setRemainingTime] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ remaining: string | null }>).detail
+      setRemainingTime(detail?.remaining ?? null)
+    }
+    window.addEventListener('shield:progress-timer', handler as EventListener)
+    return () => window.removeEventListener('shield:progress-timer', handler as EventListener)
+  }, [])
+
   // Only scroll the ticker when the text actually overflows the viewport. A
   // stable, always-mounted invisible measurer avoids the measure->switch->remeasure
   // flicker that comes from measuring the moving marquee itself.
@@ -232,13 +246,32 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
           </div>
         </button>
       ) : (
-        // IDLE: brain glyph + progress bar + "BRIDGE" label, exactly as before.
+        // IDLE: live countdown (or the glyph when none) + progress bar + "BRIDGE" label.
         <>
-          <img
-            src='/assets/svg/human.aztec.svg'
-            alt=''
-            className='h-[24px] w-[24px] shrink-0'
-          />
+          {remainingTime ? (
+            <div
+              className='flex shrink-0 items-center gap-[4px]'
+              role='timer'
+              aria-label={`Estimated time remaining ${remainingTime}`}
+              title='Estimated time remaining'
+            >
+              <Icon
+                icon='ph:clock-countdown'
+                width={18}
+                height={18}
+                className='shrink-0 animate-pulse text-[#0A0A0A] motion-reduce:animate-none'
+              />
+              <span className="text-[13px] font-[600] leading-[16px] tracking-[0.2px] tabular-nums text-[#0A0A0A] font-['Suisse_Intl']">
+                ~{remainingTime}
+              </span>
+            </div>
+          ) : (
+            <img
+              src='/assets/svg/human.aztec.svg'
+              alt=''
+              className='h-[24px] w-[24px] shrink-0'
+            />
+          )}
 
           <LoadingBar steps={steps} currentStep={headerStep} />
 

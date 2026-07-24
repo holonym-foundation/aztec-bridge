@@ -766,7 +766,7 @@ export default function ProgressCard({
               }
               disabled={!fuelErrorDetected && !escalated && resuming}
               className={`flex-[8_1_0%] rounded-lg py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60 ${
-                fuelErrorDetected ? 'bg-[#81133B]' : 'bg-[#17235E]'
+                fuelErrorDetected ? 'bg-[#81133B]' : 'bg-black'
               }`}
             >
               {escalated && !fuelErrorDetected

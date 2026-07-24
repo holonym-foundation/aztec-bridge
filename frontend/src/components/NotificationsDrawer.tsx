@@ -594,7 +594,7 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
         aria-controls={panelId}
         aria-label={unreadCount > 0 ? `Messages, ${unreadCount} unread` : 'Messages'}
         onClick={() => setPinned((p) => !p)}
-        className={`relative flex h-[120px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-[width,border-color] duration-200 ease-out ${
+        className={`relative flex h-[144px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white px-1.5 py-3.5 transition-[width,border-color] duration-200 ease-out ${
           open ? 'border-[#0A0A0A]/40' : 'border-[#D4D4D4] hover:border-[#0A0A0A]/[0.3]'
         } ${open && !prefersReducedMotion ? 'w-[42px]' : 'w-9'}`}
       >
@@ -612,7 +612,7 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
         )}
         <Icon icon="ph:envelope" width={15} height={15} className="text-[#737373]" aria-hidden="true" />
         <span
-          className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
+          className="px-0.5 py-1 text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
         >
           Messages

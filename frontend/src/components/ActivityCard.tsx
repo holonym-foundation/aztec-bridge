@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useId, useState } from 'react'
+import React, { useEffect, useId, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import type { BridgeOperation } from '@human.tech/clean.sdk'
+import { STORAGE_KEYS } from '@human.tech/clean.sdk'
 import { formatUnits } from 'viem'
 import { L1_TOKEN_METADATA, L1_NETWORKS, AZTEC_VERSION } from '@/config'
 import StyledImage from '@/components/StyledImage'
@@ -143,6 +144,34 @@ function hasFuelClaimData(op: BridgeOperation): boolean {
   return !!op.fuelMessageHash && !!op.fuelMessageLeafIndex && !!op.fuelAmount && !!op.l1TxHash
 }
 
+/**
+ * Whether the fuel from this bridge is genuinely shareable (went to someone ELSE, who needs a
+ * claim link) versus the bridger's own L2 account (theirs already, nothing to share).
+ *
+ * The recipient split lives in the encrypted blob and is never sent to the backend, so the raw
+ * operation can't tell us. The bridge flow does mirror `fuelClaimByOther` into the local deposits
+ * store on the originating device (see l1ToL2 receipt persistence), so we read that:
+ *   - 'shareable': local record says the fuel went to a third party.
+ *   - 'self': local record says the fuel went to the bridger, so hide the affordance (#308).
+ *   - 'unknown': no local record (e.g. a different device or cleared storage). We keep the
+ *     affordance but let the share handler decrypt and decide, and the copy stays explicit
+ *     about what it's for.
+ */
+function readLocalFuelShareState(op: BridgeOperation): 'shareable' | 'self' | 'unknown' {
+  if (typeof window === 'undefined') return 'unknown'
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.deposits)
+    if (!raw) return 'unknown'
+    const entries = JSON.parse(raw) as Array<Record<string, unknown>>
+    // SDK stores `id` as number|string, so normalize both sides for the comparison.
+    const entry = entries.find((c) => c && String(c.id) === String(op.id))
+    if (!entry || entry.fuelRecipient == null) return 'unknown'
+    return entry.fuelClaimByOther ? 'shareable' : 'self'
+  } catch {
+    return 'unknown'
+  }
+}
+
 interface ActivityCardProps {
   operation: BridgeOperation
   onResume: (operation: BridgeOperation) => void
@@ -184,14 +213,19 @@ export default function ActivityCard({
   // Unique per card so multiple cards' tooltips don't collide.
   const fuelTipId = `share-fuel-${useId()}`
 
-  const hasActionRow =
-    operation.l1TxUrl ||
-    operation.l2TxUrl ||
-    (onShareFuelClaim && hasFuelClaimData(operation)) ||
-    showResume
+  // localStorage isn't readable during SSR/first paint, so start 'unknown' and resolve in an
+  // effect. 'self' means the fuel is the bridger's own, so no claim link exists to share (#308).
+  const [fuelShareState, setFuelShareState] = useState<'shareable' | 'self' | 'unknown'>('unknown')
+  useEffect(() => {
+    if (hasFuelClaimData(operation)) setFuelShareState(readLocalFuelShareState(operation))
+  }, [operation])
+
+  const showShareFuelClaim = !!onShareFuelClaim && hasFuelClaimData(operation) && fuelShareState !== 'self'
+
+  const hasActionRow = operation.l1TxUrl || operation.l2TxUrl || showShareFuelClaim || showResume
 
   return (
-    <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+    <div className="bg-[#F5F5F5] rounded-xl p-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           <DirectionLogos direction={operation.direction} />
@@ -226,6 +260,8 @@ export default function ActivityCard({
       )}
 
       {hasActionRow && (
+        <>
+        <hr className="mt-2.5 border-0 border-t border-black/[0.06]" />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2">
           {operation.l1TxUrl && (
             <a
@@ -251,24 +287,24 @@ export default function ActivityCard({
           )}
 
           <div className="ml-auto flex items-center gap-2">
-            {onShareFuelClaim && hasFuelClaimData(operation) && (
+            {showShareFuelClaim && (
               <div className="flex items-center gap-1.5">
                 {/* Info (i) sits inside the pill, immediately after the label, so it
-                    reads as explaining "Share fuel claim" (#190). */}
-                <div className="inline-flex items-center gap-1 rounded-lg bg-amber-100 pl-3 pr-2 py-1">
+                    reads as explaining the share action (#190). */}
+                <div className="inline-flex items-center gap-1 rounded-lg bg-amber-100/70 pl-3 pr-2 py-1">
                   <button
-                    onClick={() => onShareFuelClaim(operation)}
+                    onClick={() => onShareFuelClaim!(operation)}
                     disabled={!!sharingFuelClaim}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-black transition-opacity hover:opacity-80 disabled:opacity-60 whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-900 transition-opacity hover:opacity-80 disabled:opacity-60 whitespace-nowrap"
                   >
                     <Icon icon="ph:share-network" width={13} height={13} />
-                    {sharingFuelClaim ? 'Decrypting…' : 'Share fuel claim'}
+                    {sharingFuelClaim ? 'Decrypting…' : 'Share fuel claim link'}
                   </button>
                   <button
                     type="button"
                     data-tooltip-id={fuelTipId}
-                    data-tooltip-content="Create a link that lets someone else claim this transfer's Fee Juice (Aztec gas). Useful when you funded gas for another wallet."
-                    aria-label="What is Share fuel claim?"
+                    data-tooltip-content="Only for when you funded gas for someone else's Aztec account. This makes a link they use to claim the Fee Juice on L2. If the gas is for your own account, it is already yours and nothing needs sharing."
+                    aria-label="What is the fuel claim link for?"
                     className="text-amber-700/70 hover:text-[#81133B]"
                   >
                     <Icon icon="ph:info" width={13} height={13} />
@@ -281,13 +317,14 @@ export default function ActivityCard({
               <button
                 onClick={() => onResume(operation)}
                 disabled={resuming}
-                className="text-xs font-semibold text-white bg-black hover:bg-gray-800 disabled:bg-gray-400 px-3 py-1 rounded-lg whitespace-nowrap"
+                className="text-xs font-semibold text-white bg-black hover:opacity-80 disabled:opacity-60 px-3 py-1 rounded-lg whitespace-nowrap"
               >
                 {resuming ? 'Decrypting...' : 'Resume'}
               </button>
             )}
           </div>
         </div>
+        </>
       )}
     </div>
   )

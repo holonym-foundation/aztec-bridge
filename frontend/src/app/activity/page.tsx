@@ -188,7 +188,7 @@ export default function ActivityPage() {
         // Self-fuel bridges never write it, so a missing field here means there's nothing to share.
         const recipient = decrypted.fuelRecipient
         if (!recipient || recipient === decrypted.l2Address) {
-          notify('info', 'This bridge sent fuel to your own L2 account — no claim link is needed; the fuel is yours.')
+          notify('info', 'Fee Juice added to your Aztec account. It is ready to use, no claim needed.')
           return
         }
         const link = buildFuelClaimUrl(window.location.origin, {
@@ -304,7 +304,7 @@ export default function ActivityPage() {
           <button
             type="button"
             onClick={() => router.push('/activity/local-recovery')}
-            className="flex-[8_1_0%] rounded-lg bg-[#17235E] py-[10px] font-semibold text-white transition-opacity hover:opacity-80"
+            className="flex-[8_1_0%] rounded-lg bg-black py-[10px] font-semibold text-white transition-opacity hover:opacity-80"
           >
             Recover from local data
           </button>

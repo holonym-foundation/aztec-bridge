@@ -714,7 +714,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
             isDark={isDark}
             icon="ph:hand-soap"
             title="Clean Hands SBT"
-            caption={`Unlocks ${DEPOSIT_CAP_LABEL}`}
+            caption={`Transfer $${Number(BRIDGE_MAX_DEPOSIT_USD).toLocaleString('en-US')}/day`}
             status={l1Fetching ? 'Checking…' : l1IsPoch ? 'Verified' : 'Not held'}
             good={l1IsPoch}
           />

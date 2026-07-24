@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useWalletStore } from '@/stores/walletStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useL2FeeJuiceBalance, useClaimFeeEstimate } from '@/hooks/useL2Operations'
+import { useBridgeOperations } from '@/hooks/useBridgeOperations'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { EXPLAINER_STEPS } from '@/components/model/HowItWorksModal'
 import { POCH_MINT_URL } from '@/config'
@@ -29,6 +30,27 @@ const PASSPORT_BUILD_URL = 'https://app.passport.xyz'
 // upward-growing steps panel must stop below it, so reserve this much space from
 // the viewport top; the panel's top edge lands here and never crosses the nav.
 const NAV_SAFE_TOP = 72
+
+// Once a user has proven the flow (completed a real bridge) or explicitly closed
+// the tutorial, we stop nagging them. The dismissal is persisted per-browser so
+// it stays gone across route changes and reloads (#320b). SSR-guarded.
+const TUTORIAL_DISMISSED_KEY = 'shield:tutorial-dismissed'
+const readTutorialDismissed = (): boolean => {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(TUTORIAL_DISMISSED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+const writeTutorialDismissed = (): void => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(TUTORIAL_DISMISSED_KEY, 'true')
+  } catch {
+    // Ignore write failures (private mode / storage disabled).
+  }
+}
 
 const ACTION_PRIMARY =
   'mt-2 inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-silk-600'
@@ -57,15 +79,12 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
   // never spills below the tab into the floating chat widget. Cap its height to
   // the room above the tab's bottom edge so the header and footer stay on-screen.
   const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined)
+  // Once dismissed (auto after a completed bridge, or via the panel's X), the
+  // whole binder tab is hidden and stays hidden across routes/reloads (#320b).
+  const [dismissed, setDismissed] = useState(false)
   const open = hovered || pinned
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
-
-  const closeDesktop = () => {
-    setPinned(false)
-    setHovered(false)
-    handleRef.current?.focus()
-  }
 
   // ── Peek coordination (#160): announce our open state; close on a sibling's.
   useEffect(() => {
@@ -97,6 +116,15 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
   const eligible = !!attestation.data?.eligible
   const verifying = bothConnected && attestation.isFetching && !attestation.data
 
+  // Real bridge activity drives the last two steps (#320a). Same hook + status
+  // vocabulary ActivityDrawer reads. A bridge is "started" once any operation
+  // exists that is in progress or already finished (anything but an outright
+  // failure); it is "done" once at least one operation has completed.
+  const { data: bridgeOperations } = useBridgeOperations()
+  const ops = bridgeOperations ?? []
+  const hasCompletedBridge = ops.some((op) => op.status === 'completed')
+  const hasStartedBridge = ops.some((op) => op.status !== 'failed')
+
   // Step-3 fuel affordance is context-aware (#236): only nudge a Fee Juice top-up when the
   // user is actually short. Compare existing FJ against the worst-case L2 claim gas — the same
   // "covered" test FuelToggle/FeeJuiceTopUp use (existing balance >= estimated claim gas). The
@@ -110,13 +138,46 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
   // back to "holds any FJ" so an already-funded owner is never told to top up.
   const feeJuiceCovered = needFj != null ? existingFj >= needFj : existingFj > 0
 
-  // Single "you are here" pointer. We can reliably observe progress through
-  // verification from global state; the deposit/claim step stays upcoming since
-  // its live state lives in the bridge form.
-  const currentStep = !bothConnected ? 0 : !eligible ? 1 : 2
+  // Single "you are here" pointer, now advancing through ALL four steps on real
+  // activity (#320a): 0 until both wallets connect, 1 until eligible, 2 while
+  // eligible with no bridge started, 3 while a bridge is in progress (started but
+  // none completed), 4 (everything done) once at least one bridge has completed.
+  const currentStep = !bothConnected
+    ? 0
+    : !eligible
+      ? 1
+      : !hasStartedBridge
+        ? 2
+        : !hasCompletedBridge
+          ? 3
+          : 4
 
   const statusFor = (index: number): StepStatus =>
     index < currentStep ? 'done' : index === currentStep ? 'active' : 'upcoming'
+
+  // Restore a prior dismissal after mount (guarded read keeps SSR and the first
+  // client render identical — the tab always renders on the server).
+  useEffect(() => {
+    if (readTutorialDismissed()) setDismissed(true)
+  }, [])
+
+  // Auto-dismiss the moment all four steps are done (a completed bridge). A proven
+  // user should not keep seeing the tutorial nag.
+  useEffect(() => {
+    if (currentStep === 4 && !dismissed) {
+      writeTutorialDismissed()
+      setDismissed(true)
+    }
+  }, [currentStep, dismissed])
+
+  // Explicit close (the X in the panel header) is a durable dismissal, not just a
+  // collapse: persist it and hide the tab.
+  const handleDismiss = () => {
+    writeTutorialDismissed()
+    setDismissed(true)
+    setPinned(false)
+    setHovered(false)
+  }
 
   const helperFor = (index: number): string | null => {
     if (index !== currentStep) return null
@@ -238,7 +299,14 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
     const measure = () => {
       const rect = handleRef.current?.getBoundingClientRect()
       if (!rect) return
-      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - NAV_SAFE_TOP)))
+      // Top boundary is the bottom of the nav bar — banners + Header — so the
+      // upward-growing panel never crosses into it (#316/#318). Measure the live
+      // header wrapper (its height changes when banners show/hide); fall back to
+      // the static nav height. maxPanelHeight IS the available viewport space, so
+      // the content-driven panel scrolls ONLY when it genuinely can't fit (#320b).
+      const header = typeof document !== 'undefined' ? document.querySelector('.ob-header-elevate') : null
+      const navBottom = header ? header.getBoundingClientRect().bottom : NAV_SAFE_TOP
+      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - navBottom)))
     }
     measure()
     window.addEventListener('resize', measure)
@@ -331,6 +399,11 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
     </>
   )
 
+  // Dismissed (proven user or explicit close): drop the whole binder tab — rail
+  // and mobile dock alike — so it never nags again (#320b). All hooks above run
+  // unconditionally, so this early return is Rules-of-Hooks safe.
+  if (dismissed) return null
+
   // Narrow-viewport dock (#243): a compact round icon button that lives in the
   // bottom-left mobile dock. It keeps the graduation-cap identity + the status
   // dot and opens the same steps panel as a bottom-anchored sheet that stays
@@ -357,7 +430,7 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
                 id={panelId}
                 className="flex max-h-[70dvh] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
               >
-                {panelBody(closeDesktop)}
+                {panelBody(handleDismiss)}
               </div>
             </motion.div>
           )}
@@ -414,7 +487,7 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
               style={{ maxHeight: maxPanelHeight }}
               className="flex max-h-[calc(100dvh-1.5rem)] w-[260px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
             >
-              {panelBody(closeDesktop)}
+              {panelBody(handleDismiss)}
             </div>
           </motion.div>
         )}

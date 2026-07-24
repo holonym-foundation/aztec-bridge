@@ -71,6 +71,7 @@ interface BridgeActionButtonProps {
   // Faucet related
   isEligibleForFaucet: boolean
   needsGas?: boolean
+  needsTokens?: boolean
   needsTokensOnly?: boolean
 
   // SBT related
@@ -140,6 +141,7 @@ function BridgeActionButton({
   withdrawTokensToL1Pending = false,
   isEligibleForFaucet,
   needsGas = false,
+  needsTokens = false,
   needsTokensOnly = false,
   hasL1SBT,
   hasL2SBT,
@@ -490,9 +492,13 @@ function BridgeActionButton({
         : 'Alpha Deposit Limit Reached'
     }
 
-    // Faucet
+    // Faucet — name what is actually missing (the faucet supplies both ETH gas and
+    // test USDC): tokens only when the user already has gas, gas only when they have
+    // tokens, or both.
     if (needsGas || needsTokensOnly) {
-      return needsTokensOnly ? 'Click to Get Tokens' : 'Click to Get Testnet ETH'
+      if (needsGas && needsTokens) return 'Click to Get Testnet ETH + USDC'
+      if (needsTokensOnly) return 'Click to Get Testnet USDC'
+      return 'Click to Get Testnet ETH'
     }
 
     // SBT requirements

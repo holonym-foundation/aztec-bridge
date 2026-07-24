@@ -18,7 +18,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatUnits, encodeFunctionData } from 'viem'
 import PortalSBTJson from '../constants/PortalSBT.json'
 import { useToast, useToastMutation, useToastQuery } from './useToast'
-import { pushNotification } from '@/stores/useNotificationsStore'
+import { pushNotification, dismissNotificationByKey } from '@/stores/useNotificationsStore'
 import { requestWaapWallet, useWalletStore, WAAP_METHOD } from '@/stores/walletStore'
 import { I_UserTokenBalance, T_AlchemyTokenBalanceResponse, T_UserTokenType } from '@/types/token.balances.types'
 import { axiosErrorMessage } from './helper'
@@ -200,16 +200,19 @@ export function useL1Faucet() {
   // L1 (Ethereum) balances and operations
   const { data: l1TokenBalances = [], isLoading: l1BalanceLoading, refetch: refetchL1Balance } = useL1TokenBalances()
 
-  // native token
+  // native token. Coerce chainId with Number() so a string chainId from the
+  // balance API still matches the numeric L1_CHAIN_ID — a strict === mismatch
+  // here would drop the native ETH entry and wrongly report needsGas (the user
+  // "has ETH but it isn't detected" bug).
   const sepoliaNativeTokens = l1TokenBalances.find(
-    (token) => token.type === 'native' && token.network?.chainId === L1_CHAIN_ID,
+    (token) => token.type === 'native' && Number(token.network?.chainId) === L1_CHAIN_ID,
   )
   const l1NativeBalance = sepoliaNativeTokens?.balance_formatted
 
   const l1Balance = l1TokenBalances.find(
     (token) =>
       token.type === 'erc20' &&
-      token.network?.chainId === L1_CHAIN_ID &&
+      Number(token.network?.chainId) === L1_CHAIN_ID &&
       token.address === L1_TOKENS[0]?.l1TokenContract,
   )?.balance_formatted
 
@@ -568,6 +571,10 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             setTransactionUrls(event.l1TxUrl, null)
             // Tx is in mempool — the "Do Not Reload" prep banner is now stale.
             notify.dismiss(TOAST_ID_L1L2_DO_NOT_RELOAD)
+            // The toast was suppressed into the persistent feed, so also drop the
+            // feed row — otherwise the stale "Do not reload" warning outlives the
+            // window and keeps surfacing in the header ticker (and across reloads).
+            dismissNotificationByKey(TOAST_ID_L1L2_DO_NOT_RELOAD)
             // Feed-only: the ProgressCard banner carries the live "keep this
             // page open" safety text, so the message stays concise here.
             pushNotification({
@@ -591,6 +598,10 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             // Deposit landed on-chain — earlier "preparing" / "in progress"
             // toasts are now stale.
             notify.dismiss(TOAST_ID_L1L2_DO_NOT_RELOAD)
+            // The toast was suppressed into the persistent feed, so also drop the
+            // feed row — otherwise the stale "Do not reload" warning outlives the
+            // window and keeps surfacing in the header ticker (and across reloads).
+            dismissNotificationByKey(TOAST_ID_L1L2_DO_NOT_RELOAD)
             notify.dismiss(TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS)
             // Feed-only, with the recovery-backup export carried as an inline
             // action so the user can still export from Messages now that no

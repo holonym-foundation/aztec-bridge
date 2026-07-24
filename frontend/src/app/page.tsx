@@ -850,6 +850,7 @@ export default function Home() {
                 // Faucet related
                 isEligibleForFaucet={isEligibleForFaucet || false}
                 needsGas={needsGas || false}
+                needsTokens={needsTokens || false}
                 needsTokensOnly={needsTokensOnly || false}
                 // SBT related
                 hasL1SBT={hasL1SBT}

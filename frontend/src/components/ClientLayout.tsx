@@ -64,25 +64,37 @@ export default function ClientLayout({
 
   return (
     <div
-      // Fixed-height app shell. The container is pinned to exactly one viewport
-      // (h-[100dvh]) so the shell footprint is stable/consistent across routes and the
-      // DOCUMENT never scrolls — this restores the single-viewport "fixed shell" feel.
-      // It is a flex column: header (top) + card region (flex-grow) + footer (bottom)
-      // always sum to 100dvh because the card region carries min-h-0 and absorbs the
-      // slack. We deliberately do NOT use a fixed height + overflow-hidden on this
-      // container (that clipped the footer, #328) nor min-h-screen (that let the box
-      // grow past the viewport, making the shell height feel inconsistent). Instead,
-      // when a viewport is genuinely too short to fit header + card + footer, only the
-      // inner card region scrolls (see below); the footer stays pinned and visible so
-      // it is never clipped.
-      className="relative flex flex-col w-full min-w-0 overflow-x-hidden h-[100dvh]"
+      // App shell: a flex column at least one viewport tall (min-h-[100dvh]). On
+      // comfortable heights the flex-grow content region fills the slack so the footer
+      // rests flush at the viewport bottom and nothing scrolls (RootStyle caps the card
+      // so header + card + footer fit exactly). When a viewport is genuinely too short,
+      // the container grows past the viewport and the DOCUMENT scrolls so the footer is
+      // always reachable — never clipped (#328) and never overflowing into a bare strip
+      // below a fixed shell (#347). min-height, not a fixed height, is what keeps the
+      // background covering the full page and the footer correctly placed.
+      className="relative flex flex-col w-full min-w-0 overflow-x-hidden min-h-[100dvh]"
       style={{ minWidth: 0 }}
     >
       {/* Onboarding is skipped on docs so the guides render without connecting a wallet. */}
       {!isDocs && <ShieldOnboarding />}
-      {/* Background: clean near-white surface on docs, pink paper-shader field elsewhere. */}
+      {/* Background: a very soft white paper-shader field on docs (same MeshGradient
+          treatment as the app for continuity, just near-white), pink field elsewhere.
+          The white wash fades in so navigating INTO docs animates rather than cuts. */}
       {isDocs ? (
-        <div className="absolute inset-0 z-0 bg-white" aria-hidden="true" />
+        <div className="absolute inset-0 z-0" aria-hidden="true">
+          <MeshGradient
+            colors={['#ffffff', '#fdfbfc', '#f8f2f7', '#f1e8f0']}
+            speed={0.12}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+          />
+          <motion.div
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+            style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.78))' }}
+          />
+        </div>
       ) : (
       <div className="absolute inset-0 z-0" aria-hidden="true">
         <MeshGradient
@@ -131,14 +143,11 @@ export default function ClientLayout({
         <BannerAztecNodeError />
         <Header />
       </div>
-      {/* Main content — the centered card lives in a flex-grow column. It carries
-          min-h-0 + overflow-y-auto so it scrolls INTERNALLY only when the viewport is
-          genuinely too short to hold the card; at comfortable heights the card fits and
-          nothing scrolls. Because this column (not the document) owns the overflow, the
-          fixed h-[100dvh] shell above never grows and the window never scrolls. The
-          inner flex-grow wrapper lets the card center in the full column, so on tall
-          desktops the footer below sits flush with no dead strip. */}
-      <div className="relative z-20 flex flex-grow flex-col min-h-0 overflow-y-auto">
+      {/* Main content — a flex-grow column so the card region absorbs the slack and
+          pushes the footer to the bottom on comfortable heights. When content genuinely
+          exceeds the viewport the whole page scrolls (the container is min-height), so
+          the footer is revealed rather than clipped or floated mid-page. */}
+      <div className="relative z-20 flex flex-grow flex-col min-h-0">
         <div className="flex-grow">{children}</div>
       </div>
       {/* Footer pinned to the bottom of the fixed shell (shrink-0 so it keeps its

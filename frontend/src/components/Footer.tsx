@@ -39,13 +39,6 @@ const RESOURCE_LINKS: TextLink[] = [
   { label: 'Terms of Use', href: 'https://human.tech/terms', external: true },
 ]
 
-// NOTE: Aztec-ecosystem quicklink URLs are best-known values — confirm before shipping.
-const ECOSYSTEM_LINKS: TextLink[] = [
-  { label: 'Aztec Scan', href: 'https://aztecscan.xyz', external: true },
-  { label: 'Azguard', href: 'https://azguardwallet.io', external: true },
-  { label: 'ZK Passport', href: 'https://zkpassport.id', external: true },
-]
-
 const SocialIcons: React.FC<{ className?: string }> = ({ className }) => (
   <div className={`flex items-center gap-x-4 ${className || ''}`}>
     {SOCIAL_LINKS.map(({ label, href, icon }) => (
@@ -77,24 +70,6 @@ const ResourceLinks: React.FC<{ className?: string }> = ({ className }) => (
   </div>
 )
 
-const EcosystemLinks: React.FC<{ className?: string }> = ({ className }) => (
-  <div className={`flex items-center gap-x-3 gap-y-2 flex-wrap ${className || ''}`}>
-    <span className='text-latest-grey-500 uppercase tracking-wide text-[10px]'>Ecosystem</span>
-    {ECOSYSTEM_LINKS.map(({ label, href }) => (
-      <Link
-        key={label}
-        href={href}
-        target='_blank'
-        rel='noopener noreferrer'
-        title={label}
-        className='inline-flex items-center gap-x-1 text-latest-grey-600 hover:text-shield transition-colors'>
-        {label}
-        <Icon icon='ph:arrow-square-out' width={12} height={12} aria-hidden='true' />
-      </Link>
-    ))}
-  </div>
-)
-
 const Footer: React.FC<FooterProps> = ({ className }) => {
   return (
     <footer className={`relative w-full text-xs pb-8 ${className || ''}`}>
@@ -112,18 +87,12 @@ const Footer: React.FC<FooterProps> = ({ className }) => {
           {/* Right Side Links */}
           <ResourceLinks className='justify-end' />
         </div>
-
-        {/* Ecosystem Quicklinks */}
-        <EcosystemLinks className='justify-center' />
       </div>
 
       {/* Mobile Footer */}
       <div className='md:hidden flex flex-col items-center w-full px-4 py-6 gap-6'>
         {/* Top Social Icons */}
         <SocialIcons className='justify-center flex-wrap' />
-
-        {/* Ecosystem Quicklinks */}
-        <EcosystemLinks className='justify-center' />
 
         {/* Middle Resource Links */}
         <ResourceLinks className='justify-center' />

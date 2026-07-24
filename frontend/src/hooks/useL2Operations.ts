@@ -6,7 +6,7 @@ import { AztecAddress } from '@aztec/stdlib/aztec-address'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatUnits, parseUnits } from 'viem'
 import { useToast, useToastMutation } from './useToast'
-import { pushNotification } from '@/stores/useNotificationsStore'
+import { pushNotification, dismissNotificationByKey } from '@/stores/useNotificationsStore'
 import { exportWithdrawalData, copyToClipboard, decryptStorageEntry, verifyEncryptionDomain } from '@/utils'
 import { useL2ErrorHandler } from '@/utils/l2ErrorHandler'
 import { estimateClaimFeeLimit } from '@/utils/fuelGasEstimate'
@@ -392,6 +392,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             })
             // Burn is on L2 — the "Do Not Reload" prep banner is now stale.
             notify.dismiss('l2-to-l1-do-not-reload')
+            // The toast was suppressed into the persistent feed, so also drop the
+            // feed row — otherwise the stale "Do not reload" warning outlives the
+            // window and keeps surfacing in the header ticker (and across reloads).
+            dismissNotificationByKey('l2-to-l1-do-not-reload')
             // Feed-only: the ProgressCard banner carries the live "keep this
             // page open" safety text, so the message stays concise here.
             pushNotification({
@@ -412,6 +416,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             setTransactionUrls(null, event.l2TxUrl)
             // Burn landed on L2 — the "Do Not Reload" prep banner is now stale.
             notify.dismiss('l2-to-l1-do-not-reload')
+            // The toast was suppressed into the persistent feed, so also drop the
+            // feed row — otherwise the stale "Do not reload" warning outlives the
+            // window and keeps surfacing in the header ticker (and across reloads).
+            dismissNotificationByKey('l2-to-l1-do-not-reload')
             // Feed-only, with the recovery-backup export carried as an inline
             // action so the user can still export from Messages now that no
             // corner toast exists to click.

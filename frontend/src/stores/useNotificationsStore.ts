@@ -96,6 +96,11 @@ interface NotificationsState {
     autoDismissMs?: number
   }) => void
   dismiss: (id: string) => void
+  // Remove every row carrying this stable `key`. Used to retire a transient,
+  // context-bound banner (e.g. a "Do not reload" safety notice) the moment its
+  // window closes, so it never lingers in the feed — or, now that the feed is
+  // persisted, survives a reload — after the operation has moved on.
+  dismissByKey: (key: string) => void
   dismissAll: () => void
   markAllRead: () => void
 }
@@ -181,6 +186,14 @@ export const useNotificationsStore = create<NotificationsState>()(
       return { notifications, unreadCount: unread(notifications) }
     }),
 
+  dismissByKey: (key) =>
+    set((state) => {
+      if (!key) return state
+      const notifications = state.notifications.filter((n) => n.key !== key)
+      if (notifications.length === state.notifications.length) return state
+      return { notifications, unreadCount: unread(notifications) }
+    }),
+
   dismissAll: () => set({ notifications: [], unreadCount: 0 }),
 
   markAllRead: () =>
@@ -222,3 +235,10 @@ export const pushNotification = (input: {
   mode?: 'public' | 'private'
   autoDismissMs?: number
 }) => useNotificationsStore.getState().pushNotification(input)
+
+// Non-React accessor for retiring a keyed banner from event callbacks (mirrors
+// `pushNotification`). Clearing the feed row here is what makes a transient
+// safety notice actually go away when the flow advances — dismissing the toast
+// alone never touched the persisted feed.
+export const dismissNotificationByKey = (key: string) =>
+  useNotificationsStore.getState().dismissByKey(key)

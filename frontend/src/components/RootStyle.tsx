@@ -17,7 +17,7 @@ export default function RootStyle({ children, className }: RootStyleProps) {
     // scrolled the whole page on short (<~940px) laptop windows. The reduced reserve keeps
     // the card centered while leaving room for the nav so the page never scrolls; the card's
     // own max-h-[calc(90vh-5rem)] budget (set by the caller) still caps its height.
-    <div className={`flex items-center min-h-[85vh] justify-center py-6`}>
+    <div className={`flex items-center min-h-[min(85vh,calc(100dvh-11rem))] justify-center py-6`}>
       <div
         className={clsxm(
           `relative rounded-xl bg-white shadow-[0px_383px_107px_0px_rgba(0,0,0,0),0px_245px_98px_0px_rgba(0,0,0,0.01),0px_138px_83px_0px_rgba(0,0,0,0.05),0px_61px_61px_0px_rgba(0,0,0,0.09),0px_15px_34px_0px_rgba(0,0,0,0.10)]`,

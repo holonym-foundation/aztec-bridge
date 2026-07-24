@@ -453,13 +453,20 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
             </div>
           ) : null}
 
+          {/* Covered / no-top-up-needed state: the add action is still a proper
+              primary CTA, not a buried text link. It reveals the amount entry so
+              the user can add Fee Juice on purpose. It never coexists with the
+              "Buy and bridge Fee Juice" primary — opening the form hides this
+              button and shows the form's own primary, keeping one primary per
+              state. */}
           {noTopUpNeeded && !optionalTopUpOpen && (
             <button
               type="button"
               onClick={() => setOptionalTopUpOpen(true)}
-              className="text-12 font-medium text-latest-grey-500 underline underline-offset-2 transition-colors hover:text-[#81133B]"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#81133B] px-4 py-3 text-14 font-semibold text-white transition-opacity hover:opacity-80"
             >
-              Add more anyway
+              <Icon icon="ph:gas-pump-fill" width={16} height={16} />
+              Add Fee Juice
             </button>
           )}
 

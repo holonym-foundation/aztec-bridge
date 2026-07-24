@@ -57,6 +57,30 @@ function formatUsd(usd: number): string {
   return `$${usd.toLocaleString('en-US', { minimumFractionDigits: hasCents ? 2 : 0, maximumFractionDigits: 2 })}`
 }
 
+// Network marks sit on white/light selector chips. The Aztec mark is a light-green
+// diamond that vanishes on a light surface, so it gets a dark circular chip with the
+// mark inset. Every other mark renders bare.
+function NetworkMark({
+  src,
+  network,
+  chip,
+  inner,
+}: {
+  src: string
+  network?: string
+  chip: string
+  inner: string
+}) {
+  if (network === 'aztec') {
+    return (
+      <span className={`inline-flex items-center justify-center rounded-full bg-[#0A0A0A] shrink-0 ${chip}`}>
+        <StyledImage src={src} alt="" className={inner} />
+      </span>
+    )
+  }
+  return <StyledImage src={src} alt="" className={`${chip} shrink-0`} />
+}
+
 const BridgeSection: React.FC<BridgeSectionProps> = ({
   bridgeConfig: bridge,
   setIsFromSection,
@@ -94,6 +118,10 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
 
   // Swap icon rotation state
   const [swapRotation, setSwapRotation] = useState(0)
+  // Local override for the compact/collapsed summary: parent drives `compact` when a detail
+  // accordion expands, but the founder expects tapping the collapsed From row to reopen the
+  // full box. This lets the user re-expand without a setter from the parent.
+  const [userExpanded, setUserExpanded] = useState(false)
   const handleSwapClick = () => {
     setSwapRotation((prev) => prev + 180)
     if (onSwap) onSwap()
@@ -117,13 +145,14 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   const tierLimitUsd = isPoch ? cleanHandsLimitUsd : passportLimitUsd
 
   const amountNum = Number(inputAmount)
-  // Nudge only on the Passport path, only as the amount nears or crosses the tier limit.
-  // PoCH-verified users already have the higher limit, so they are never nagged.
-  const nearPassportCap =
+  // Mutually exclusive with the "Limit: $X" indicator: once a Passport-only user crosses the
+  // tier cap, the Clean Hands nudge REPLACES the limit indicator in the same slot. PoCH users
+  // already hold the higher cap, so they keep the plain limit indicator and are never nagged.
+  const showCleanHandsNudge =
     attestationMethod === 'passport' &&
     !isNaN(amountNum) &&
     amountNum > 0 &&
-    amountNum >= passportLimitUsd * 0.9
+    amountNum > tierLimitUsd
 
   // Verified-tier badge: the tier's brand mark alongside the per-human limit. Passport
   // tier uses the Human Passport mark, Clean Hands tier uses the Clean Hands mark. The
@@ -132,8 +161,8 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   const badgeClass = isPoch
     ? 'bg-[rgba(15,123,79,0.10)] text-[#0F7B4F]'
     : 'bg-[rgba(23,35,94,0.08)] text-[#17235E]'
-  // Make it unmistakably a cap per human, not a wallet balance.
-  const headlineLabel = tierLimitUsd > 0 ? `up to ${formatUsd(tierLimitUsd)} per human` : null
+  // Compact per-human cap shown under the balance. The "per human" framing lives in the tooltip.
+  const limitLabel = tierLimitUsd > 0 ? `Limit: ${formatUsd(tierLimitUsd)}` : null
   // Temporary hold from a pending deposit, appended to the badge tooltip when present.
   const reservedNote =
     reservedDepositUsd != null && reservedDepositUsd > 0
@@ -144,9 +173,10 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
     : `Verified with Passport (score above ${passportScoreThreshold}). Bridge up to ${formatUsd(passportLimitUsd)} per human.${reservedNote} Verify with Proof of Clean Hands to unlock ${formatUsd(cleanHandsLimitUsd)}.`
 
   // Compact summary rows shown while a detail accordion is expanded — e.g.
-  // "From Eth Sepolia · 100 USDC" / "To Aztec · cUSDC". Tapping a row re-selects
-  // its network so the user can still edit without leaving compact mode.
-  if (compact) {
+  // "From Eth Sepolia · 100 USDC" / "To Aztec · cUSDC". Tapping either row reopens the
+  // full From/To boxes (the founder-reported dead click). userExpanded lets the local
+  // control override the parent's compact request until the user is done editing.
+  if (compact && !userExpanded) {
     const fromSummary = `${bridge.from.network?.title ?? ''} · ${inputAmount || '0'} ${bridge.from.token?.symbol ?? ''}`
     const toReceive = youWillReceive ?? inputAmount
     const toSummary = `${bridge.to.network?.title ?? ''} · ${toReceive || '0'} ${bridge.to.token?.symbol ?? ''}`
@@ -154,29 +184,35 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
       <div className="flex flex-col gap-1.5">
         <button
           type="button"
-          onClick={() => {
-            setIsFromSection(true)
-            setSelectNetwork(true)
-          }}
+          onClick={() => setUserExpanded(true)}
+          aria-label="Expand From section"
           className="bg-[#F5F5F5] rounded-md px-3 py-2 flex items-center justify-between gap-2 text-left"
         >
           <span className="text-12 font-semibold text-latest-grey-100 shrink-0">From</span>
           <span className="flex items-center gap-1.5 min-w-0">
-            <StyledImage src={bridge.from.network?.img || '/assets/svg/ethLogo.svg'} alt="" className="h-4 w-4 shrink-0" />
+            <NetworkMark
+              src={bridge.from.network?.img || '/assets/svg/ethLogo.svg'}
+              network={bridge.from.network?.network}
+              chip="h-4 w-4"
+              inner="h-3 w-3"
+            />
             <span className="text-14 font-medium text-latest-black-100 truncate">{fromSummary}</span>
           </span>
         </button>
         <button
           type="button"
-          onClick={() => {
-            setIsFromSection(false)
-            setSelectNetwork(true)
-          }}
+          onClick={() => setUserExpanded(true)}
+          aria-label="Expand To section"
           className="bg-[#F5F5F5] rounded-md px-3 py-2 flex items-center justify-between gap-2 text-left"
         >
           <span className="text-12 font-semibold text-latest-grey-100 shrink-0">To</span>
           <span className="flex items-center gap-1.5 min-w-0">
-            <StyledImage src={bridge.to.network?.img || ''} alt="" className="h-4 w-4 shrink-0" />
+            <NetworkMark
+              src={bridge.to.network?.img || ''}
+              network={bridge.to.network?.network}
+              chip="h-4 w-4"
+              inner="h-3 w-3"
+            />
             <span className="text-14 font-medium text-latest-black-100 truncate">{toSummary}</span>
           </span>
         </button>
@@ -203,7 +239,12 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                 setSelectNetwork(true)
               }}
             >
-              <StyledImage src={bridge.from.network?.img || '/assets/svg/ethLogo.svg'} alt="" className="h-5 w-5" />
+              <NetworkMark
+                src={bridge.from.network?.img || '/assets/svg/ethLogo.svg'}
+                network={bridge.from.network?.network}
+                chip="h-5 w-5"
+                inner="h-3.5 w-3.5"
+              />
               <p className="text-16 font-medium text-latest-black-100 w-[106px]">{bridge.from.network?.title}</p>
               <StyledImage src="/assets/svg/dropDown.svg" alt="" className="h-2.5 w-1.5 p-1.5 mr-1.5" />
             </div>
@@ -227,8 +268,9 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
           </div>
         </div>
         <hr className="text-latest-grey-300 my-1" />
-        {/* Amount + balance/Max on one row: balance is click-to-fill and the Max chip
-            sits beside it, so no separate Max row is needed (saves vertical rhythm). */}
+        {/* Amount + balance/limit stack. The typed amount is the focal element (larger,
+            vertically centered against the right column); the balance sits top-right and the
+            per-human limit sits directly under it, right-aligned. */}
         <div className="flex justify-between items-center gap-3">
           <input
             ref={inputRef}
@@ -236,7 +278,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             placeholder="0"
             value={inputAmount}
             onChange={(e) => setInputAmount(e.target.value)}
-            className="min-w-0 flex-1 placeholder-latest-grey-400 outline-none bg-[transparent] text-26 leading-tight font-medium"
+            className="min-w-0 flex-1 placeholder-latest-grey-400 outline-none bg-[transparent] text-32 leading-tight font-medium"
             autoFocus
           />
           <div className="flex flex-col items-end gap-0.5 shrink-0">
@@ -245,11 +287,11 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
               onClick={() => setInputAmount(direction === BridgeDirection.L1_TO_L2 ? l1BalanceStr : l2BalanceStr)}
               title="Use full balance"
             >
-              <p className="text-latest-grey-500 text-12 font-medium">Balance:</p>
-              <p className="text-latest-grey-500 text-12 font-medium break-all">
+              <p className="text-latest-grey-500 text-14 font-medium">Balance:</p>
+              <p className="text-latest-grey-500 text-14 font-medium break-all">
                 {direction === BridgeDirection.L1_TO_L2 ? l1BalanceStr : l2BalanceStr}
               </p>
-              <p className="text-latest-grey-500 text-12 font-medium">{bridge.from.token?.title}</p>
+              <p className="text-latest-grey-500 text-14 font-medium">{bridge.from.token?.title}</p>
               <p
                 className="text-12 font-medium text-latest-black-200 bg-white px-2 rounded-[32px] leading-5"
                 onClick={(e) => {
@@ -268,56 +310,54 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                 <p className="text-latest-grey-500 text-12 font-medium">Fee Juice</p>
               </div>
             )}
+            {/* One slot, mutually exclusive: under the cap we show "Limit: $X" with the tier
+                brand mark + per-human tooltip; once the amount exceeds the cap (Passport tier)
+                the linked Clean Hands nudge REPLACES it. Never both. */}
+            {attestationMethod &&
+              (showCleanHandsNudge ? (
+                <a
+                  href={POCH_MINT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708] hover:bg-[rgba(181,71,8,0.18)] transition-colors"
+                >
+                  <Icon icon="ph:arrow-up-right-bold" width={11} height={11} className="shrink-0" />
+                  Above {formatUsd(passportLimitUsd)} needs Proof of Clean Hands
+                </a>
+              ) : (
+                limitLabel && (
+                  <span
+                    data-tooltip-id="attestation-info"
+                    data-tooltip-content={badgeTooltip}
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold cursor-default ${badgeClass}`}
+                  >
+                    <span>{limitLabel}</span>
+                    <span
+                      aria-hidden
+                      className="inline-block h-[12px] w-[12px] shrink-0 bg-[#0A0A0A]"
+                      style={{
+                        maskImage: `url(${badgeIconSrc})`,
+                        WebkitMaskImage: `url(${badgeIconSrc})`,
+                        maskRepeat: 'no-repeat',
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskPosition: 'center',
+                        WebkitMaskPosition: 'center',
+                        maskSize: 'contain',
+                        WebkitMaskSize: 'contain',
+                      }}
+                    />
+                  </span>
+                )
+              ))}
           </div>
         </div>
-        {attestationMethod && (
-          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mt-3">
-            {/* Contextual nudge: only near/over the Passport cap; links out to mint PoCH.
-                A spacer keeps the tier-limit indicator right-justified when absent. */}
-            {nearPassportCap ? (
-              <a
-                href={POCH_MINT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-12 font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708] hover:bg-[rgba(181,71,8,0.18)] transition-colors"
-              >
-                <Icon icon="ph:arrow-up-right-bold" width={12} height={12} className="shrink-0" />
-                Above {formatUsd(passportLimitUsd)} needs Proof of Clean Hands
-              </a>
-            ) : (
-              <span aria-hidden />
-            )}
-            {/* Tier-limit indicator: per-human limit text on the left, tier brand logo
-                on the right, right-justified. Tier, score, and any pending hold live in
-                the hover tooltip. */}
-            <span
-              data-tooltip-id="attestation-info"
-              data-tooltip-content={badgeTooltip}
-              className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-12 font-semibold cursor-default ${badgeClass}`}
-            >
-              {headlineLabel && <span>{headlineLabel}</span>}
-              <span
-                aria-hidden
-                className="inline-block h-[13px] w-[13px] shrink-0 bg-[#0A0A0A]"
-                style={{
-                  maskImage: `url(${badgeIconSrc})`,
-                  WebkitMaskImage: `url(${badgeIconSrc})`,
-                  maskRepeat: 'no-repeat',
-                  WebkitMaskRepeat: 'no-repeat',
-                  maskPosition: 'center',
-                  WebkitMaskPosition: 'center',
-                  maskSize: 'contain',
-                  WebkitMaskSize: 'contain',
-                }}
-              />
-            </span>
-            <ReactTooltip
-              id="attestation-info"
-              place="top"
-              className="z-[100]"
-              style={{ fontSize: '12px', maxWidth: '220px' }}
-            />
-          </div>
+        {attestationMethod && !showCleanHandsNudge && limitLabel && (
+          <ReactTooltip
+            id="attestation-info"
+            place="top"
+            className="z-[100]"
+            style={{ fontSize: '12px', maxWidth: '220px' }}
+          />
         )}
         {onSwap && <SwapIcon onClick={onSwap} />}
       </div>
@@ -338,7 +378,12 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                 setSelectNetwork(true)
               }}
             >
-              <StyledImage src={bridge.to.network?.img || ''} alt="" className="h-5 w-5" />
+              <NetworkMark
+                src={bridge.to.network?.img || ''}
+                network={bridge.to.network?.network}
+                chip="h-5 w-5"
+                inner="h-3.5 w-3.5"
+              />
               <p className="text-16 font-medium text-latest-black-100 w-[106px]">{bridge.to.network?.title}</p>
               <StyledImage src="/assets/svg/dropDown.svg" alt="" className="h-2.5 w-1.5 p-1.5 mr-1.5" />
             </div>

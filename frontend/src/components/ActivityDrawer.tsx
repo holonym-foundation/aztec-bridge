@@ -12,7 +12,8 @@ import { useResumableCount } from '@/hooks/useResumableCount'
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useToast } from '@/hooks/useToast'
-import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
+import { canResumeOp } from '@/utils/resumability'
+import { formatFjAmount } from '@/utils/fuelPricing'
 import { L1_TOKEN_METADATA, L1_NETWORKS, AZTEC_VERSION } from '@/config'
 import { BridgeDirection } from '@/types/bridge'
 import { LocalRecoveryPanel } from '@/components/LocalRecoveryPanel'
@@ -85,6 +86,27 @@ function DirectionLogos({ direction }: { direction: BridgeOperation['direction']
       {renderMark(second)}
     </span>
   )
+}
+
+// TODO(#331): "Fee Juice used" (L2 gas consumption) cannot be surfaced from this
+// data source. useBridgeOperations() -> bridge.getOperations() -> GET
+// /api/bridge/operations returns only BridgeOperation rows (L1->L2 deposits and
+// L2->L1 withdrawals). Fuel appears ONLY as the top-up leg of a deposit
+// (op.fuelAmount / fuelMessageHash), surfaced on the row below. Nothing in this
+// source, or any client store, records FeeJuice spent paying for L2 transactions,
+// so usage needs backend/indexer support emitting fuel-consumption events first.
+//
+// Human-readable Fee Juice top-up for a deposit that carved part of the bridged
+// token into FeeJuice. op.fuelAmount is the FeeJuice received (18-dec) — the same
+// value the claim flow and FuelClaimLinkPanel treat as the claim amount.
+// Withdrawals never carry a fuel leg, so this is L1->L2 only.
+function fuelTopUpFj(op: BridgeOperation): string | null {
+  if (op.direction !== 'L1_TO_L2' || !op.fuelAmount) return null
+  try {
+    return formatFjAmount(BigInt(op.fuelAmount))
+  } catch {
+    return null
+  }
 }
 
 // Recent-bridge-operations peek, mirroring BridgeStepsRail's drawer pattern but
@@ -314,7 +336,8 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
       { hour: 'numeric', minute: '2-digit' },
     )}`
     const meta = STATUS_META[op.status] ?? { label: op.status, className: 'bg-gray-100 text-gray-800' }
-    const showResume = isResumable(op) || hasPossibleLockedFunds(op)
+    const showResume = canResumeOp(op)
+    const fuelTopUp = fuelTopUpFj(op)
 
     return (
       <li key={op.id} className="border-b border-[#F0F0F0] py-2.5 last:border-b-0 last:pb-0">
@@ -347,11 +370,17 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
         {DEPLOYMENT_LABEL && (
           <p className="mt-0.5 truncate text-[10px] text-[#989898]">{DEPLOYMENT_LABEL}</p>
         )}
+        {fuelTopUp && (
+          <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-medium text-amber-700">
+            <Icon icon="ph:gas-pump" width={10} height={10} className="flex-shrink-0" />
+            Fee Juice top up · {fuelTopUp} FJ
+          </p>
+        )}
         {showResume && (
           <button
             onClick={() => handleResume(op)}
             disabled={resumingId === op.id}
-            className="mt-1.5 rounded-md bg-[#17235E] px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-[#17235E]/90 disabled:opacity-50"
+            className="mt-1.5 rounded-md bg-black px-2.5 py-1 text-[11px] font-semibold text-white hover:opacity-80 disabled:opacity-60"
           >
             {resumingId === op.id ? 'Decrypting…' : 'Resume'}
           </button>

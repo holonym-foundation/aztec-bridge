@@ -6,7 +6,7 @@ import SwapIcon from './SwapIcon'
 import { Icon } from '@iconify/react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { POCH_MINT_URL } from '@/config'
-import { BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD } from '@/config/env.config'
+import { BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD, PASSPORT_SCORE_THRESHOLD } from '@/config/env.config'
 
 interface BridgeSectionProps {
   bridgeConfig: BridgeState
@@ -110,6 +110,10 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   // fall back to the same config value if it isn't passed.
   const cleanHandsLimitUsd = pochDailyLimitUsd ?? Number(BRIDGE_MAX_DEPOSIT_USD)
   const passportLimitUsd = Number(TRAVEL_RULE_THRESHOLD_USD)
+  // Personhood score gate for the Passport tier. Sourced from the config constant
+  // (source of truth) rather than the per-request passportThreshold prop, which was
+  // surfacing the scorer's internal passing value (1) instead of the real gate.
+  const passportScoreThreshold = Number(PASSPORT_SCORE_THRESHOLD)
   const tierLimitUsd = isPoch ? cleanHandsLimitUsd : passportLimitUsd
 
   const amountNum = Number(inputAmount)
@@ -121,10 +125,10 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
     amountNum > 0 &&
     amountNum >= passportLimitUsd * 0.9
 
-  // Verified-tier badge: brand icon + short label. Passport tier uses the Human Passport
-  // mark, Clean Hands tier uses the Clean Hands mark. Tinted via CSS mask to the label color.
+  // Verified-tier badge: the tier's brand mark alongside the per-human limit. Passport
+  // tier uses the Human Passport mark, Clean Hands tier uses the Clean Hands mark. The
+  // mark is rendered in black via CSS mask so it reads as the real brand logo, not a tint.
   const badgeIconSrc = isPoch ? '/assets/svg/clean-hands.svg' : '/assets/svg/passport.svg'
-  const badgeLabel = isPoch ? 'Clean Hands' : 'Passport'
   const badgeClass = isPoch
     ? 'bg-[rgba(15,123,79,0.10)] text-[#0F7B4F]'
     : 'bg-[rgba(23,35,94,0.08)] text-[#17235E]'
@@ -137,9 +141,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
       : ''
   const badgeTooltip = isPoch
     ? `Verified with Proof of Clean Hands. Bridge up to ${formatUsd(cleanHandsLimitUsd)} per human.${reservedNote}`
-    : `Verified with Passport (uniqueness).${
-        passportScore != null && passportThreshold != null ? ` Score ${passportScore} ≥ ${passportThreshold}.` : ''
-      } Bridge up to ${formatUsd(passportLimitUsd)} per human.${reservedNote} Verify with Proof of Clean Hands to unlock ${formatUsd(cleanHandsLimitUsd)}.`
+    : `Verified with Passport (score above ${passportScoreThreshold}). Bridge up to ${formatUsd(passportLimitUsd)} per human.${reservedNote} Verify with Proof of Clean Hands to unlock ${formatUsd(cleanHandsLimitUsd)}.`
 
   // Compact summary rows shown while a detail accordion is expanded — e.g.
   // "From Eth Sepolia · 100 USDC" / "To Aztec · cUSDC". Tapping a row re-selects
@@ -269,17 +271,34 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
           </div>
         </div>
         {attestationMethod && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-3">
-            {/* Requirement badge (icon + tier) with the max the user can bridge alongside.
-                Cap, score, and any pending hold live in the hover tooltip. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mt-3">
+            {/* Contextual nudge: only near/over the Passport cap; links out to mint PoCH.
+                A spacer keeps the tier-limit indicator right-justified when absent. */}
+            {nearPassportCap ? (
+              <a
+                href={POCH_MINT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-12 font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708] hover:bg-[rgba(181,71,8,0.18)] transition-colors"
+              >
+                <Icon icon="ph:arrow-up-right-bold" width={12} height={12} className="shrink-0" />
+                Above {formatUsd(passportLimitUsd)} needs Proof of Clean Hands
+              </a>
+            ) : (
+              <span aria-hidden />
+            )}
+            {/* Tier-limit indicator: per-human limit text on the left, tier brand logo
+                on the right, right-justified. Tier, score, and any pending hold live in
+                the hover tooltip. */}
             <span
               data-tooltip-id="attestation-info"
               data-tooltip-content={badgeTooltip}
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-12 font-medium cursor-default ${badgeClass}`}
+              className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-12 font-semibold cursor-default ${badgeClass}`}
             >
+              {headlineLabel && <span>{headlineLabel}</span>}
               <span
                 aria-hidden
-                className="inline-block h-[13px] w-[13px] shrink-0 bg-current"
+                className="inline-block h-[13px] w-[13px] shrink-0 bg-[#0A0A0A]"
                 style={{
                   maskImage: `url(${badgeIconSrc})`,
                   WebkitMaskImage: `url(${badgeIconSrc})`,
@@ -291,23 +310,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                   WebkitMaskSize: 'contain',
                 }}
               />
-              {badgeLabel}
             </span>
-            {headlineLabel && (
-              <span className="text-12 font-semibold text-latest-black-100">{headlineLabel}</span>
-            )}
-            {/* Contextual nudge: only near/over the Passport cap; links out to mint PoCH. */}
-            {nearPassportCap && (
-              <a
-                href={POCH_MINT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-12 font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708] hover:bg-[rgba(181,71,8,0.18)] transition-colors"
-              >
-                <Icon icon="ph:arrow-up-right-bold" width={12} height={12} className="shrink-0" />
-                Above {formatUsd(passportLimitUsd)} needs Proof of Clean Hands
-              </a>
-            )}
             <ReactTooltip
               id="attestation-info"
               place="top"

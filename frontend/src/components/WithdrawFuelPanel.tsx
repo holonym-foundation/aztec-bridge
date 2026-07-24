@@ -79,7 +79,7 @@ export function useTopUpQuote(
         setFjOutput(null)
         const errMsg = err instanceof Error ? err.message : String(err)
         const isRevert = errMsg.includes('reverted') || errMsg.includes('execution reverted')
-        setError(isRevert ? 'Swap amount exceeds pool liquidity — try a smaller amount' : 'Quote failed')
+        setError(isRevert ? 'Swap amount exceeds pool liquidity, try a smaller amount' : 'Quote failed')
       } finally {
         setLoading(false)
       }
@@ -364,7 +364,7 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
               )}
 
               {underfunded ? (
-                <div className="flex items-start gap-1.5 rounded-[8px] bg-[#FDECEC] px-2.5 py-1.5">
+                <div className="flex items-start gap-2 rounded-[8px] bg-[#FDECEC] px-3 py-2">
                   <Icon
                     icon="ph:warning-circle-fill"
                     width={13}
@@ -378,7 +378,7 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="flex items-start gap-1.5 rounded-[8px] bg-[#E5EFFF] px-2.5 py-1.5">
+                <div className="flex items-start gap-2 rounded-[8px] bg-[#E5EFFF] px-3 py-2">
                   <Icon icon="ph:lightning-fill" width={13} height={13} className="mt-0.5 flex-shrink-0 text-[#17235E]" />
                   <p className="text-[11px] leading-[15px] text-[#737373]">
                     <span className="font-semibold text-[#0A0A0A]">Fee Juice is gas on Aztec.</span> Withdrawing burns
@@ -390,7 +390,7 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
 
               {/* Real top-up: buy Fee Juice on L1 and bridge it to L2 (same mechanism as
                   deposit-fuel — bridgeL1ToL2 with a fuel carve via SwapBridgeRouter). */}
-              <div className="rounded-[8px] border border-[#81133B]/40 bg-[#F9EEF3] px-2.5 py-2 space-y-2">
+              <div className="rounded-[8px] border border-[#81133B]/40 bg-[#F9EEF3] px-3 py-3 space-y-2">
                 <p className="text-[11px] font-semibold text-[#81133B]">Add Fee Juice</p>
 
                 {!canTopUp ? (
@@ -401,22 +401,22 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
                 ) : (
                   <>
                     <p className="text-[11px] leading-[15px] text-[#737373]">
-                      Buy Fee Juice with {fundingSymbol} on Ethereum and bridge it to Aztec — no need to switch tabs.
+                      Buy Fee Juice with {fundingSymbol} on Ethereum and bridge it to Aztec. No need to switch tabs.
                       Almost all of it converts to Fee Juice; a negligible remainder lands on L2 as c{fundingSymbol}.
                     </p>
 
                     {isPrivacyModeEnabled && (
-                      <div className="flex items-start gap-1.5 rounded-[6px] bg-white/60 px-2 py-1.5">
+                      <div className="flex items-start gap-2 rounded-[6px] bg-white/60 px-3 py-2">
                         <Icon icon="ph:lock-key-fill" width={12} height={12} className="mt-0.5 flex-shrink-0 text-[#81133B]" />
                         <p className="text-[11px] leading-[15px] text-[#737373]">
                           <span className="font-semibold text-[#81133B]">Private Fee Juice.</span> Privacy mode routes the
-                          top-up through private (BridgedFPC) fuel so your withdrawal stays anonymous.
+                          top up through private (BridgedFPC) fuel so your withdrawal stays anonymous.
                         </p>
                       </div>
                     )}
 
                     {pricesError && (
-                      <p className="text-[11px] text-amber-600">Live prices unavailable — using fallback prices</p>
+                      <p className="text-[11px] text-amber-600">Live prices unavailable, using fallback prices</p>
                     )}
 
                     <div className="flex items-center gap-1.5 max-w-full">
@@ -480,7 +480,7 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
                       type="button"
                       onClick={handleConfirm}
                       disabled={confirmDisabled}
-                      className="w-full flex items-center justify-center gap-1.5 rounded-md bg-[#81133B] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="w-full flex items-center justify-center gap-1.5 rounded-md bg-[#81133B] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {topUp.isPending ? (
                         <>
@@ -497,7 +497,7 @@ const WithdrawFuelPanel: React.FC<WithdrawFuelPanelProps> = ({
 
                     {topUp.isPending && (
                       <p className="text-[11px] leading-[15px] text-[#737373]">
-                        Keep this page open — the bridge to Aztec can take ~5–15 minutes.
+                        Keep this page open. The bridge to Aztec can take about 5 to 15 minutes.
                       </p>
                     )}
                   </>

@@ -221,6 +221,7 @@ export function AztecWalletConnectionModals() {
     selectAccount,
     showWalletInstallPrompt,
     setShowWalletInstallPrompt,
+    startWalletDiscovery,
     webWalletUrl,
     setWebWalletUrl,
     waapAddress,
@@ -236,26 +237,32 @@ export function AztecWalletConnectionModals() {
   useBindingStatus()
   const linkedAddress = useSessionLinkedL2(waapAddress)
 
+  // Single source of truth for "the wallet discovery/install modal is open".
+  // The "No Aztec Wallet Found" (install prompt) and "Select Aztec Wallet"
+  // (discovery) screens are two STATES of one modal instance, never two
+  // simultaneously-mounted modals (#332). The modal picks its own state from
+  // `isDiscovering` + `wallets`; mounting it a second time while it's already
+  // open is impossible because there is only one render site.
+  const isWalletDiscoveryOpen =
+    showWalletInstallPrompt ||
+    walletConnectionPhase === 'discovering' ||
+    walletConnectionPhase === 'selecting'
+
   return (
     <>
-      {showWalletInstallPrompt && (
-        <WalletDiscoveryModal
-          isOpen={true}
-          wallets={[]}
-          isDiscovering={false}
-          onSelectWallet={() => {}}
-          onClose={() => setShowWalletInstallPrompt(false)}
-          webWalletUrl={webWalletUrl}
-          onConnectWebWallet={setWebWalletUrl}
-        />
-      )}
-      {(walletConnectionPhase === 'discovering' || walletConnectionPhase === 'selecting') && (
+      {isWalletDiscoveryOpen && (
         <WalletDiscoveryModal
           isOpen={true}
           wallets={discoveredWallets}
           isDiscovering={walletConnectionPhase === 'discovering'}
           onSelectWallet={selectWallet}
-          onClose={cancelWalletConnection}
+          onClose={() => {
+            cancelWalletConnection()
+            setShowWalletInstallPrompt(false)
+          }}
+          onRecheck={() => {
+            void startWalletDiscovery()
+          }}
           webWalletUrl={webWalletUrl}
           onConnectWebWallet={setWebWalletUrl}
         />

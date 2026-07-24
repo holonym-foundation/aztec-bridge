@@ -75,3 +75,19 @@ export function hasPossibleLockedFunds(op: {
   if (isConsumedMessageError(op.lastErrorMessage)) return false
   return op.status === 'pending' && (!!op.l1TxHash || !!op.l2TxHash)
 }
+
+/**
+ * A row is resumable when the bridge is still in flight. isResumable /
+ * hasPossibleLockedFunds cover the SDK-classified mid-flow states; a bare
+ * 'pending' (session dropped before any tx landed, so no hash yet) still needs a
+ * route back into /progress/resume. Terminal + likely-completed never resume.
+ * Single source of truth for both the Activity rows and the "N to finish" badge.
+ */
+export function canResumeOp(op: ResumableFields): boolean {
+  return (
+    !isLikelyCompleted(op) &&
+    op.status !== 'completed' &&
+    op.status !== 'failed' &&
+    (isResumable(op) || hasPossibleLockedFunds(op) || op.status === 'pending')
+  )
+}

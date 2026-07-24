@@ -8,7 +8,6 @@ import RootStyle from '@/components/RootStyle'
 import BridgeHeader from '@/components/BridgeHeader'
 import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModals'
 import FeeJuiceTopUp from '@/components/FeeJuiceTopUp'
-import TextButton from '@/components/TextButton'
 import { useL2FeeJuiceBalance, useL2PrivateFeeJuiceBalance } from '@/hooks/useL2Operations'
 import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
 import { useBridgeStore } from '@/stores/bridgeStore'
@@ -16,7 +15,6 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useToast } from '@/hooks/useToast'
 import { isResumable, hasPossibleLockedFunds, isLikelyCompleted } from '@/utils/resumability'
 import { BridgeDirection } from '@/types/bridge'
-import { BRIDGED_FPC_ADDRESS } from '@/config'
 import type { BridgeOperation, RecoveryClaimData } from '@human.tech/clean.sdk'
 
 function FeeJuicePageInner() {
@@ -129,88 +127,44 @@ function FeeJuicePageInner() {
     }
   }
 
-  // Show both balances whenever private fuel exists on this deployment, so the
-  // one-line summary always reflects the full picture regardless of the active mode.
-  const showPrivate = !!BRIDGED_FPC_ADDRESS
-  // The active side of the balance line is highlighted (bold + brand color); the inactive side
-  // is dimmed. This is the mode indication — mirrors FeeJuiceTopUp's fuelType resolution.
-  const privateActive = isPrivacyModeEnabled && showPrivate
-
   return (
     <RootStyle className="min-h-0 max-h-[calc(90vh-2rem)] overflow-hidden">
       <AztecWalletConnectionModals />
       <div className="flex h-full max-h-[calc(90vh-2rem)] flex-col overflow-hidden">
         <div className="px-5 pt-5">
-          <div className="flex items-center gap-4">
-            <BridgeHeader title="TOP UP" />
+          {/* Back is always a left-aligned arrow (SOP §4 / #194), never a stacked
+              full-width button. Mirrors the ProgressCard / Activity back affordance. */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push('/')}
+              title="Back to main screen"
+              aria-label="Back to main screen"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-latest-grey-100 transition-colors hover:bg-latest-grey-200 hover:text-latest-black-100"
+            >
+              <Icon icon="ph:arrow-left-bold" width={18} height={18} />
+            </button>
+            <div className="min-w-0 flex-1">
+              <BridgeHeader title="TOP UP" />
+            </div>
           </div>
         </div>
 
         <div className="px-5 pb-5 min-h-0 flex-1 overflow-y-auto">
-          {/* Title left, current Fee Juice balances compact on the right — one row. The active
-              mode's side is highlighted (bold + brand color) and the inactive side is dimmed. */}
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Icon icon="ph:gas-pump-fill" width={20} height={20} className="text-[#17235E]" />
-              <h1 className="text-16 font-semibold text-latest-black-100">Fee Juice</h1>
-              <Icon
-                icon="ph:info"
-                width={15}
-                height={15}
-                className="cursor-help text-latest-grey-500"
-                data-tooltip-id="fj-purpose"
-                data-tooltip-content="Fee Juice is gas on Aztec. Top up here anytime."
-              />
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-12">
-              {fjLoading ? (
-                <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
-              ) : (
-                <>
-                  <span className={privateActive ? 'font-medium text-latest-grey-500' : 'font-bold text-[#17235E]'}>
-                    {feeJuiceBalance ?? '--'}
-                  </span>
-                  <span
-                    className={`flex items-center gap-0.5 ${
-                      privateActive ? 'text-latest-grey-500' : 'font-semibold text-[#17235E]'
-                    }`}
-                  >
-                    public
-                    <Icon
-                      icon="ph:globe-hemisphere-west-fill"
-                      width={11}
-                      height={11}
-                      style={{ color: privateActive ? '#747474' : '#17235E' }}
-                    />
-                  </span>
-                </>
-              )}
-              {showPrivate && (
-                <>
-                  <span className="text-latest-grey-400">·</span>
-                  {privateFjLoading ? (
-                    <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
-                  ) : (
-                    <span className={privateActive ? 'font-bold text-[#81133B]' : 'font-medium text-latest-grey-500'}>
-                      {privateFeeJuiceBalance ?? '--'}
-                    </span>
-                  )}
-                  <span
-                    className={`flex items-center gap-0.5 ${
-                      privateActive ? 'font-semibold text-[#81133B]' : 'text-latest-grey-500'
-                    }`}
-                  >
-                    private
-                    <Icon
-                      icon="ph:lock-key-fill"
-                      width={11}
-                      height={11}
-                      style={{ color: privateActive ? '#81133B' : '#747474' }}
-                    />
-                  </span>
-                </>
-              )}
-            </div>
+          {/* One-line title only. The rich public/private balances are owned by the
+              FeeJuiceTopUp panel below, so the header never duplicates them. Kept on a
+              single line (never wraps) beside the gas-pump icon and info tooltip. */}
+          <div className="mt-2 flex items-center gap-2">
+            <Icon icon="ph:gas-pump-fill" width={20} height={20} className="text-[#17235E]" />
+            <h1 className="whitespace-nowrap text-16 font-semibold text-latest-black-100">Fee Juice</h1>
+            <Icon
+              icon="ph:info"
+              width={15}
+              height={15}
+              className="cursor-help text-latest-grey-500"
+              data-tooltip-id="fj-purpose"
+              data-tooltip-content="Fee Juice is gas on Aztec. Top up here anytime."
+            />
           </div>
           <ReactTooltip id="fj-purpose" place="bottom" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
 
@@ -222,6 +176,8 @@ function FeeJuicePageInner() {
               isPrivacyModeEnabled={isPrivacyModeEnabled}
               feeJuiceBalance={feeJuiceBalance}
               privateFeeJuiceBalance={privateFeeJuiceBalance}
+              feeJuiceBalanceLoading={fjLoading}
+              privateFeeJuiceBalanceLoading={privateFjLoading}
               landingClaimShort={fromResume}
               depositLikelyCompleted={depositLikelyCompleted}
               onLandingCoveredChange={setLandingCovered}
@@ -241,12 +197,6 @@ function FeeJuicePageInner() {
               {resuming ? 'Resuming…' : 'Resume claim'}
             </button>
           )}
-
-          <div className="mt-3 flex items-center justify-center">
-            <TextButton className="" onClick={() => router.push('/')}>
-              Back to Main Screen
-            </TextButton>
-          </div>
         </div>
       </div>
     </RootStyle>

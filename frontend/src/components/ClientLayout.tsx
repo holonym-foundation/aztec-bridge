@@ -11,6 +11,7 @@ import NotificationsDrawer from '@/components/NotificationsDrawer'
 import SupportTab from '@/components/SupportTab'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
 import { useBridgeStore } from '@/stores/bridgeStore'
+import { useNotificationsStore } from '@/stores/useNotificationsStore'
 import { isSupportOpenable } from '@/utils/support'
 import { motion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
@@ -57,6 +58,13 @@ export default function ClientLayout({
       window.clearInterval(id)
       window.clearTimeout(stop)
     }
+  }, [])
+
+  // The notifications feed persists to localStorage but rehydrates with
+  // skipHydration, so restore it once on the client — server and first client
+  // render stay empty (no hydration mismatch), then prior messages reappear.
+  useEffect(() => {
+    void useNotificationsStore.persist.rehydrate()
   }, [])
 
   return (
@@ -141,7 +149,10 @@ export default function ClientLayout({
         <BridgeStepsRail />
         <ActivityDrawer />
         <NotificationsDrawer />
-        <SupportTab />
+        {/* Only surface the Support tab once the Iris widget is actually
+            openable; until then the native bubble is the working entry point and
+            a tab that can't open anything would be dead. See shield.human.tech#86. */}
+        {hideNativeBubble && <SupportTab />}
       </div>
       {/* Below md the centered card leaves no right gutter, so the right-edge
           binder tabs would sit off-screen (#243). Relocate them to a compact,
@@ -152,7 +163,7 @@ export default function ClientLayout({
         <BridgeStepsRail variant="dock" />
         <ActivityDrawer variant="dock" />
         <NotificationsDrawer variant="dock" />
-        <SupportTab variant="dock" />
+        {hideNativeBubble && <SupportTab variant="dock" />}
       </div>
       {/* See shield.human.tech#86 — hide the native Iris floating bubble ONLY once
           it's programmatically openable, so the Support tab replaces it without ever

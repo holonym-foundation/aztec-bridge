@@ -25,8 +25,13 @@ type PeekSignal = { id: string; open: boolean }
 // comes from config so it tracks the active network (sandbox vs production).
 const PASSPORT_BUILD_URL = 'https://app.passport.xyz'
 
+// The top nav row is pt-3 (12px) + CHIP_H (h-14 = 56px) ≈ 68px tall (#316). The
+// upward-growing steps panel must stop below it, so reserve this much space from
+// the viewport top; the panel's top edge lands here and never crosses the nav.
+const NAV_SAFE_TOP = 72
+
 const ACTION_PRIMARY =
-  'mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#17235E]/90'
+  'mt-2 inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-silk-600'
 const ACTION_SECONDARY =
   'mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#D4D4D4] px-3 py-1.5 text-[12px] font-semibold text-[#17235E] transition-colors hover:border-[#17235E]/50'
 
@@ -225,14 +230,15 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
   }, [pinned])
 
   // Measure the space above the tab's bottom edge and cap the panel to it, so the
-  // upward-growing panel is never clipped by the viewport top (or, on short
-  // screens, forced to overlap the chat widget below). Re-measures on resize.
+  // upward-growing panel is never clipped by the viewport top and never crosses
+  // into the top nav bar (#316). Reserving NAV_SAFE_TOP lands the panel's top edge
+  // just below the nav. Re-measures on resize.
   useEffect(() => {
     if (!open) return
     const measure = () => {
       const rect = handleRef.current?.getBoundingClientRect()
       if (!rect) return
-      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - 12)))
+      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - NAV_SAFE_TOP)))
     }
     measure()
     window.addEventListener('resize', measure)
@@ -421,14 +427,14 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
         aria-controls={panelId}
         aria-label="Bridge in 4 steps"
         onClick={() => setPinned((p) => !p)}
-        className={`flex h-[120px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-[width,border-color] duration-200 ease-out ${
+        className={`flex h-[144px] px-1.5 py-3.5 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-[width,border-color] duration-200 ease-out ${
           open ? 'border-[#81133B]/40' : 'border-[#D4D4D4] hover:border-[#81133B]/30'
         } ${open && !prefersReducedMotion ? 'w-[42px]' : 'w-9'}`}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${eligible && bothConnected ? 'bg-[#17235E]' : 'bg-[#81133B]'}`} />
         <Icon icon="ph:graduation-cap" width={15} height={15} className="text-[#737373]" aria-hidden="true" />
         <span
-          className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
+          className="px-0.5 py-1 text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
         >
           Tutorial

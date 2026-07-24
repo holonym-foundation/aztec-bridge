@@ -236,7 +236,7 @@ function FeeJuicePageInner() {
             <button
               onClick={handleResume}
               disabled={resuming}
-              className="mt-3 w-full rounded-lg bg-[#17235E] py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-3 w-full rounded-lg bg-black py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {resuming ? 'Resuming…' : 'Resume claim'}
             </button>

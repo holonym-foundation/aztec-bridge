@@ -195,8 +195,32 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
   const tickerTextClass =
     "whitespace-nowrap text-[12px] font-[600] leading-[16px] tracking-[0.2px] font-['Suisse_Intl']"
 
+  // The live countdown owns its own shrink-0 slot at the head of the bar, rendered
+  // independently of the alert ticker. During a transfer an active warning/error would
+  // otherwise take over the whole bar and hide the timer; keeping the timer in a dedicated
+  // slot lets the countdown and the ticker coexist so the estimate is always visible.
+  const timerSlot = remainingTime ? (
+    <div
+      className='flex shrink-0 items-center gap-[4px]'
+      role='timer'
+      aria-label={`Estimated time remaining ${remainingTime}`}
+      title='Estimated time remaining'
+    >
+      <Icon
+        icon='ph:clock-countdown'
+        width={18}
+        height={18}
+        className='shrink-0 animate-pulse text-[#0A0A0A] motion-reduce:animate-none'
+      />
+      <span className="text-[13px] font-[600] leading-[16px] tracking-[0.2px] tabular-nums text-[#0A0A0A] font-['Suisse_Intl']">
+        ~{remainingTime}
+      </span>
+    </div>
+  ) : null
+
   return (
     <div className='flex w-full min-w-0 items-center gap-[12px] rounded-[136px] border border-[#D4D4D4] bg-white px-[16px] py-[4px] pl-[8px]'>
+      {timerSlot}
       {isAlertActive && alertMeta ? (
         // ACTIVE: a live warning/error message takes over the bar as a compact
         // single-line ticker. The brain glyph and the "BRIDGE" label are hidden to
@@ -246,26 +270,9 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
           </div>
         </button>
       ) : (
-        // IDLE: live countdown (or the glyph when none) + progress bar + "BRIDGE" label.
+        // IDLE: the glyph (only when the countdown slot is empty) + progress bar + "BRIDGE" label.
         <>
-          {remainingTime ? (
-            <div
-              className='flex shrink-0 items-center gap-[4px]'
-              role='timer'
-              aria-label={`Estimated time remaining ${remainingTime}`}
-              title='Estimated time remaining'
-            >
-              <Icon
-                icon='ph:clock-countdown'
-                width={18}
-                height={18}
-                className='shrink-0 animate-pulse text-[#0A0A0A] motion-reduce:animate-none'
-              />
-              <span className="text-[13px] font-[600] leading-[16px] tracking-[0.2px] tabular-nums text-[#0A0A0A] font-['Suisse_Intl']">
-                ~{remainingTime}
-              </span>
-            </div>
-          ) : (
+          {!remainingTime && (
             <img
               src='/assets/svg/human.aztec.svg'
               alt=''

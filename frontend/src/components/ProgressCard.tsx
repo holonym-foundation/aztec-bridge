@@ -488,7 +488,7 @@ export default function ProgressCard({
     ) : null
 
   return (
-    <div className="h-full">
+    <div className="flex h-full flex-col">
       {/* In-progress layout: the title leads, the From/To + amount panel sits centered in the
           space freed by moving the countdown to the mini-bar, and the step-dots + status line
           close it out. The single do-not-reload indicator is the mini-bar pill (no in-card banner). */}
@@ -550,7 +550,9 @@ export default function ProgressCard({
               <div>
                 <p className="text-14 font-semibold text-latest-grey-100">To</p>
                 <div className="flex gap-2 mt-2">
-                  <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-6 w-6" />
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]">
+                    <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-[18px] w-[18px]" />
+                  </span>
                   <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
                 </div>
               </div>
@@ -703,7 +705,9 @@ export default function ProgressCard({
           </span>
           <Icon icon="ph:arrow-right-bold" width={13} height={13} className="text-latest-grey-100" />
           <span className="inline-flex items-center gap-1.5">
-            <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-5 w-5" />
+            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]">
+              <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-[15px] w-[15px]" />
+            </span>
             <span className="text-14 font-medium text-latest-black-100">{toNetwork}</span>
           </span>
           <span className="text-latest-grey-300">·</span>
@@ -722,7 +726,9 @@ export default function ProgressCard({
             <div>
               <p className="text-14 font-semibold text-latest-grey-100">To</p>
               <div className="flex gap-2 mt-1.5">
-                <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-6 w-6" />
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]">
+                  <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-[18px] w-[18px]" />
+                </span>
                 <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
               </div>
             </div>
@@ -769,7 +775,7 @@ export default function ProgressCard({
           recovery path and the Activity link ride underneath as light text links, so the whole
           block stays inside the no-scroll budget instead of stacking full-width pills. */}
       {hasError && !isAlreadyCompleted && direction && (
-        <div className="mt-3 mb-6 flex flex-col items-center gap-2">
+        <div className="mt-auto mb-6 pt-3 flex flex-col items-center gap-2">
           <div className="flex w-full items-stretch gap-2">
             <button
               onClick={() => router.push('/?app=1')}
@@ -837,8 +843,9 @@ export default function ProgressCard({
 
           <button
             onClick={() => router.push('/activity')}
-            className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-latest-black-100 hover:underline"
+            className="inline-flex items-center gap-1 text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-latest-black-100 hover:underline"
           >
+            <Icon icon="ph:clock-counter-clockwise" width={13} height={13} />
             View in Activity
           </button>
         </div>

@@ -64,15 +64,19 @@ export default function ClientLayout({
 
   return (
     <div
-      // The bridge (/) and progress screens target a single-viewport, no-scroll fit
-      // (card capped at 90vh-5rem, footer nested up into the card region). But that fit
-      // is only achievable at comfortable heights. Clamp with min-height, never a fixed
-      // height + overflow-hidden: at 720/800/900 the content fits and the container is
-      // exactly 100vh so nothing scrolls, while on short viewports (or with an extra
-      // banner / wallet-discovery modal present) the container grows past 100vh and the
-      // document scrolls to reveal the footer instead of clipping it (#328).
-      className="relative flex flex-col w-full min-w-0 overflow-x-hidden min-h-screen"
-      style={{ minHeight: '100vh', minWidth: 0 }}
+      // Fixed-height app shell. The container is pinned to exactly one viewport
+      // (h-[100dvh]) so the shell footprint is stable/consistent across routes and the
+      // DOCUMENT never scrolls — this restores the single-viewport "fixed shell" feel.
+      // It is a flex column: header (top) + card region (flex-grow) + footer (bottom)
+      // always sum to 100dvh because the card region carries min-h-0 and absorbs the
+      // slack. We deliberately do NOT use a fixed height + overflow-hidden on this
+      // container (that clipped the footer, #328) nor min-h-screen (that let the box
+      // grow past the viewport, making the shell height feel inconsistent). Instead,
+      // when a viewport is genuinely too short to fit header + card + footer, only the
+      // inner card region scrolls (see below); the footer stays pinned and visible so
+      // it is never clipped.
+      className="relative flex flex-col w-full min-w-0 overflow-x-hidden h-[100dvh]"
+      style={{ minWidth: 0 }}
     >
       {/* Onboarding is skipped on docs so the guides render without connecting a wallet. */}
       {!isDocs && <ShieldOnboarding />}
@@ -127,15 +131,21 @@ export default function ClientLayout({
         <BannerAztecNodeError />
         <Header />
       </div>
-      {/* Main content */}
-      <div className="relative z-20 flex flex-col flex-grow min-h-0">
-        <div className='flex-grow'>{children}</div>
-        {/* When content fits, the outer container sits at exactly 100vh (min-height) and the
-            flex-grow region above absorbs the slack, so the footer rests flush at the bottom
-            edge with no dead strip beneath it. When content exceeds the viewport the container
-            grows past 100vh and the document scrolls, keeping the footer reachable rather than
-            clipped. A negative top-margin here would instead lift the footer off the bottom
-            and expose a dead strip. */}
+      {/* Main content — the centered card lives in a flex-grow column. It carries
+          min-h-0 + overflow-y-auto so it scrolls INTERNALLY only when the viewport is
+          genuinely too short to hold the card; at comfortable heights the card fits and
+          nothing scrolls. Because this column (not the document) owns the overflow, the
+          fixed h-[100dvh] shell above never grows and the window never scrolls. The
+          inner flex-grow wrapper lets the card center in the full column, so on tall
+          desktops the footer below sits flush with no dead strip. */}
+      <div className="relative z-20 flex flex-grow flex-col min-h-0 overflow-y-auto">
+        <div className="flex-grow">{children}</div>
+      </div>
+      {/* Footer pinned to the bottom of the fixed shell (shrink-0 so it keeps its
+          height). It rests at the bottom edge on every route and can never be clipped:
+          when a short viewport can't fit the card, the column above scrolls under this
+          footer rather than pushing it off-screen or forcing a document scroll. */}
+      <div className="relative z-20 shrink-0">
         <Footer />
       </div>
       {/* Persistent binder dock: app-shell chrome mounted once, so the Tutorial /

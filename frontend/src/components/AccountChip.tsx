@@ -421,9 +421,12 @@ const AccountChip: React.FC<AccountChipProps> = ({
   ) : (
     EvmAvatar
   )
+  // The Aztec mark is a light-green diamond, invisible on the light-pink avatar
+  // chip. Seat it on a small dark circular chip so it reads on the white/light
+  // dropdown + nav surfaces (round-12: 12px mark inset in the w-6 sibling chip).
   const AztecAvatar = (
-    <span className="flex w-6 h-6 p-[3px] justify-center items-center rounded-full bg-[#FDE7F3] flex-shrink-0">
-      <Image src={AZTEC_ICON} alt="" width={16} height={16} />
+    <span className="inline-flex w-6 h-6 items-center justify-center rounded-full bg-[#0A0A0A] flex-shrink-0">
+      <Image src={AZTEC_ICON} alt="" width={12} height={12} />
     </span>
   )
 

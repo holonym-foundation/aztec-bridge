@@ -103,6 +103,23 @@ function trackBg(isDark: boolean): string {
   return isDark ? 'bg-white/[0.12]' : 'bg-black/[0.06]'
 }
 
+/**
+ * Canonical Human Points glyph, ported from the design-system icon set
+ * (human-tech-design-system/src/icons/humanpoints.svg). Inlined as raw SVG since
+ * the design system isn't a dependency here. Used for the HUMN Points value now
+ * folded into the account chip (#313).
+ */
+const HumanPointsIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 100 100" fill="none" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M50.5 10C54.0539 10 57.136 11.6347 59.5978 13.9768C62.0389 16.2999 64.0561 19.472 65.6595 23.0796C66.8788 25.8231 67.9004 28.9244 68.7057 32.2892C72.0727 33.0947 75.1753 34.1205 77.9204 35.3405C81.5277 36.9437 84.7001 38.9614 87.0232 41.4022C89.3651 43.8637 90.9997 46.9466 91 50.5C90.9997 54.0537 89.3654 57.1362 87.0232 59.5978C84.7003 62.0387 81.5276 64.0511 77.9204 65.6544C75.1754 66.8744 72.0725 67.8993 68.7057 68.7057C67.9002 72.0724 66.8794 75.1756 65.6595 77.9204C64.0561 81.528 62.0389 84.7001 59.5978 87.0232C57.136 89.3653 54.0539 91 50.5 91C46.946 90.9996 43.8639 89.3657 41.4022 87.0232C38.9612 84.7002 36.9489 81.5278 35.3456 77.9204C34.1254 75.1751 33.0957 72.0731 32.2892 68.7057C28.9242 67.8995 25.8232 66.8738 23.0796 65.6544C19.4724 64.0511 16.2997 62.0387 13.9768 59.5978C11.6346 57.1362 10.0003 54.0537 10 50.5C10.0003 46.9466 11.6349 43.8637 13.9768 41.4022C16.2999 38.9614 19.4723 36.9437 23.0796 35.3405C25.8233 34.1211 28.924 33.0945 32.2892 32.2892C33.0955 28.9237 34.126 25.8236 35.3456 23.0796C36.9489 19.4722 38.9612 16.2998 41.4022 13.9768C43.8639 11.6343 46.946 10.0003 50.5 10ZM59.8876 70.2313C56.8657 70.57 53.7207 70.75 50.5 70.75C47.2775 70.75 44.1307 70.5703 41.1073 70.2313C41.6021 71.8156 42.1484 73.2882 42.7448 74.6301C44.0732 77.619 45.5506 79.7887 46.986 81.1547C48.3999 82.5003 49.5812 82.9037 50.5 82.9041C51.4188 82.9041 52.6 82.4999 54.014 81.1547C55.4494 79.7887 56.9268 77.619 58.2552 74.6301C58.8514 73.2887 59.3925 71.815 59.8876 70.2313ZM50.5 38.3459C46.5082 38.3459 42.7086 38.6605 39.2003 39.2003C38.6615 42.7086 38.351 46.5085 38.351 50.5C38.351 54.4896 38.662 58.2877 39.2003 61.7946C42.7089 62.3335 46.5081 62.649 50.5 62.649C54.49 62.649 58.2874 62.333 61.7946 61.7946C62.334 58.2874 62.6541 54.4902 62.6541 50.5C62.6541 46.5079 62.3345 42.7089 61.7946 39.2003C58.2877 38.661 54.4899 38.3459 50.5 38.3459ZM30.7636 41.1073C29.1812 41.6021 27.7104 42.149 26.3699 42.7448C23.3813 44.073 21.2113 45.5508 19.8453 46.986C18.5006 48.3994 18.0963 49.5814 18.0959 50.5C18.0963 51.4187 18.5002 52.6003 19.8453 54.014C21.2112 55.4493 23.3812 56.9269 26.3699 58.2552C27.7104 58.8509 29.1812 59.3983 30.7636 59.8927C30.4246 56.8695 30.25 53.7222 30.25 50.5C30.25 47.2778 30.4246 44.1305 30.7636 41.1073ZM70.2313 41.1073C70.5697 44.1308 70.75 47.2776 70.75 50.5C70.75 53.7224 70.5697 56.8692 70.2313 59.8927C71.8155 59.3979 73.2883 58.8515 74.6301 58.2552C77.6188 56.9269 79.7888 55.4493 81.1547 54.014C82.4998 52.6003 82.9037 51.4187 82.9041 50.5C82.9037 49.5814 82.4994 48.3994 81.1547 46.986C79.7887 45.5508 77.6186 44.073 74.6301 42.7448C73.2883 42.1484 71.8155 41.6025 70.2313 41.1073ZM50.5 18.0959C49.5812 18.0963 48.3999 18.4997 46.986 19.8453C45.5506 21.2113 44.0732 23.381 42.7448 26.3699C42.149 27.7104 41.6018 29.1811 41.1073 30.7636C44.1306 30.4253 47.2778 30.25 50.5 30.25C53.7204 30.25 56.8659 30.4256 59.8876 30.7636C59.3929 29.1817 58.8508 27.71 58.2552 26.3699C56.9268 23.3809 55.4494 21.2113 54.014 19.8453C52.6 18.5001 51.4188 18.0959 50.5 18.0959Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 interface AccountChipProps {
   /** True when Privacy Mode is on and the page is on the dark maroon field. */
   isDark?: boolean
@@ -134,6 +151,14 @@ interface AccountChipProps {
    * Switch Account list gets a "Linked" badge so the user can pick it (issue #284).
    */
   linkedAccountAddress?: string
+  /**
+   * HUMN Points balance, folded into the account chip (#313 — the separate
+   * humanity/points nav chip is gone). Optional and gated on the connection/data
+   * state (#303): the value renders ONLY while the EVM wallet is connected and a
+   * real number is present, so it can never persist as a stale readout after the
+   * wallet disconnects.
+   */
+  points?: number
 }
 
 /**
@@ -158,6 +183,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
   conflictNotice,
   conflictSevere = false,
   linkedAccountAddress,
+  points,
 }) => {
   const {
     waapAddress,
@@ -207,6 +233,68 @@ const AccountChip: React.FC<AccountChipProps> = ({
   const l1Verified = l1HasScore || l1IsPoch || (l1Humanity?.eligible ?? false)
   // Has a Passport score but not yet Clean Hands.
   const l1OnPassportTier = !l1IsPoch && l1HasScore
+
+  // #303: HUMN Points render strictly from the connection + data state — only
+  // while the EVM wallet is connected AND a real numeric balance is present. When
+  // the wallet disconnects the chip collapses to the connect state (below), so
+  // there is no persisted/stale value left to clear.
+  const showPoints = isWaapConnected && typeof points === 'number' && points > 0
+
+  // #306: current-tier deposit limits derived from the L1 proof tier
+  // (useL1Humanity), NOT gated behind an authed attestation session. Clean Hands
+  // unlocks the daily deposit cap; a passing Passport (no Clean Hands) is bound
+  // by the lifetime Travel-Rule threshold; an unverified wallet sees a verify
+  // prompt and nothing else. Real remaining usage is shown where the authed
+  // attestation has supplied it.
+  const depositCapUsd = Number(BRIDGE_MAX_DEPOSIT_USD)
+  const travelRuleUsd = Number(TRAVEL_RULE_THRESHOLD_USD)
+
+  const tierLimitLabel = l1IsPoch
+    ? `Daily limit (${DEPOSIT_CAP_LABEL}/human)`
+    : l1OnPassportTier
+      ? `Lifetime limit (${TRAVEL_RULE_LABEL}/human)`
+      : 'Deposit limits'
+
+  const tierLimitValue = l1IsPoch
+    ? depositLimitReached
+      ? 'Reached'
+      : typeof remainingDepositUsd === 'number'
+        ? `$${remainingDepositUsd.toLocaleString()} left`
+        : attFetching
+          ? 'Checking…'
+          : `${DEPOSIT_CAP_LABEL} daily`
+    : l1OnPassportTier
+      ? typeof travelRuleRemainingUsd === 'number'
+        ? `$${travelRuleRemainingUsd.toLocaleString()} left`
+        : attFetching
+          ? 'Checking…'
+          : `${TRAVEL_RULE_LABEL} lifetime`
+      : l1Fetching
+        ? 'Checking…'
+        : 'Verify to see limits'
+
+  // Usage percentage only when a real remaining figure is available against a
+  // known cap; otherwise the bar stays a striped placeholder rather than
+  // fabricating a fill level.
+  let tierLimitPct: number | undefined
+  if (l1IsPoch) {
+    if (depositLimitReached) tierLimitPct = 100
+    else if (typeof remainingDepositUsd === 'number' && depositCapUsd > 0)
+      tierLimitPct = ((depositCapUsd - remainingDepositUsd) / depositCapUsd) * 100
+  } else if (l1OnPassportTier) {
+    if (typeof travelRuleRemainingUsd === 'number' && travelRuleUsd > 0)
+      tierLimitPct = ((travelRuleUsd - travelRuleRemainingUsd) / travelRuleUsd) * 100
+  }
+  const tierLimitPlaceholder = tierLimitPct === undefined && (l1IsPoch || l1OnPassportTier)
+  const tierLimitTint: 'maroon' | 'navy' = l1IsPoch ? 'maroon' : 'navy'
+
+  // #304: the exact linked Aztec account (when it is one of the connected
+  // Azguard accounts) so the conflict banner can offer a one-tap switch to the
+  // named target without implying the user has already switched.
+  const linkedAccount =
+    linkedAccountAddress && availableAccounts.length > 0
+      ? availableAccounts.find((a) => a.address.toLowerCase() === linkedAccountAddress.toLowerCase())
+      : undefined
 
   const [open, setOpen] = useState(false)
   const [aztecSwitchOpen, setAztecSwitchOpen] = useState(false)
@@ -315,15 +403,20 @@ const AccountChip: React.FC<AccountChipProps> = ({
       {/* Skinny collapsed chip — a SINGLE row (stacked avatars + Account + verified
           + caret) at the uniform top-row height (h-14 / CHIP_H), never two stacked
           wallet rows. */}
+      {/* One SOLID glass pill holding the primary account segment, the folded-in
+          HUMN Points readout (#313) and the Connect-Aztec affordance. The
+          secondary segments are TRANSPARENT and adjoined to the solid primary via
+          a hairline divider (#302) — not separate floating pills. overflow-hidden
+          keeps each segment's hover tint inside the pill's rounded corners. */}
       <div
-        className={`flex items-center gap-1 h-14 pl-2 pr-2 rounded-[20px] max-w-[200px] sm:max-w-[260px] ${glassPill(isDark, open)}`}
+        className={`flex items-center h-14 pl-2 pr-1 rounded-[20px] overflow-hidden max-w-[240px] sm:max-w-[360px] ${glassPill(isDark, open)}`}
       >
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-haspopup="true"
           aria-expanded={open}
-          className="flex items-center gap-1.5 min-w-0 flex-1 pl-0.5 py-1 cursor-pointer"
+          className="flex items-center gap-1.5 min-w-0 pl-0.5 pr-1.5 py-1 cursor-pointer"
         >
           {/* Avatars: stacked (EVM + Aztec) when both are connected. */}
           <span className="flex items-center flex-shrink-0">
@@ -347,13 +440,32 @@ const AccountChip: React.FC<AccountChipProps> = ({
             icon="ph:caret-down"
             width={12}
             height={12}
-            className={`ml-auto flex-shrink-0 ${mutedIconText(isDark)} transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+            className={`flex-shrink-0 ${mutedIconText(isDark)} transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
           />
         </button>
 
-        {/* EVM connected, Aztec NOT → inline Connect Aztec affordance (sibling
-            button, not nested). #287: clear ACTIVE treatment when idle (tinted
-            fill + border + hover) so it can't read as disabled; only faded +
+        {/* HUMN Points — folded into the account chip (#313), a TRANSPARENT
+            segment adjoined to the primary via a hairline divider. Gated on the
+            connection/data state (#303): only rendered while the EVM wallet is
+            connected and a real balance is present. Hidden below sm, where the
+            row gets tight (matches the old standalone chip's breakpoint). */}
+        {showPoints && (
+          <span
+            className={`hidden sm:flex items-center gap-1.5 flex-shrink-0 h-9 pl-2.5 pr-1.5 border-l ${
+              isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
+            }`}
+            title="HUMN Points"
+            aria-label={`${points!.toLocaleString()} HUMN Points`}
+          >
+            <HumanPointsIcon className={`w-4 h-4 ${navText(isDark)}`} />
+            <span className={`text-xs font-semibold leading-none ${navText(isDark)}`}>{points!.toLocaleString()}</span>
+          </span>
+        )}
+
+        {/* EVM connected, Aztec NOT → inline Connect Aztec affordance (#302):
+            a TRANSPARENT secondary segment adjoined to the solid primary via the
+            same hairline divider, NOT a filled floating pill. Accent-coloured
+            label + hover tint keep it reading as active; only faded +
             cursor-not-allowed while actually connecting. */}
         {isWaapConnected && !isAztecConnected && (
           <button
@@ -361,14 +473,10 @@ const AccountChip: React.FC<AccountChipProps> = ({
             onClick={onConnectAztec}
             disabled={isL2Connecting}
             title="Connect Aztec wallet"
-            className={`flex items-center gap-1 flex-shrink-0 pl-1.5 pr-2 py-1 rounded-full text-[11px] font-medium border ${
-              isL2Connecting
-                ? 'opacity-60 cursor-not-allowed border-transparent'
-                : `cursor-pointer ${
-                    isDark
-                      ? 'bg-[#FA8FC4]/[0.14] border-[#FA8FC4]/[0.30] hover:bg-[#FA8FC4]/[0.22]'
-                      : 'bg-[#FA8FC4]/[0.16] border-[#81133B]/[0.25] hover:bg-[#FA8FC4]/[0.26]'
-                  }`
+            className={`flex items-center gap-1 flex-shrink-0 h-9 pl-2.5 pr-2 border-l text-[11px] font-medium ${
+              isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
+            } ${
+              isL2Connecting ? 'opacity-40 cursor-not-allowed' : `cursor-pointer ${hoverTint(isDark)}`
             } ${accentPink(isDark)}`}
           >
             <Image src={AZTEC_ICON} alt="" width={13} height={13} className="flex-shrink-0" />
@@ -395,7 +503,30 @@ const AccountChip: React.FC<AccountChipProps> = ({
               } ${isDark ? 'bg-white/[0.06]' : 'bg-black/[0.03]'}`}
             >
               <Icon icon="ph:warning-circle" width={15} height={15} className={`mt-[1px] flex-shrink-0 ${accentPink(isDark)}`} />
-              <p className={`text-[11px] leading-snug ${navText(isDark)}`}>{conflictNotice}</p>
+              <div className="flex flex-col gap-1.5 min-w-0">
+                <p className={`text-[11px] leading-snug ${navText(isDark)}`}>{conflictNotice}</p>
+                {/* #304: when the bound target is one of the connected Azguard
+                    accounts, name it and offer a one-tap switch — never a generic
+                    prompt that implies the user has already moved. */}
+                {linkedAccount && aztecAddress && linkedAccount.address.toLowerCase() !== aztecAddress.toLowerCase() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      switchAztecAccount(linkedAccount)
+                      setAztecSwitchOpen(false)
+                    }}
+                    title="Switch to your linked Aztec account"
+                    className={`self-start flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border ${
+                      isDark
+                        ? 'border-[#FA8FC4]/[0.30] hover:bg-[#FA8FC4]/[0.14]'
+                        : 'border-[#81133B]/[0.25] hover:bg-[#FA8FC4]/[0.16]'
+                    } ${accentPink(isDark)}`}
+                  >
+                    <Icon icon="ph:arrows-left-right" width={13} height={13} className="flex-shrink-0" />
+                    Switch to {shortAddr(linkedAccount.address)}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -619,26 +750,20 @@ const AccountChip: React.FC<AccountChipProps> = ({
           </SectionLabel>
 
           <div className="px-4 py-1 flex flex-col gap-2.5">
+            {/* #306: ONE bar reflecting the user's CURRENT proof tier — Clean
+                Hands shows the daily deposit cap, a passing Passport shows the
+                lifetime Travel-Rule limit, and only a genuinely unverified wallet
+                is prompted to verify. Real remaining usage (and its fill %) is
+                shown when the authed attestation supplies it; otherwise the tier
+                ceiling is shown as a striped estimate — never a bare "Verify to
+                see limits" for a wallet that clearly holds a proof. */}
             <LimitBar
               isDark={isDark}
-              label="Deposit allowance"
-              // No client-side cap TOTAL is exposed, so the used/limit ratio
-              // can't be computed — show the real remaining $ and flag the bar
-              // as an estimate rather than fabricating a percentage. #292: when
-              // the per-user cap data is unavailable (no authed session) show the
-              // configured ceiling + a verify hint, NEVER a bare "No limit".
-              valueText={
-                depositLimitReached
-                  ? 'Reached'
-                  : typeof remainingDepositUsd === 'number'
-                    ? `$${remainingDepositUsd.toLocaleString()} left`
-                    : attFetching
-                      ? 'Checking…'
-                      : `Verify to see limits · ${DEPOSIT_CAP_LABEL}`
-              }
-              pct={depositLimitReached ? 100 : undefined}
-              placeholder={!depositLimitReached && typeof remainingDepositUsd === 'number'}
-              tint="maroon"
+              label={tierLimitLabel}
+              valueText={tierLimitValue}
+              pct={tierLimitPct}
+              placeholder={tierLimitPlaceholder}
+              tint={tierLimitTint}
             />
             {typeof reservedDepositUsd === 'number' && reservedDepositUsd > 0 && (
               <LimitBar
@@ -650,20 +775,6 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 tint="amber"
               />
             )}
-            <LimitBar
-              isDark={isDark}
-              label={`Lifetime limit (${TRAVEL_RULE_LABEL}/human)`}
-              valueText={
-                typeof travelRuleRemainingUsd === 'number'
-                  ? `$${travelRuleRemainingUsd.toLocaleString()} left`
-                  : attFetching
-                    ? 'Checking…'
-                    : `Verify to see limits · ${TRAVEL_RULE_LABEL}`
-              }
-              pct={undefined}
-              placeholder={typeof travelRuleRemainingUsd === 'number'}
-              tint="navy"
-            />
           </div>
 
           <Divider isDark={isDark} />

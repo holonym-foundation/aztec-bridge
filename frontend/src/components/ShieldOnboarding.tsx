@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useWalletStore } from '@/stores/walletStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
+import DeploymentSelector from '@/components/DeploymentSelector'
 
 const ONBOARDED_KEY = 'shield_onboarded'
 const BRAND = '#81133B'
@@ -765,6 +766,14 @@ export default function ShieldOnboarding() {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.5, ease: 'easeInOut' }}
     >
+      {/* #301: the version/network chip is a real, interactive DeploymentSelector
+          here, not a static label. On the splash a non-connected user has no
+          elevated nav (that only lifts above this overlay when connected), so
+          without this the dropdown would sit behind the opaque overlay and never
+          open. Rendered inside .ob-inner so its menu layers above the splash field. */}
+      <div className="ob-splash-top">
+        <DeploymentSelector />
+      </div>
       <div className="ob-stage">
         <div className="ob-stage-inner">
           <div className="ob-card-region">
@@ -998,6 +1007,10 @@ export default function ShieldOnboarding() {
           -webkit-mask: url(/assets/svg/human.tech.logo.svg) no-repeat center / contain;
           mask: url(/assets/svg/human.tech.logo.svg) no-repeat center / contain; }
         .ob-dot { opacity: 0.5; }
+        /* #301: splash version/network chip row. z-4 keeps the chip (and its
+           open dropdown, which lifts to its own higher stacking level) above the
+           splash card/field below it so the menu is fully clickable on the splash. */
+        .ob-splash-top { position: relative; z-index: 4; display: flex; justify-content: center; padding: 20px 24px 0; }
         /* #157: splash trust-line footer, pinned to the bottom of the splash. */
         .ob-splash-footer { position: relative; z-index: 3; padding: 0 24px 20px; display: flex; justify-content: center; }
         /* Secondary, subordinate developer CTA on the splash — a quiet text link beneath the

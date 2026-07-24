@@ -12,7 +12,7 @@ import { usePathname } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { silkUrl } from '@/config/l1.config'
-import { L1_CHAIN_ID, POCH_MINT_URL } from '@/config'
+import { L1_CHAIN_ID, POCH_MINT_URL, IS_MAINNET } from '@/config'
 import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
@@ -666,11 +666,15 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
             </span>
             <span className={`text-xs font-semibold leading-none ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
           </span>
-          {/* Points row — HUMN Points glyph with slow continuous rotation (ported DS chip--spin-icon). */}
-          <span className="flex items-center gap-1.5">
-            <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
-            <span className={`text-xs font-semibold leading-none ${navText(isDark)}`}>{points.toLocaleString()}</span>
-          </span>
+          {/* Points row — hidden on mainnet: the HUMN Points value is still a
+              placeholder stub (PLACEHOLDER_POINTS), not wired to a real points
+              source, so we do not show a fabricated number in production. */}
+          {!IS_MAINNET && (
+            <span className="flex items-center gap-1.5">
+              <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
+              <span className={`text-xs font-semibold leading-none ${navText(isDark)}`}>{points.toLocaleString()}</span>
+            </span>
+          )}
         </div>
       </button>
 
@@ -756,23 +760,24 @@ const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
                 </p>
               )}
             </div>
-            <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.15]">
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-1.5 text-xs font-medium text-white/[0.70]">
-                  <HumanPointsIcon className="w-3.5 h-3.5" />
-                  HUMN Points
-                </span>
-                <span className="text-sm font-semibold text-white/[0.90]">{points.toLocaleString()}</span>
+            {/* HUMN Points section hidden on mainnet — `points` is still the
+                PLACEHOLDER_POINTS stub (no real per-user points source is wired;
+                the real value must come from the passport/Covenant HUMN Points
+                service). Don't show a fabricated balance in production. */}
+            {!IS_MAINNET && (
+              <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.15]">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-white/[0.70]">
+                    <HumanPointsIcon className="w-3.5 h-3.5" />
+                    HUMN Points
+                  </span>
+                  <span className="text-sm font-semibold text-white/[0.90]">{points.toLocaleString()}</span>
+                </div>
+                <p className="text-[11px] leading-snug text-white/[0.75]">
+                  HUMN Points reward real, verified humans, not bots, across human.tech.
+                </p>
               </div>
-              {/* TODO: `points` is still the PLACEHOLDER_POINTS stub. Shield has no
-                  per-user points source yet. The real value must be fetched from the
-                  points backend (the passport/Covenant HUMN Points service) and
-                  threaded through the `points` prop. Do NOT fabricate a per-action
-                  breakdown here, show only the real single balance once it's wired. */}
-              <p className="text-[11px] leading-snug text-white/[0.75]">
-                HUMN Points reward real, verified humans, not bots, across human.tech.
-              </p>
-            </div>
+            )}
           </div>
         )}
       />

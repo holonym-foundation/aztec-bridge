@@ -4,6 +4,7 @@ import { Icon, loadIcons } from '@iconify/react'
 import Image from 'next/image'
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { useWalletStore } from '@/stores/walletStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useL1Humanity } from '@/hooks/useL1Humanity'
@@ -411,6 +412,28 @@ const AccountChip: React.FC<AccountChipProps> = ({
       <div
         className={`flex items-center h-14 pl-2 pr-1 rounded-[20px] overflow-hidden max-w-[240px] sm:max-w-[360px] ${glassPill(isDark, open)}`}
       >
+        {/* HUMN Points — folded into the account chip (#313) and pinned to the
+            LEFT of the account, so the chip reads [points] then [account]. A
+            TRANSPARENT segment adjoined to the primary via a hairline divider on
+            its RIGHT edge. Gated on the connection/data state (#303): only
+            rendered while the EVM wallet is connected and a real balance is
+            present. Hidden below sm, where the row gets tight (matches the old
+            standalone chip's breakpoint). The glyph slowly rotates via the
+            ported `humn-points-spin` class (motion-reduce guarded in globals). */}
+        {showPoints && (
+          <span
+            className={`hidden sm:flex items-center gap-1.5 flex-shrink-0 h-9 pl-1 pr-2.5 border-r ${
+              isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
+            }`}
+            data-tooltip-id="humn-points-tooltip"
+            data-tooltip-content="HUMN Points reward real, verified humans across human.tech."
+            aria-label={`${points!.toLocaleString()} HUMN Points`}
+          >
+            <HumanPointsIcon className={`humn-points-spin w-4 h-4 ${navText(isDark)}`} />
+            <span className={`text-xs font-semibold leading-none ${navText(isDark)}`}>{points!.toLocaleString()}</span>
+          </span>
+        )}
+
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -443,24 +466,6 @@ const AccountChip: React.FC<AccountChipProps> = ({
             className={`flex-shrink-0 ${mutedIconText(isDark)} transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
           />
         </button>
-
-        {/* HUMN Points — folded into the account chip (#313), a TRANSPARENT
-            segment adjoined to the primary via a hairline divider. Gated on the
-            connection/data state (#303): only rendered while the EVM wallet is
-            connected and a real balance is present. Hidden below sm, where the
-            row gets tight (matches the old standalone chip's breakpoint). */}
-        {showPoints && (
-          <span
-            className={`hidden sm:flex items-center gap-1.5 flex-shrink-0 h-9 pl-2.5 pr-1.5 border-l ${
-              isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
-            }`}
-            title="HUMN Points"
-            aria-label={`${points!.toLocaleString()} HUMN Points`}
-          >
-            <HumanPointsIcon className={`w-4 h-4 ${navText(isDark)}`} />
-            <span className={`text-xs font-semibold leading-none ${navText(isDark)}`}>{points!.toLocaleString()}</span>
-          </span>
-        )}
 
         {/* EVM connected, Aztec NOT → inline Connect Aztec affordance (#302):
             a TRANSPARENT secondary segment adjoined to the solid primary via the
@@ -802,6 +807,15 @@ const AccountChip: React.FC<AccountChipProps> = ({
         </div>,
         document.body,
       )}
+
+      {/* Tooltip explaining the HUMN Points readout (reuses the app's
+          react-tooltip data-tooltip-id / data-tooltip-content pattern). */}
+      <ReactTooltip
+        id="humn-points-tooltip"
+        place="bottom"
+        className="z-[100] max-w-[220px]"
+        style={{ fontSize: '12px', padding: '4px 8px' }}
+      />
     </div>
   )
 }

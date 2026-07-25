@@ -317,6 +317,13 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
 
   const walletsReady = isWaapConnected && isAztecConnected
   const amountValid = !!fuelAmount && Number(fuelAmount) > 0
+  // Fee Juice is non-transferable L2 gas, not a bridged asset, so a top-up must NEVER be gated
+  // by (or shown against) the compliance deposit limit — only real token bridges consume it. The
+  // gates below are intentionally limit-free: no remaining-cap check, no limit block, no pill.
+  // NOTE: the underlying buy+bridge still runs through `useL1TopUpFeeJuice` -> `bridge.bridgeL1ToL2`,
+  // whose attestation cascade counts the spend against the deposit limit at the backend. That
+  // consumption can only be exempted server-side (a fuel-only deposit flag on the attestation
+  // request) and is out of scope for this frontend; see the backend follow-up.
   const confirmDisabled =
     !canTopUp ||
     !walletsReady ||

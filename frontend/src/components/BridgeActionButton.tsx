@@ -9,6 +9,7 @@ import CongestionWarningModal from './model/CongestionWarningModal'
 import { useL2PendingTxCount, useNetworkHealth } from '@/hooks/useL2Operations'
 import { POCH_MINT_URL } from '@/config'
 import { PASSPORT_MAX_AMOUNT } from '@/config/env.config'
+import { pushNotification, dismissNotificationByKey } from '@/stores/useNotificationsStore'
 
 // Single-loader policy (#298): progress lives in the top mini progress bar
 // (BridgeHeader's LoadingBar), so the button no longer renders its own spinner.
@@ -100,9 +101,11 @@ interface BridgeActionButtonProps {
   // Travel Rule: USD budget left before the threshold (undefined = disabled).
   travelRuleRemainingUsd?: number
   // USD held by an outstanding attestation reservation (already netted out of the remaining
-  // budgets above). When a block is charged to this, it's temporary — clears when the pending
-  // deposit confirms or the reservation expires (<= 30 min) — so we disable with a hold label
-  // rather than routing the user to Clean Hands verification.
+  // budgets above). A block charged to this is a temporary hold, not a permanent cap: it frees
+  // once the pending deposit settles (or the reservation is released), so we disable with a hold
+  // label rather than routing the user to Clean Hands verification. The hold can persist for
+  // other reasons too (e.g. a deposit stuck for lack of Fee Juice), so we never promise a fixed
+  // time for it to clear.
   reservedDepositUsd?: number
 
   // Operation completion state
@@ -439,14 +442,44 @@ function BridgeActionButton({
     holdUsd > 0 && !travelRuleBlocked && travelRuleRemainingUsd != null && travelRuleRemainingUsd <= 0
   const pendingHoldBlocked = depositHeldOut || travelRuleHeldOut
 
-  // Full explanation for the temporary hold, used both for the disabled CTA's
-  // aria-label/title (SOP §6) and to shape a concise on-button label. Names the
-  // reserved amount when the reservation figure is known.
+  // Full explanation for the temporary hold, delivered as a Messages entry (below) and carried
+  // on the disabled CTA's aria-label/title (SOP §6). Stays GENERAL: a hold can clear on its own
+  // when the pending deposit settles, but it can also linger for other reasons (a deposit stuck
+  // for lack of Fee Juice), so we never promise a fixed time. Names the reserved amount when the
+  // reservation figure is known.
   const pendingHoldReason = pendingHoldBlocked
     ? holdUsd > 0
-      ? `A pending deposit is using $${holdUsd.toFixed(2)} of your limit. It frees up when that deposit confirms (~30 min).`
-      : 'A pending deposit is using part of your limit. It frees up when that deposit confirms (~30 min).'
+      ? `$${holdUsd.toFixed(2)} of your limit is held by a pending deposit. It frees up once that deposit settles.`
+      : 'Part of your limit is held by a pending deposit. It frees up once that deposit settles.'
     : undefined
+
+  // Full explanation for a plain limit block (the entered amount exceeds what's left of the cap,
+  // or the cap is spent). Also delivered as a Messages entry and carried on the aria-label/title,
+  // so the button itself stays a short critical label instead of a wrapped paragraph (#415b).
+  const depositLimitReason =
+    depositLimitBlocked && !pendingHoldBlocked
+      ? remainingDepositUsd != null && remainingDepositUsd > 0
+        ? `That amount is over your remaining limit. You can bridge up to $${remainingDepositUsd.toFixed(2)} more right now.`
+        : 'You have reached your deposit limit for now. It frees up as your recent deposits settle.'
+      : undefined
+
+  // One reason string for the disabled CTA (pending hold wins, matching the label priority below).
+  const limitBlockReason = pendingHoldReason ?? depositLimitReason
+
+  // #415b: keep the full sentence OUT of the button. The button is a clean grayed control with a
+  // short critical label ("Limit held" / "Over your limit"); the full explanation lands here as a
+  // persistent, keyed Messages entry so paragraphs never wrap inside the button. Keyed upsert =
+  // one row, no spam; dismissed by key the moment the block clears.
+  useEffect(() => {
+    const key = 'bridge-deposit-limit'
+    if (pendingHoldReason) {
+      pushNotification({ type: 'warning', key, title: 'Deposit limit on hold', message: pendingHoldReason })
+    } else if (depositLimitReason) {
+      pushNotification({ type: 'warning', key, title: 'Over your deposit limit', message: depositLimitReason })
+    } else {
+      dismissNotificationByKey(key)
+    }
+  }, [pendingHoldReason, depositLimitReason])
 
   // Binding conflict is only meaningful once BOTH wallets are connected (it's
   // derived from the connected pair). Before that the button is a Connect CTA,
@@ -504,12 +537,10 @@ function BridgeActionButton({
     // stays a plain, disabled operation label and the concise reason renders under
     // it, while the full switch-your-wallet notice lives in the Messages feed.
 
-    // Temporary reservation hold: a signed-but-unconfirmed deposit is holding the user's
-    // budget. Distinct from a permanent cap — say it clears itself so they wait, not verify.
+    // Temporary reservation hold: a signed-but-unconfirmed deposit is holding the user's budget.
+    // Short critical label only — the full sentence lives in Messages and on the aria-label (#415b).
     if (pendingHoldBlocked) {
-      return holdUsd > 0
-        ? `$${holdUsd.toFixed(2)} held by a pending deposit (frees in ~30 min)`
-        : 'Pending deposit is holding your limit (frees in ~30 min)'
+      return 'Limit held'
     }
 
     // Travel Rule: passport tier exhausted, POCH required (deposits only)
@@ -517,11 +548,10 @@ function BridgeActionButton({
       return 'Verify with Clean Hands to bridge more'
     }
 
-    // Alpha deposit cap (deposits only)
+    // Alpha deposit cap (deposits only). Short critical label only — the figure and the full
+    // explanation live in Messages and on the aria-label, not wrapped inside the button (#415b).
     if (depositLimitBlocked) {
-      return remainingDepositUsd != null && remainingDepositUsd > 0
-        ? `Only $${remainingDepositUsd.toFixed(2)} left (Alpha limit)`
-        : 'Alpha Deposit Limit Reached'
+      return 'Over your limit'
     }
 
     // Faucet — name what is actually missing (the faucet supplies both ETH gas and
@@ -570,8 +600,8 @@ function BridgeActionButton({
           onClick={handleButtonClick}
           disabled={isButtonDisabled || isDisabled}
           className=""
-          title={pendingHoldReason}
-          aria-label={pendingHoldReason}
+          title={limitBlockReason}
+          aria-label={limitBlockReason}
         >
           {showLoadingSpinner ? (
             <LoadingContent label={getLoadingText()} />

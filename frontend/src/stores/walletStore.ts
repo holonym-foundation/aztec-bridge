@@ -1,7 +1,7 @@
 import { L1_CHAIN_ID, L1_RPC_URL, ROLLUP_VERSION, L2_NETWORKS } from '@/config'
 import { networkConfig, waapConfig } from '@/config/l1.config'
 import { showToast } from '@/hooks/useToast'
-import { pushNotification } from '@/stores/useNotificationsStore'
+import { dismissNotificationByKey, pushNotification } from '@/stores/useNotificationsStore'
 import {
   detectWalletByProvider,
   discoveredProviders,
@@ -95,6 +95,12 @@ declare global {
 
 const AZTEC_WALLET_KEY = 'aztecLoginMethod'
 const WEB_WALLET_URL_KEY = 'aztecWebWalletUrl'
+
+// Stable feed key for the "signature needed" alert (#417). The mini-bar ticker
+// selects this key so the alert wins priority while a signature is pending, and
+// the row is retired by key the instant the request resolves — so it never
+// lingers on an idle bridge.
+export const SIGNATURE_NEEDED_KEY = 'waap-signature-needed'
 
 const DISCOVERY_TIMEOUT_MS = 60000
 const DISCONNECT_GRACE_MS = 1000
@@ -208,11 +214,12 @@ interface WalletState {
   // Utility functions
   refreshWaapWalletInfo: () => Promise<void>
 
-  // Anti-abandonment (#408): set while a wallet signature/approval is being
+  // Anti-abandonment (#408/#417): set while a wallet signature/approval is being
   // requested and awaited; cleared the moment it resolves OR rejects. Drives the
-  // sticky SignaturePrompt bar + tab-title flip so a user who missed the wallet
-  // popup is pulled back instead of silently abandoning the flow. `onReRequest`,
-  // when present, re-invokes the pending wallet call.
+  // sticky mini-bar ticker alert + the tab-title flip so a user who missed the
+  // wallet popup is pulled back instead of silently abandoning the flow — never a
+  // layout-pushing banner. `onReRequest`, when present, re-invokes the pending
+  // wallet call.
   pendingSignature: { label: string; onReRequest?: () => void } | null
   setPendingSignature: (pending: { label: string; onReRequest?: () => void } | null) => void
 
@@ -985,6 +992,7 @@ const walletStore = create<WalletState>((set, get) => ({
           isWaapConnected: isConnected,
           pendingSignature: null,
         })
+        dismissNotificationByKey(SIGNATURE_NEEDED_KEY)
 
         // If wallet is connected, retrieve the login method
         if (isConnected) {
@@ -1133,6 +1141,7 @@ const walletStore = create<WalletState>((set, get) => ({
         waapWalletIcon: null,
         pendingSignature: null,
       })
+      dismissNotificationByKey(SIGNATURE_NEEDED_KEY)
 
       logInfo('WaaP wallet disconnected successfully', {
         walletType: WalletType.WAAP,
@@ -1250,10 +1259,12 @@ const walletStore = create<WalletState>((set, get) => ({
         return cached
       }
 
+      const requestSignature = () => requestWaapWallet(WAAP_METHOD.personal_sign, [message, waapAddress])
+
       // The wallet signature popup is easy to miss; nudge the user to check it.
       // Stable toastId so rapid re-signs refresh in place instead of stacking.
-      // feed:false — the semantic 'signature' push below is the feed record, so
-      // the toast must not also auto-mirror a duplicate generic entry.
+      // feed:false — the keyed feed record below is the persistent entry, so the
+      // toast must not also auto-mirror a duplicate generic row.
       // autoClose:false (#408 / T4): the required-signature toast stays until the
       // sign resolves or rejects (dismissed in the finally below), instead of
       // vanishing after a few seconds while the user is still in their wallet.
@@ -1262,18 +1273,26 @@ const walletStore = create<WalletState>((set, get) => ({
         autoClose: false,
         feed: false,
       })
-      // Also record it in the persistent feed so the request is recoverable in
-      // the Messages tab even if the toast is dismissed.
+      // Persistent, recoverable feed record (#417). Typed `warning` so it also
+      // surfaces in the mini-bar ticker, and keyed so it collapses to one row and
+      // is retired by key the instant the signature resolves. The Re-request
+      // action re-opens the wallet popup straight from the Messages feed.
       pushNotification({
-        type: 'signature',
-        title: 'Signature required',
-        message: 'Check your wallet and approve the signature to continue.',
+        type: 'warning',
+        key: SIGNATURE_NEEDED_KEY,
+        title: 'Signature needed. Check your wallet to continue.',
+        action: {
+          label: 'Re-request',
+          onClick: () => {
+            void requestSignature()
+          },
+        },
       })
 
-      // Sticky prompt + tab-title flip while we await the wallet (#408 / T1).
-      // onReRequest re-opens the wallet request for a user who dismissed or
-      // missed the popup. Cleared in the finally so it never outlives the await.
-      const requestSignature = () => requestWaapWallet(WAAP_METHOD.personal_sign, [message, waapAddress])
+      // Anti-abandonment signal (#408 / T1): drives the sticky ticker alert and
+      // the tab-title flip while we await the wallet. onReRequest re-opens the
+      // wallet request for a user who dismissed or missed the popup. Cleared in
+      // the finally so it never outlives the await.
       set({
         pendingSignature: {
           label: 'Unlock My Secrets',
@@ -1288,6 +1307,7 @@ const walletStore = create<WalletState>((set, get) => ({
         return signature as string
       } finally {
         set({ pendingSignature: null })
+        dismissNotificationByKey(SIGNATURE_NEEDED_KEY)
         showToast.dismiss('waap-sign-request')
       }
     } catch (err) {

@@ -3,7 +3,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import LoadingBar from './LoadingBar'
 import { useBridgeStore } from '@/stores/bridgeStore'
-import { useWalletStore } from '@/stores/walletStore'
+import { SIGNATURE_NEEDED_KEY, useWalletStore } from '@/stores/walletStore'
 import { useNotificationsStore } from '@/stores/useNotificationsStore'
 import { useL1TokenBalance } from '@/hooks/useL1Operations'
 import { useL2TokenBalance } from '@/hooks/useL2Operations'
@@ -76,7 +76,8 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
 
   const {
     isWaapConnected,
-    isAztecConnected
+    isAztecConnected,
+    pendingSignature
   } = useWalletStore()
 
   // Inline "refreshing balances" status, sourced from the SAME balance-query
@@ -151,7 +152,23 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
         !(!isProgressRoute && n.key !== undefined && SAFETY_BANNER_KEYS.has(n.key)),
     ),
   )
-  const currentAlert = suppressCompletedAlerts ? undefined : rawAlert
+
+  // While a wallet signature is pending it is the STICKY, top-priority ticker
+  // alert — a missed wallet popup is the top abandonment driver (#408/#417). It's
+  // the keyed `warning` row the wallet store pushes; selecting it by key keeps it
+  // winning even if a newer warning/error arrives. It never lingers on an idle
+  // bridge: the store retires the row by key the instant the signature resolves
+  // (so pendingSignature and this row clear together), consistent with the
+  // ticker-state gates (#346/#350/#351/#366).
+  const signatureAlert = useNotificationsStore((s) =>
+    s.notifications.find((n) => n.key === SIGNATURE_NEEDED_KEY),
+  )
+  const currentAlert =
+    pendingSignature && signatureAlert
+      ? signatureAlert
+      : suppressCompletedAlerts
+        ? undefined
+        : rawAlert
   const alertMeta = currentAlert ? ALERT_META[currentAlert.type as 'warning' | 'error'] : null
   const isAlertActive = !!(currentAlert && alertMeta)
 

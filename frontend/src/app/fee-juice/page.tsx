@@ -128,9 +128,9 @@ function FeeJuicePageInner() {
   }
 
   return (
-    <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
+    <RootStyle className="min-h-0 overflow-hidden">
       <AztecWalletConnectionModals />
-      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden">
         <div className="px-5 pt-5">
           {/* Back is always a left-aligned arrow (SOP §4 / #194), never a stacked
               full-width button. Mirrors the ProgressCard / Activity back affordance. */}

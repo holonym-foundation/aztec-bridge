@@ -170,7 +170,7 @@ export default function ActivityPage() {
         !operation.fuelAmount ||
         !operation.l1TxHash
       ) {
-        notify('error', 'Missing fuel data for this bridge — cannot rebuild the claim link.')
+        notify('error', 'Missing fuel data for this bridge. Cannot rebuild the claim link.')
         return
       }
       setSharingId(operation.id)
@@ -182,7 +182,7 @@ export default function ActivityPage() {
           )
         }
         if (!decrypted.fuelSecret) {
-          throw new Error('No fuel secret in this bridge — was it a public-fuel deposit?')
+          throw new Error('No fuel secret in this bridge. Was it a public fuel deposit?')
         }
         // The override field is only set in the blob when the bridger sent fuel to a third party.
         // Self-fuel bridges never write it, so a missing field here means there's nothing to share.
@@ -211,8 +211,8 @@ export default function ActivityPage() {
   )
 
   return (
-    <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
-      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden px-5 pt-4 pb-4">
+    <RootStyle className="min-h-0 overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden px-5 pt-4 pb-4">
         <div className="flex items-center gap-4">
           <BridgeHeader />
         </div>

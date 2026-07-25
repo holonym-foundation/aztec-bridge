@@ -193,8 +193,8 @@ export default function ResumePage() {
   return (
     // Same no-scroll shell as /progress: cap the card to the 90vh budget and let the card body
     // scroll inside itself if it ever can't fit, so the page never scrolls and nothing clips.
-    <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
-      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden">
+    <RootStyle className="min-h-0 overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden">
         <div className="px-5 pt-5">
           <div className="flex items-center gap-4">
             <BridgeHeader />

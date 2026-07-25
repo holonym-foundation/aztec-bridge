@@ -145,6 +145,15 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   const tierLimitUsd = isPoch ? cleanHandsLimitUsd : passportLimitUsd
 
   const amountNum = Number(inputAmount)
+  // The alpha deposit cap is deposit-only (L1->L2). Showing a per-human limit on funds
+  // LEAVING Aztec is misleading and implies double-counting, so the limit indicator (both
+  // the "Limit: $X" state and the Clean Hands nudge) renders only when this flow is a deposit.
+  const isDeposit = direction === BridgeDirection.L1_TO_L2
+  // Fit-to-width: the typed amount owns the free space and steps its font size DOWN as the
+  // value grows so a long number (e.g. "1234.5678") stays fully visible instead of being
+  // clipped behind the input's right edge. Short values keep the prominent size.
+  const amountLength = (inputAmount || '0').length
+  const amountFontPx = Math.min(32, Math.max(16, Math.round(200 / Math.max(amountLength, 1))))
   // Mutually exclusive with the "Limit: $X" indicator: once a Passport-only user crosses the
   // tier cap, the Clean Hands nudge REPLACES the limit indicator in the same slot. PoCH users
   // already hold the higher cap, so they keep the plain limit indicator and are never nagged.
@@ -278,7 +287,8 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             placeholder="0"
             value={inputAmount}
             onChange={(e) => setInputAmount(e.target.value)}
-            className="min-w-0 flex-1 placeholder-latest-grey-400 outline-none bg-[transparent] text-32 leading-tight font-medium"
+            className="min-w-0 flex-1 placeholder-latest-grey-400 outline-none bg-[transparent] leading-tight font-medium"
+            style={{ fontSize: `${amountFontPx}px` }}
             autoFocus
           />
           <div className="flex flex-col items-end gap-0.5 shrink-0">
@@ -312,8 +322,10 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             )}
             {/* One slot, mutually exclusive: under the cap we show "Limit: $X" with the tier
                 brand mark + per-human tooltip; once the amount exceeds the cap (Passport tier)
-                the linked Clean Hands nudge REPLACES it. Never both. */}
-            {attestationMethod &&
+                the linked Clean Hands nudge REPLACES it. Never both. Deposit-only: the cap
+                does not apply to withdrawals (L2->L1), so nothing limit-related renders there. */}
+            {isDeposit &&
+              attestationMethod &&
               (showCleanHandsNudge ? (
                 <a
                   href={POCH_MINT_URL}
@@ -351,7 +363,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
               ))}
           </div>
         </div>
-        {attestationMethod && !showCleanHandsNudge && limitLabel && (
+        {isDeposit && attestationMethod && !showCleanHandsNudge && limitLabel && (
           <ReactTooltip
             id="attestation-info"
             place="top"

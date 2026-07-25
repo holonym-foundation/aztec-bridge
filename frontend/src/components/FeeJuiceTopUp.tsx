@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { formatUnits, parseUnits } from 'viem'
 import {
   formatFjAmount,
@@ -362,7 +363,8 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
               <p className="text-[11px] font-semibold uppercase tracking-wide text-latest-grey-500">Your balance</p>
               {/* Mode indicator: mode follows Privacy Mode in the top nav. */}
               <div
-                title="Mode follows Privacy Mode in the top nav"
+                data-tooltip-id="fj-mode-info"
+                data-tooltip-content="Public Fee Juice pays L2 gas openly. Private (BridgedFPC) fuel keeps your transaction anonymous. Mode follows Privacy Mode in the top nav."
                 className={`flex shrink-0 cursor-help items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                   modeIsPrivate ? 'border-[#81133B]/40 bg-[#81133B]/[0.06]' : 'border-[#17235E]/40 bg-[#17235E]/[0.06]'
                 }`}
@@ -605,6 +607,8 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
               )}
             </div>
           )}
+
+          <ReactTooltip id="fj-mode-info" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
         </>
       )}
     </div>

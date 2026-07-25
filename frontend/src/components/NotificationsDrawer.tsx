@@ -28,6 +28,16 @@ const PANEL_WIDTH = 300
 // panel's top edge lands here and never crosses into the nav (#318). Mirrors the
 // same NAV_SAFE_TOP reservation BridgeStepsRail uses for its rail panel (#316).
 const NAV_SAFE_TOP = 72
+// SOP §5: an open rail panel (and its new-message peek bubble) must keep a >=12px
+// breathing gap from the centered 360px app-shell card and never clip its edge
+// (#378). The card is viewport-centered so its right edge sits at 50vw+180px; a
+// right-anchored overlay grows leftward from ~ (tab 42px + its gap) off the
+// viewport edge. Capping the overlay width keeps its left edge >=12px clear of the
+// card; on roomy viewports the cap exceeds the natural width (no effect), on
+// tighter md+ widths the overlay shrinks from the left and sits in the right
+// gutter. Panel gap-to-tab is 12px -> 50vw-246px; the peek bubble's is 10px.
+const CARD_SAFE_MAX_WIDTH = 'calc(50vw - 246px)'
+const CARD_SAFE_PEEK_MAX_WIDTH = 'min(260px, calc(50vw - 244px))'
 // Fixed page size. The panel paginates rather than scrolls, matching the app's
 // no-scroll direction. Kept small (3) so the taller, roomier rows plus header and
 // pager fit inside the viewport-capped panel height without clipping (#208/#229).
@@ -609,6 +619,7 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
             animate={{ x: 0, opacity: 1, scale: 1 }}
             exit={{ x: 18, opacity: 0, scale: 0.96 }}
             transition={{ duration: DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+            style={{ maxWidth: CARD_SAFE_PEEK_MAX_WIDTH }}
             className="absolute right-[calc(100%_+_10px)] top-1/2 flex max-w-[260px] -translate-y-1/2 items-center gap-3 rounded-2xl rounded-br-md border border-[#D4D4D4] bg-white py-2.5 pl-3 pr-3.5 text-left shadow-[0px_12px_28px_0px_rgba(0,0,0,0.12)]"
           >
             <span
@@ -638,11 +649,12 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
             animate={{ width: PANEL_WIDTH, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+            style={{ maxWidth: CARD_SAFE_MAX_WIDTH }}
             className="absolute bottom-0 right-[calc(100%_+_12px)] overflow-hidden"
           >
             <div
               id={panelId}
-              style={{ maxHeight: maxPanelHeight }}
+              style={{ maxHeight: maxPanelHeight, maxWidth: CARD_SAFE_MAX_WIDTH }}
               className={`flex max-h-[calc(100dvh-1.5rem)] w-[300px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white ${PANEL_PADDING} shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]`}
             >
               {panelBody(closeDesktop)}

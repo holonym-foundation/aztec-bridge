@@ -34,6 +34,7 @@ if (typeof window !== 'undefined') {
     'ph:check',
     'ph:copy',
     'ph:warning-circle',
+    'ph:info',
     'majesticons:open',
   ])
 }
@@ -259,8 +260,14 @@ const AccountChip: React.FC<AccountChipProps> = ({
   const tierLimitLabel = l1IsPoch
     ? `Daily limit (${DEPOSIT_CAP_LABEL}/human)`
     : l1OnPassportTier
-      ? `Lifetime limit (${TRAVEL_RULE_LABEL}/human)`
+      ? `Lifetime bridged in (${TRAVEL_RULE_LABEL}/human)`
       : 'Deposit limits'
+
+  // Explainer for the lifetime bridge-in cap, surfaced as an (i) tooltip beside
+  // the label (SOP §7). Deposit-only: withdrawals never reduce it.
+  const tierLimitInfo = l1OnPassportTier
+    ? 'This is a per human lifetime cap on the value you bridge into Aztec. Only deposits count toward it. Withdrawals do not reduce it, and only funds bridged in through this app are counted.'
+    : undefined
 
   const tierLimitValue = l1IsPoch
     ? depositLimitReached
@@ -430,10 +437,13 @@ const AccountChip: React.FC<AccountChipProps> = ({
   )
   // The Aztec mark is a light-green diamond, invisible on the light-pink avatar
   // chip. Seat it on a small dark circular chip so it reads on the white/light
-  // dropdown + nav surfaces (round-12: 12px mark inset in the w-6 sibling chip).
+  // dropdown + nav surfaces. The mark fills the chip at 18px (matching the EVM
+  // glyph beside it) with a small even inset, instead of a tiny dot in a big
+  // empty circle. The aztec.svg carries its own viewBox padding, so 18px lands
+  // the visible diamond with a balanced gutter inside the w-6 chip.
   const AztecAvatar = (
     <span className="inline-flex w-6 h-6 items-center justify-center rounded-full bg-[#0A0A0A] flex-shrink-0">
-      <Image src={AZTEC_ICON} alt="" width={12} height={12} />
+      <Image src={AZTEC_ICON} alt="" width={18} height={18} />
     </span>
   )
 
@@ -858,6 +868,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
             <LimitBar
               isDark={isDark}
               label={tierLimitLabel}
+              info={tierLimitInfo}
               valueText={tierLimitValue}
               pct={tierLimitPct}
               placeholder={tierLimitPlaceholder}
@@ -903,6 +914,16 @@ const AccountChip: React.FC<AccountChipProps> = ({
         place="bottom"
         className="z-[100] max-w-[220px]"
         style={{ fontSize: '12px', padding: '4px 8px' }}
+      />
+
+      {/* Explainer for the lifetime bridge-in cap in LIMITS & USAGE (#372). Same
+          react-tooltip pattern; content is supplied per-anchor via
+          data-tooltip-content so a single instance serves the (i) affordance. */}
+      <ReactTooltip
+        id="limit-info-tooltip"
+        place="top"
+        className="z-[100] max-w-[240px]"
+        style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35' }}
       />
     </div>
   )
@@ -1044,7 +1065,9 @@ const LimitBar: React.FC<{
   /** True when the bar is an unknown-ratio placeholder (no total exposed). */
   placeholder?: boolean
   tint: 'maroon' | 'amber' | 'navy'
-}> = ({ isDark, label, valueText, pct, placeholder, tint }) => {
+  /** Optional (i) hover explainer surfaced beside the label (SOP §7). */
+  info?: string
+}> = ({ isDark, label, valueText, pct, placeholder, tint, info }) => {
   const fillColor =
     tint === 'maroon'
       ? isDark
@@ -1058,7 +1081,21 @@ const LimitBar: React.FC<{
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
-        <span className={`text-[11px] ${subtleText(isDark)} truncate`}>{label}</span>
+        <span className="flex items-center gap-1 min-w-0">
+          <span className={`text-[11px] ${subtleText(isDark)} truncate`}>{label}</span>
+          {info && (
+            <span
+              data-tooltip-id="limit-info-tooltip"
+              data-tooltip-content={info}
+              tabIndex={0}
+              role="img"
+              aria-label={info}
+              className={`inline-flex flex-shrink-0 cursor-help ${mutedIconText(isDark)}`}
+            >
+              <Icon icon="ph:info" width={13} height={13} />
+            </span>
+          )}
+        </span>
         <span className={`text-[11px] font-medium ${navText(isDark)} flex-shrink-0`}>{valueText}</span>
       </div>
       <div className={`w-full h-1.5 rounded-full overflow-hidden ${trackBg(isDark)}`}>

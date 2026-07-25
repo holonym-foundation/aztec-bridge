@@ -50,6 +50,16 @@ const MAX_VISIBLE_OPS = 5
 // same NAV_SAFE_TOP reservation BridgeStepsRail uses for its rail panel (#316).
 const NAV_SAFE_TOP = 72
 
+// SOP §5: an open rail panel must keep a >=12px breathing gap from the centered
+// 360px app-shell card and never clip its edge (#378). The card is
+// viewport-centered so its right edge sits at 50vw+180px; the panel is right-
+// anchored ~ (tab 42px + 12px gap) from the viewport edge and grows leftward. Cap
+// the panel width to 50vw-246px [42 tab + 12 gap-to-tab + 180 card-half + 12 gap-
+// to-card] so its left edge stays >=12px clear of the card. On roomy viewports the
+// natural width is smaller than the cap (no effect); on tighter md+ widths the
+// panel shrinks from the left and sits in the right gutter rather than colliding.
+const CARD_SAFE_MAX_WIDTH = 'calc(50vw - 246px)'
+
 // Network/deployment this app instance runs against. The operation record does
 // not persist a per-op network or Aztec version, so we surface the current active
 // deployment. Same config-derived source and "vX Alpha" language the nav's
@@ -551,11 +561,12 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
             animate={{ width: 280, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+            style={{ maxWidth: CARD_SAFE_MAX_WIDTH }}
             className="absolute bottom-0 right-[calc(100%_+_12px)] overflow-hidden"
           >
             <div
               id={panelId}
-              style={{ maxHeight: maxPanelHeight }}
+              style={{ maxHeight: maxPanelHeight, maxWidth: CARD_SAFE_MAX_WIDTH }}
               className="flex max-h-[calc(100dvh-1.5rem)] w-[280px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
             >
               {panelBody(closeDesktop)}

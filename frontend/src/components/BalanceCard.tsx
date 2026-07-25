@@ -73,7 +73,7 @@ export const BalanceCard = () => {
           className={`px-3 py-1 rounded text-sm font-medium flex items-center ${
             isRefreshing
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+              : 'bg-shield text-white hover:bg-pink-95'
           }`}
         >
           {isRefreshing ? (
@@ -94,7 +94,7 @@ export const BalanceCard = () => {
       )}
 
       {(l1TokenError || l2Error) && (
-        <div className="bg-red-50 p-4 rounded-md text-red-700 mb-4">Error loading balances. Please try again.</div>
+        <div className="bg-error-200 p-4 rounded-md text-error-main mb-4">Error loading balances. Please try again.</div>
       )}
 
       {(hasL1TokenData || hasL2Data) && (
@@ -105,10 +105,10 @@ export const BalanceCard = () => {
                 <div className="text-sm text-gray-500">Ethereum Token Balance</div>
                 <div className="text-lg font-medium">
                   {l1TokenBalance || '0'} TEST
-                  {l1TokenIsFetching && <span className="ml-2 text-xs text-blue-500 animate-pulse">refreshing...</span>}
+                  {l1TokenIsFetching && <span className="ml-2 text-xs text-neutral-500 animate-pulse">refreshing...</span>}
                 </div>
               </div>
-              <div className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-xs">L1</div>
+              <div className="bg-latest-blue-200 text-latest-blue-100 px-3 py-1 rounded-full text-xs">L1</div>
             </div>
 
             {l2Data && (
@@ -118,12 +118,12 @@ export const BalanceCard = () => {
                   <div className="text-lg font-medium">
                     <div>
                       {l2Data.publicBalance || '0'} TEST (Public)
-                      {l2IsFetching && <span className="ml-2 text-xs text-blue-500 animate-pulse">refreshing...</span>}
+                      {l2IsFetching && <span className="ml-2 text-xs text-neutral-500 animate-pulse">refreshing...</span>}
                     </div>
                     <div>{l2Data.privateBalance || '0'} TEST (Private)</div>
                   </div>
                 </div>
-                <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs">L2</div>
+                <div className="bg-success-200 text-success-main px-3 py-1 rounded-full text-xs">L2</div>
               </div>
             )}
           </div>

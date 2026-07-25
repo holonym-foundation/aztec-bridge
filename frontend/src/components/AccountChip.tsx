@@ -10,7 +10,7 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useL1Humanity } from '@/hooks/useL1Humanity'
 import { shortAddr, accountLabel } from '@/hooks/useBindingStatus'
-import { POCH_MINT_URL } from '@/config'
+import { POCH_MINT_URL, IS_MAINNET } from '@/config'
 import { BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD } from '@/config/env.config'
 import { silkUrl } from '@/config/l1.config'
 import { LOGIN_METHODS } from '@/types/wallet'
@@ -35,6 +35,7 @@ if (typeof window !== 'undefined') {
     'ph:copy',
     'ph:warning-circle',
     'ph:info',
+    'ph:trash',
     'majesticons:open',
   ])
 }
@@ -389,6 +390,46 @@ const AccountChip: React.FC<AccountChipProps> = ({
     if (isAztecConnected) void disconnectAztecWallet()
     if (isWaapConnected) void disconnectWaapWallet()
     setOpen(false)
+  }
+
+  // #393: testnet-only "Clear app data" reset. Wipes this origin's local state
+  // (storage + cookies), disconnects via the SAME handlers as the normal
+  // Disconnect, then reloads so every in-memory store rebuilds from a clean
+  // slate. Guarded by the SAME fund-loss hard-lock (actionsLocked) so a user
+  // can never nuke local data mid-transfer. Never rendered on mainnet.
+  const handleClearAppData = () => {
+    if (actionsLocked) return
+    if (typeof window === 'undefined') return
+    const ok = window.confirm(
+      'Clear all Shield app data on this device? This resets your local state (onboarding, cached balances, saved recovery data) and disconnects. Testnet only.',
+    )
+    if (!ok) return
+
+    try {
+      window.localStorage.clear()
+      window.sessionStorage.clear()
+    } catch {
+      // storage may be unavailable (private mode / blocked) — best effort.
+    }
+
+    // Best-effort cookie clear for this origin: expire each cookie name.
+    if (typeof document !== 'undefined') {
+      try {
+        for (const pair of document.cookie.split(';')) {
+          const name = pair.split('=')[0]?.trim()
+          if (name) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`
+          }
+        }
+      } catch {
+        // ignore — cookie access can throw under some policies.
+      }
+    }
+
+    if (isAztecConnected) void disconnectAztecWallet()
+    if (isWaapConnected) void disconnectWaapWallet()
+    setOpen(false)
+    window.location.reload()
   }
 
   // ── State 1: nothing connected → a compact "Connect wallet" chip. ──
@@ -886,23 +927,34 @@ const AccountChip: React.FC<AccountChipProps> = ({
             )}
           </div>
 
-          <Divider isDark={isDark} />
-
-          {/* ── Disconnect (lives here now — removed from the progress bar in #61) ── */}
-          <button
-            type="button"
-            disabled={actionsLocked}
-            title={actionsLocked ? 'Locked during transfer to protect your funds.' : undefined}
-            onClick={handleDisconnect}
-            className={`flex items-center gap-2 mx-2 px-2 py-2 rounded-lg transition-colors duration-150 ${
-              actionsLocked
-                ? 'opacity-40 cursor-not-allowed'
-                : `${menuItemHover(isDark)} cursor-pointer`
-            } ${isDark ? 'text-[#FF6B6B]' : 'text-red'}`}
-          >
-            <Icon icon="ph:sign-out" width={18} height={18} />
-            <span className="text-sm">Disconnect</span>
-          </button>
+          {/* ── Clear app data (#393) — TESTNET ONLY. The normal Disconnect
+              lives on the Wallets-section header above; this bottom slot is a
+              destructive testing reset that wipes local state and reloads. It
+              never renders on mainnet, and it honours the SAME fund-loss
+              hard-lock (actionsLocked) as Disconnect. */}
+          {!IS_MAINNET && (
+            <>
+              <Divider isDark={isDark} />
+              <button
+                type="button"
+                disabled={actionsLocked}
+                title={
+                  actionsLocked
+                    ? 'Locked during transfer to protect your funds.'
+                    : 'Wipe local app data on this device and reload (testnet only).'
+                }
+                onClick={handleClearAppData}
+                className={`flex items-center gap-2 mx-2 px-2 py-2 rounded-lg transition-colors duration-150 ${
+                  actionsLocked
+                    ? 'opacity-40 cursor-not-allowed'
+                    : `${menuItemHover(isDark)} cursor-pointer`
+                } ${isDark ? 'text-[#FF6B6B]' : 'text-red'}`}
+              >
+                <Icon icon="ph:trash" width={18} height={18} />
+                <span className="text-sm">Clear app data</span>
+              </button>
+            </>
+          )}
         </div>,
         document.body,
       )}

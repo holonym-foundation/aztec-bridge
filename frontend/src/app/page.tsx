@@ -633,7 +633,7 @@ export default function Home() {
         // No-scroll budget: cap the card so it never grows the RootStyle region past
         // its 90vh floor (min-h-[650px] would otherwise push card+py-10 over 90vh on
         // short laptops). Content beyond the cap scrolls inside the card, never the page.
-        className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden"
+        className="overflow-hidden"
       >
         {/* Maintenance Overlay - blocks all interactions when enabled */}
         {MAINTENANCE_MODE && <MaintenanceOverlay title={MAINTENANCE_TITLE} message={MAINTENANCE_MESSAGE} />}
@@ -679,7 +679,7 @@ export default function Home() {
             a `flex-1 min-h-0` child bounds it correctly, so withdraw scrolls INSIDE
             the card and the page never grows. */}
         <div
-          className={`flex flex-col w-full max-h-[calc(90vh-5rem)] overflow-hidden ${
+          className={`flex flex-col w-full h-full overflow-hidden ${
             MAINTENANCE_MODE ? 'pointer-events-none' : ''
           }`}
         >

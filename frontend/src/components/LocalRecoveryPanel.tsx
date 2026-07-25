@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import BridgeHeader from '@/components/BridgeHeader'
 import TextButton from '@/components/TextButton'
+import { getStatusBadge } from '@/components/ActivityCard'
 import { getDeposits, getWithdrawals } from '@human.tech/clean.sdk'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
 import { decryptOperationPayload } from '@/hooks/useBridgeOperations'
@@ -214,27 +215,12 @@ function toBridgeOperationShape(entry: LocalRecoveryEntry): BridgeOperation {
   } as BridgeOperation
 }
 
-// ─── STATUS_STYLES (shared with ActivityCard) ───────────────────────
+// ─── Status badge (colour from the shared ActivityCard source of truth) ──
 
-const STATUS_STYLES: Record<string, { label: string; className: string }> = {
-  pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' },
-  deposited: { label: 'Deposited', className: 'bg-blue-100 text-blue-800' },
-  claimed: { label: 'Claimed', className: 'bg-purple-100 text-purple-800' },
-  submitted: { label: 'Submitted', className: 'bg-blue-100 text-blue-800' },
-  ready: { label: 'Ready', className: 'bg-indigo-100 text-indigo-800' },
-  pending_finalize: {
-    label: 'Finalizing',
-    className: 'bg-indigo-100 text-indigo-800',
-  },
-  completed: { label: 'Completed', className: 'bg-green-100 text-green-800' },
-  failed: { label: 'Failed', className: 'bg-red-100 text-red-800' },
-}
-
+// Colour comes from getStatusBadge (#394 single source); this component keeps
+// its own size/shape classes so the pill matches the recovery card's scale.
 function StatusBadge({ status }: { status: string }) {
-  const style = STATUS_STYLES[status] ?? {
-    label: status,
-    className: 'bg-gray-100 text-gray-800',
-  }
+  const style = getStatusBadge(status)
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${style.className}`}>{style.label}</span>
 }
 
@@ -326,7 +312,7 @@ function RecoveryEntryCard({ entry, onResume, resuming }: RecoveryEntryCardProps
             href={entry.l1TxUrl ?? entry.serverEntry?.l1TxUrl ?? '#'}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
+            className="inline-flex items-center gap-1 text-xs font-medium text-shield hover:text-pink-70"
           >
             L1 Tx
             <Icon icon="ph:arrow-square-out" width={13} height={13} />

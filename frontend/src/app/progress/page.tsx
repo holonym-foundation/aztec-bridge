@@ -194,8 +194,8 @@ export default function ProgressPage() {
     // No-scroll budget: same cap as the bridge card (see app/page.tsx) so the progress card
     // never grows the RootStyle region past its 90vh floor. The header stays pinned; the
     // card body scrolls inside itself if it can't fit, never the page.
-    <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
-      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden">
+    <RootStyle className="min-h-0 overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden">
         <div className="px-5 pt-5">
           <div className="flex items-center gap-4">
             <BridgeHeader />

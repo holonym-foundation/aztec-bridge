@@ -174,9 +174,9 @@ export default function ClaimFuelPage() {
   }
 
   return (
-    <RootStyle className='overflow-y-auto'>
+    <RootStyle className='overflow-hidden'>
       <AztecWalletConnectionModals />
-      <div className='px-5 pt-5 pb-5 flex flex-col h-full max-w-2xl mx-auto'>
+      <div className='px-5 pt-5 pb-5 flex flex-col h-full max-w-2xl mx-auto overflow-y-auto'>
         <div className='flex items-center gap-4'>
           <BridgeHeader />
         </div>

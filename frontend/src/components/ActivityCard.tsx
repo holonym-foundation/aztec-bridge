@@ -13,15 +13,32 @@ import { formatFjAmount } from '@/utils/fuelPricing'
 import { copyToClipboard } from '@/utils'
 import { useToast } from '@/hooks/useToast'
 
-const STATUS_STYLES: Record<string, { label: string; className: string }> = {
-  pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' },
-  deposited: { label: 'Deposited', className: 'bg-blue-100 text-blue-800' },
-  claimed: { label: 'Claimed', className: 'bg-purple-100 text-purple-800' },
-  submitted: { label: 'Submitted', className: 'bg-blue-100 text-blue-800' },
-  ready: { label: 'Ready', className: 'bg-indigo-100 text-indigo-800' },
-  pending_finalize: { label: 'Finalizing', className: 'bg-indigo-100 text-indigo-800' },
-  completed: { label: 'Completed', className: 'bg-green-100 text-green-800' },
-  failed: { label: 'Failed', className: 'bg-red-100 text-red-800' },
+export type StatusBadgeStyle = { label: string; className: string }
+
+// Single source of truth for bridge-operation status badges, shared with
+// ActivityDrawer so the card and the drawer can never drift apart (#394). Each
+// entry is a soft Shield tint paired with the dark-of-that-hue text token, so
+// every pairing clears 4.5:1 and none is dark text on a saturated red/pink fill
+// (SOP §1 brand tokens only, §2 contrast). `className` carries colour only; each
+// component keeps its own size/shape classes. Semantics: completed = success
+// green; deposited/claimed = navy (milestone reached); pending/submitted/ready/
+// finalizing = warn amber (in flight); failed = error red (soft tint, dark text).
+const STATUS_NAVY = 'bg-latest-blue-200 text-latest-blue-100'
+const STATUS_WARN = 'bg-warn-200 text-warn-main'
+
+export const STATUS_BADGE: Record<string, StatusBadgeStyle> = {
+  pending: { label: 'Pending', className: STATUS_WARN },
+  submitted: { label: 'Submitted', className: STATUS_WARN },
+  ready: { label: 'Ready', className: STATUS_WARN },
+  pending_finalize: { label: 'Finalizing', className: STATUS_WARN },
+  deposited: { label: 'Deposited', className: STATUS_NAVY },
+  claimed: { label: 'Claimed', className: STATUS_NAVY },
+  completed: { label: 'Completed', className: 'bg-success-200 text-success-main' },
+  failed: { label: 'Failed', className: 'bg-error-200 text-error-main' },
+}
+
+export function getStatusBadge(status: string): StatusBadgeStyle {
+  return STATUS_BADGE[status] ?? { label: status, className: 'bg-neutral-200 text-neutral-800' }
 }
 
 // Network/deployment this app instance runs against. The operation record does
@@ -60,10 +77,7 @@ function DirectionLogos({ direction }: { direction: BridgeOperation['direction']
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const style = STATUS_STYLES[status] ?? {
-    label: status,
-    className: 'bg-gray-100 text-gray-800',
-  }
+  const style = getStatusBadge(status)
   return (
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${style.className}`}>
       {style.label}

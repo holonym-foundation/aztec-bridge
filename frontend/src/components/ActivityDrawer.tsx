@@ -18,6 +18,7 @@ import { L1_TOKEN_METADATA, L1_NETWORKS, AZTEC_VERSION } from '@/config'
 import { BridgeDirection } from '@/types/bridge'
 import { LocalRecoveryPanel } from '@/components/LocalRecoveryPanel'
 import StyledImage from '@/components/StyledImage'
+import { getStatusBadge } from '@/components/ActivityCard'
 
 // Motion values mirrored from the human-tech design system (docs/tokens.css):
 // --dur-enter / --ease-slide for the panel that slides out from the tab.
@@ -28,19 +29,6 @@ const DS_EASE_SLIDE: [number, number, number, number] = [0.32, 0.72, 0, 1]
 // state; a tab that sees another open closes itself, so only one peeks at a time.
 const PEEK_EVENT = 'shield:peek'
 type PeekSignal = { id: string; open: boolean }
-
-type StatusMeta = { label: string; className: string }
-
-const STATUS_META: Record<string, StatusMeta> = {
-  pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' },
-  deposited: { label: 'Deposited', className: 'bg-blue-100 text-blue-800' },
-  claimed: { label: 'Claimed', className: 'bg-purple-100 text-purple-800' },
-  submitted: { label: 'Submitted', className: 'bg-blue-100 text-blue-800' },
-  ready: { label: 'Ready', className: 'bg-indigo-100 text-indigo-800' },
-  pending_finalize: { label: 'Finalizing', className: 'bg-indigo-100 text-indigo-800' },
-  completed: { label: 'Completed', className: 'bg-green-100 text-green-800' },
-  failed: { label: 'Failed', className: 'bg-red-100 text-red-800' },
-}
 
 const MAX_VISIBLE_OPS = 5
 
@@ -345,7 +333,7 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
       undefined,
       { hour: 'numeric', minute: '2-digit' },
     )}`
-    const meta = STATUS_META[op.status] ?? { label: op.status, className: 'bg-gray-100 text-gray-800' }
+    const meta = getStatusBadge(op.status)
     const showResume = canResumeOp(op)
     const fuelTopUp = fuelTopUpFj(op)
 

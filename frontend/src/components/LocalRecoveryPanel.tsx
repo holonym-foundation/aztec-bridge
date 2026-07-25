@@ -721,7 +721,7 @@ export function LocalRecoveryPanel({ variant = 'page', onClose }: LocalRecoveryP
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
                     aria-label="Previous page"
-                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-30 disabled:hover:text-gray-500 p-1 rounded"
+                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-40 disabled:hover:text-gray-500 p-1 rounded"
                   >
                     <Icon icon="ph:caret-left-bold" width={16} height={16} />
                   </button>
@@ -733,7 +733,7 @@ export function LocalRecoveryPanel({ variant = 'page', onClose }: LocalRecoveryP
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
                     aria-label="Next page"
-                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-30 disabled:hover:text-gray-500 p-1 rounded"
+                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-40 disabled:hover:text-gray-500 p-1 rounded"
                   >
                     <Icon icon="ph:caret-right-bold" width={16} height={16} />
                   </button>

@@ -96,7 +96,7 @@ export default function DocsLayout({
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 md:px-8">
       <div className="mb-6">
-        <Link href="/docs" className="text-12 text-latest-grey-600 hover:text-black">
+        <Link href="/docs" className="text-12 text-neutral-600 hover:text-black">
           ← All docs
         </Link>
         <h1 className="mt-2 text-30 font-bold text-latest-black-100">{title}</h1>

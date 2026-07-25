@@ -94,7 +94,7 @@ export default function WalletDiscoveryModal({
 
   const webWalletInput = onConnectWebWallet ? (
     <div className='mb-4'>
-      <label className='block text-latest-grey-600 text-12 font-medium mb-1.5'>
+      <label className='block text-neutral-600 text-12 font-medium mb-1.5'>
         Web wallet URL
       </label>
       <div className='flex gap-2'>
@@ -165,7 +165,7 @@ export default function WalletDiscoveryModal({
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}>
-                  <p className='text-latest-grey-600 text-14 mb-4'>
+                  <p className='text-neutral-600 text-14 mb-4'>
                     No Aztec wallet detected. Install Azguard to continue, or
                     connect a web wallet below.
                   </p>
@@ -213,7 +213,7 @@ export default function WalletDiscoveryModal({
                         secondaryColor='#D4D4D4'
                         strokeWidth={4}
                       />
-                      <p className='text-latest-grey-600 text-14'>
+                      <p className='text-neutral-600 text-14'>
                         Searching for Aztec wallets...
                       </p>
                     </motion.div>
@@ -242,7 +242,7 @@ export default function WalletDiscoveryModal({
                         </motion.button>
                       ))}
                       {isDiscovering && (
-                        <p className='text-latest-grey-600 text-12 text-center'>
+                        <p className='text-neutral-600 text-12 text-center'>
                           Still searching for more wallets...
                         </p>
                       )}
@@ -261,7 +261,7 @@ export default function WalletDiscoveryModal({
                   alt=''
                   className='h-4 w-[14px]'
                 />
-                <p className='text-12 font-medium text-latest-grey-600'>
+                <p className='text-12 font-medium text-neutral-600'>
                   Secured by human.tech
                 </p>
               </motion.div>

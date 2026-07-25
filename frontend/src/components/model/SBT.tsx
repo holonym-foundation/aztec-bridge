@@ -95,7 +95,7 @@ export default function SBT({
                   alt=''
                   className='h-4 w-[14px]'
                 />
-                <p className='text-12 font-medium text-latest-grey-600'>
+                <p className='text-12 font-medium text-neutral-600'>
                   {' '}
                   Secured by human.tech
                 </p>

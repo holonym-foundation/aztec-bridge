@@ -19,7 +19,7 @@ function FilterButton({
       className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${
         active
           ? 'bg-latest-red-100 text-white'
-          : 'bg-latest-grey-200 text-latest-grey-600 hover:bg-latest-grey-300'
+          : 'bg-latest-grey-200 text-neutral-600 hover:bg-latest-grey-300'
       } ${className}`}>
       {children}
     </button>
@@ -40,7 +40,7 @@ function TokenListItem({
     <div
       onClick={() => !disabled && onClick()}
       className={`flex cursor-pointer justify-between p-2.5 hover:bg-latest-red-100 transition-colors duration-200 ${
-        disabled ? 'opacity-50 cursor-not-allowed' : ''
+        disabled ? 'opacity-40 cursor-not-allowed' : ''
       }`}
       role='button'
       tabIndex={0}
@@ -51,7 +51,7 @@ function TokenListItem({
           <p className='text-16 font-medium text-latest-black-200'>
             {token.title}
           </p>
-          <p className='text-14 font-medium text-latest-grey-600'>{token.symbol}</p>
+          <p className='text-14 font-medium text-neutral-600'>{token.symbol}</p>
         </div>
       </div>
       {/* <div className='text-right'>
@@ -61,7 +61,7 @@ function TokenListItem({
             ? 'text-green-500' 
             : token.percentage.startsWith('-')
             ? 'text-red-500'
-            : 'text-latest-grey-600'
+            : 'text-neutral-600'
         }`}>
           {token.percentage}
         </p>
@@ -168,7 +168,7 @@ export default function TokensModal({
                   placeholder='Search tokens'
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className='outline-none w-full bg-[transparent] text-latest-grey-600 text-16 font-medium focus:ring-2 focus:ring-latest-red-100'
+                  className='outline-none w-full bg-[transparent] text-neutral-600 text-16 font-medium focus:ring-2 focus:ring-latest-red-100'
                 />
               </div>
             </div>

@@ -353,7 +353,7 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
     // recovery data off this tab before closing it (#322).
     const recoveryDirection = n.key ? DO_NOT_RELOAD_DIRECTION[n.key] : undefined
     return (
-      <li key={n.id} className={`${ROW_LAYOUT} ${state === 'stale' ? 'opacity-55' : ''}`}>
+      <li key={n.id} className={`${ROW_LAYOUT} ${state === 'stale' ? 'opacity-60' : ''}`}>
         <span
           className={`relative mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${ICON_TINT[n.type]}`}
         >

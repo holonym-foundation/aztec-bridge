@@ -14,7 +14,7 @@ import { logInfo, logError, DatadogUserAction } from '@/utils/datadog'
 
 export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
   const { setProgressStep, setTransactionUrls, clearRecovery } = useBridgeStore()
-  const { aztecAddress, aztecLoginMethod } = useWalletStore()
+  const { aztecAddress, aztecLoginMethod, signWaapMessage } = useWalletStore()
   const walletAdapter = useWalletAdapter()
   const notify = useToast()
   const bridge = useBridge()
@@ -61,8 +61,13 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
       },
       signMessage: async (msg: string) => {
         verifyEncryptionDomain()
-        const sig = await requestWaapWallet(WAAP_METHOD.personal_sign, [msg, l1Address])
-        return sig as string
+        // Cached signer (not raw personal_sign): resuming in the same session
+        // reuses the "Unlock My Secrets" signature from the original deposit, so
+        // it never re-prompts. The message is byte-identical, so the cache key
+        // (address+message) matches (#408 / P1).
+        const sig = await signWaapMessage(msg)
+        if (!sig) throw new Error('Failed to sign message')
+        return sig
       },
       onStep: (step, status) => setProgressStep(step, status),
       onEvent: (event: BridgeEvent) => {

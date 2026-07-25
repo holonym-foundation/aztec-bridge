@@ -217,6 +217,23 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   // Compact cap shown under the balance. Passport is a per-human tier limit; the Clean Hands cap
   // ($25k) is a DAILY cap, so it carries a "/day" suffix. The "per human" framing lives in the tooltip.
   const limitLabel = tierLimitUsd > 0 ? `Limit: ${formatUsd(tierLimitUsd)}${isPoch ? '/day' : ''}` : null
+  // Live remaining budget under the active cap, shown in the same slot as the static limit
+  // pill (e.g. "$740 of $1,000 left"). Falls back to the static cap label when the backend
+  // doesn't surface a remaining figure (cap disabled). Deposit-only, like the rest of this slot.
+  const remainingKnown = remainingDepositUsd != null && tierLimitUsd > 0
+  const remainingLabel = remainingKnown
+    ? `${formatUsd(remainingDepositUsd as number)} of ${formatUsd(tierLimitUsd)} left`
+    : limitLabel
+  // Heads-up: the entered amount would spend past what's left of the cap. Distinct from the
+  // Clean Hands nudge, which fires only once the amount clears the FULL tier cap; guard on
+  // !showCleanHandsNudge so this single slot stays mutually exclusive.
+  const overRemaining =
+    isDeposit &&
+    remainingKnown &&
+    !isNaN(amountNum) &&
+    amountNum > 0 &&
+    amountNum > (remainingDepositUsd as number) &&
+    !showCleanHandsNudge
   // Temporary hold from a pending deposit, appended to the badge tooltip when present.
   const reservedNote =
     reservedDepositUsd != null && reservedDepositUsd > 0
@@ -385,14 +402,18 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                 <Icon icon="ph:arrow-up-right-bold" width={11} height={11} className="shrink-0" />
                 Above {formatUsd(passportLimitUsd)} needs Proof of Clean Hands
               </a>
+            ) : overRemaining ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708]">
+                Over your limit, {formatUsd(remainingDepositUsd as number)} left
+              </span>
             ) : (
-              limitLabel && (
+              remainingLabel && (
                 <span
                   data-tooltip-id="attestation-info"
                   data-tooltip-content={badgeTooltip}
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold cursor-default ${badgeClass}`}
                 >
-                  <span>{limitLabel}</span>
+                  <span>{remainingLabel}</span>
                   <span
                     aria-hidden
                     className="inline-block h-[12px] w-[12px] shrink-0 bg-[#0A0A0A]"
@@ -412,7 +433,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             )}
           </div>
         )}
-        {isDeposit && attestationMethod && !showCleanHandsNudge && limitLabel && (
+        {isDeposit && attestationMethod && !showCleanHandsNudge && !overRemaining && remainingLabel && (
           <ReactTooltip
             id="attestation-info"
             place="top"

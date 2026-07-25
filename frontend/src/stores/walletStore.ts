@@ -208,6 +208,14 @@ interface WalletState {
   // Utility functions
   refreshWaapWalletInfo: () => Promise<void>
 
+  // Anti-abandonment (#408): set while a wallet signature/approval is being
+  // requested and awaited; cleared the moment it resolves OR rejects. Drives the
+  // sticky SignaturePrompt bar + tab-title flip so a user who missed the wallet
+  // popup is pulled back instead of silently abandoning the flow. `onReRequest`,
+  // when present, re-invokes the pending wallet call.
+  pendingSignature: { label: string; onReRequest?: () => void } | null
+  setPendingSignature: (pending: { label: string; onReRequest?: () => void } | null) => void
+
   reset: () => void
 }
 
@@ -278,6 +286,9 @@ const initialState = {
   waapWalletProvider: null,
   waapWalletIcon: null,
   isWaapInitialized: false,
+
+  // Anti-abandonment signal (#408) — no signature awaited at rest.
+  pendingSignature: null,
 }
 
 const walletStore = create<WalletState>((set, get) => ({
@@ -964,13 +975,15 @@ const walletStore = create<WalletState>((set, get) => ({
       // Set up event listeners
       window.waap.on('accountsChanged', async (accounts: string[]) => {
         // Address changed or disconnected — a cached signature/key must never
-        // cross accounts, so drop the whole cache on any account change.
+        // cross accounts, so drop the whole cache on any account change. Any
+        // in-flight sign prompt is now stale, so retire the pending signal too.
         clearWaapSignatureCache()
 
         const isConnected = accounts.length > 0
         set({
           waapAddress: (accounts[0] as `0x${string}`) || null,
           isWaapConnected: isConnected,
+          pendingSignature: null,
         })
 
         // If wallet is connected, retrieve the login method
@@ -1118,6 +1131,7 @@ const walletStore = create<WalletState>((set, get) => ({
         waapLoginMethod: null,
         waapWalletProvider: null,
         waapWalletIcon: null,
+        pendingSignature: null,
       })
 
       logInfo('WaaP wallet disconnected successfully', {
@@ -1219,6 +1233,8 @@ const walletStore = create<WalletState>((set, get) => ({
     }
   },
 
+  setPendingSignature: (pending) => set({ pendingSignature: pending }),
+
   signWaapMessage: async (message: string) => {
     try {
       const { waapAddress } = get()
@@ -1238,22 +1254,42 @@ const walletStore = create<WalletState>((set, get) => ({
       // Stable toastId so rapid re-signs refresh in place instead of stacking.
       // feed:false — the semantic 'signature' push below is the feed record, so
       // the toast must not also auto-mirror a duplicate generic entry.
-      showToast('info', 'Check your wallet — a signature is required to continue.', {
+      // autoClose:false (#408 / T4): the required-signature toast stays until the
+      // sign resolves or rejects (dismissed in the finally below), instead of
+      // vanishing after a few seconds while the user is still in their wallet.
+      showToast('info', 'Check your wallet. A signature is required to continue.', {
         toastId: 'waap-sign-request',
-        autoClose: 8000,
+        autoClose: false,
         feed: false,
       })
-      // Also record it in the persistent feed — the toast auto-closes, but the
-      // request should be recoverable in the Messages tab.
+      // Also record it in the persistent feed so the request is recoverable in
+      // the Messages tab even if the toast is dismissed.
       pushNotification({
         type: 'signature',
         title: 'Signature required',
         message: 'Check your wallet and approve the signature to continue.',
       })
 
-      const signature = await requestWaapWallet(WAAP_METHOD.personal_sign, [message, waapAddress])
-      waapSignatureCache.set(cacheKey, signature as string)
-      return signature as string
+      // Sticky prompt + tab-title flip while we await the wallet (#408 / T1).
+      // onReRequest re-opens the wallet request for a user who dismissed or
+      // missed the popup. Cleared in the finally so it never outlives the await.
+      const requestSignature = () => requestWaapWallet(WAAP_METHOD.personal_sign, [message, waapAddress])
+      set({
+        pendingSignature: {
+          label: 'Unlock My Secrets',
+          onReRequest: () => {
+            void requestSignature()
+          },
+        },
+      })
+      try {
+        const signature = await requestSignature()
+        waapSignatureCache.set(cacheKey, signature as string)
+        return signature as string
+      } finally {
+        set({ pendingSignature: null })
+        showToast.dismiss('waap-sign-request')
+      }
     } catch (err) {
       return handleWaapError(err, 'Failed to sign message with Ethereum wallet', set)
     }

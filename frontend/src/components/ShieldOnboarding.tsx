@@ -616,11 +616,14 @@ export default function ShieldOnboarding() {
 
   // Connect from the splash nav (e.g. "Connect Aztec"): the connect modal renders
   // BENEATH the splash overlay, so hitting connect on the splash would fire but stay
-  // hidden. Drop the splash the moment any connect flow starts (discovery/selecting,
-  // or the install prompt) so the modal is visible and the user can complete it
-  // (#370, same root cause as the frozen dropdown #349).
+  // hidden. Drop the splash the moment an ACTIVE connect flow starts (discovering /
+  // selecting, or the install prompt) so the modal is visible (#370). Gate on the
+  // actively-connecting phases ONLY — NOT `!== 'idle'` — because a fully 'connected'
+  // user who deliberately returns to the splash via the Shield brand link must NOT be
+  // bounced straight back to the app (#409).
   useEffect(() => {
-    if (mode === 'splash' && (walletConnectionPhase !== 'idle' || showWalletInstallPrompt)) {
+    const connecting = walletConnectionPhase === 'discovering' || walletConnectionPhase === 'selecting'
+    if (mode === 'splash' && (connecting || showWalletInstallPrompt)) {
       setMode('hidden')
     }
   }, [mode, walletConnectionPhase, showWalletInstallPrompt])

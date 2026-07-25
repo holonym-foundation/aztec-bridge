@@ -797,7 +797,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
           )}
 
           {/* Link a New Wallet — DISABLED variant. Non-interactive (no onClick)
-              until the WAAP wallet-linking flow ships; opacity-40 (opacity-50 is a
+              until the WAAP wallet-linking flow ships; opacity-40 (opacity-40 is a
               no-op on this repo's sparse opacity scale) + muted + cursor-not-allowed
               + select-none make the "Coming soon" state read as intentionally inert. */}
           <div

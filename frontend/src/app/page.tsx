@@ -801,7 +801,7 @@ export default function Home() {
                 canScrollDown ? 'opacity-100' : 'opacity-0'
               }`}
             >
-              <Icon icon="ph:caret-down-bold" width={16} height={16} className="text-latest-grey-400" />
+              <Icon icon="ph:caret-down-bold" width={16} height={16} className="text-neutral-600" />
             </div>
           </div>
 

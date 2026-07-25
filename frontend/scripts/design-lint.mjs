@@ -37,7 +37,12 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, relative } from 'node:path'
 
 // When false, the script exits non-zero if there are any findings (blocking).
-const ADVISORY = true
+const ADVISORY = false
+// Rules that FAIL the build (the mechanical design-system rules — colors, contrast,
+// opacity scale). The tree is clean for these, so a new violation blocks the merge.
+// `copy` (em/long dash, mostly long-form docs prose) and `states` (disabled-button
+// aria heuristic) stay advisory/review per SOP §12 — they print but don't block.
+const BLOCKING_RULES = new Set(['contrast', 'opacity'])
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SRC = join(__dirname, '..', 'src')
@@ -263,9 +268,17 @@ function reportManualChecklist() {
 }
 reportManualChecklist()
 
-if (!ADVISORY && findings.length > 0) {
-  console.log(`design-lint: BLOCKING mode — failing on ${findings.length} finding(s).`)
+const blocking = findings.filter((f) => BLOCKING_RULES.has(f.rule))
+const advisoryCount = findings.length - blocking.length
+if (!ADVISORY && blocking.length > 0) {
+  console.log(
+    `design-lint: BLOCKING — ${blocking.length} finding(s) in enforced rules (${[...BLOCKING_RULES].join(', ')}). ` +
+      `Fix these to merge. ${advisoryCount} advisory finding(s) (copy/states) shown above are non-blocking.`,
+  )
   process.exit(1)
 }
-console.log(`design-lint: advisory mode (findings do not fail the build). Flip ADVISORY=false to block.`)
+console.log(
+  `design-lint: enforced rules (${[...BLOCKING_RULES].join(', ')}) are clean. ` +
+    `${advisoryCount} advisory finding(s) (copy/states) shown above do not block.`,
+)
 process.exit(0)

@@ -30,13 +30,25 @@ const DS_EASE_SLIDE: [number, number, number, number] = [0.32, 0.72, 0, 1]
 const PEEK_EVENT = 'shield:peek'
 type PeekSignal = { id: string; open: boolean }
 
-const MAX_VISIBLE_OPS = 5
+// Enough rows to fill the taller mid-length panel (below) and scroll the rest
+// inside it, so the peek shows several recent ops at once rather than a couple.
+const MAX_VISIBLE_OPS = 12
 
 // The top nav row (banners + Header) sits at the viewport top. The upward-growing
 // panel must stop BELOW it, so reserve this much space from the viewport top; the
 // panel's top edge lands here and never crosses into the nav (#318). Mirrors the
 // same NAV_SAFE_TOP reservation BridgeStepsRail uses for its rail panel (#316).
 const NAV_SAFE_TOP = 72
+
+// The panel is given a DEFINITE height so the list region fills a substantial
+// mid-length panel (the founder's "as long as Messages") instead of collapsing
+// to the height of the few short rows it happens to have. This target mirrors the
+// intrinsic height NotificationsDrawer's Messages panel settles at (its taller,
+// padded rows). It is always clamped by the measured available space
+// (maxPanelHeight, which reserves NAV_SAFE_TOP and caps to the viewport), so it
+// never overflows the viewport or grows into the nav — it only makes the panel
+// taller when there is room. The flex-1 list then scrolls internally (#406).
+const PANEL_TARGET_HEIGHT = 560
 
 // SOP §5: an open rail panel must keep a >=12px breathing gap from the centered
 // 360px app-shell card and never clip its edge (#378). The card is
@@ -554,7 +566,11 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
           >
             <div
               id={panelId}
-              style={{ maxHeight: maxPanelHeight, maxWidth: CARD_SAFE_MAX_WIDTH }}
+              style={{
+                height: maxPanelHeight != null ? Math.min(maxPanelHeight, PANEL_TARGET_HEIGHT) : undefined,
+                maxHeight: maxPanelHeight,
+                maxWidth: CARD_SAFE_MAX_WIDTH,
+              }}
               className="flex max-h-[calc(100dvh-1.5rem)] w-[280px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
             >
               {panelBody(closeDesktop)}

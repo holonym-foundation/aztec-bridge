@@ -611,16 +611,21 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
     : shortfallFj != null
       ? `You need about ${fmtFj(shortfallFj)} more FJ to cover this transaction’s L2 gas.`
       : 'Checking whether your Fee Juice covers this transaction’s L2 gas.'
-  const typeTooltip = usePrivateFj
-    ? 'Private Fee Juice is held via the bridge and keeps your L2 claim anonymous.'
-    : 'Public Fee Juice pays for L2 gas from your public balance.'
 
   return (
     <div className="bg-[#F5F5F5] rounded-md p-2.5 mt-1.5 overflow-hidden">
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-1.5">
           <Icon icon="ph:gas-pump-fill" width={14} height={14} className="shrink-0 text-[#17235E]" />
-          <span className="text-sm font-medium text-latest-grey-700">Top up Fee Juice</span>
+          <span className="text-sm font-medium text-latest-grey-700">Aztec Fees</span>
+          <Icon
+            icon="ph:info"
+            width={13}
+            height={13}
+            className="shrink-0 cursor-help text-[#17235E]/[0.60]"
+            data-tooltip-id="fj-about"
+            data-tooltip-content="Aztec transactions are paid in Fee Juice, the network's gas token. You need some to claim your bridged funds on Aztec."
+          />
         </span>
         {/* Toggle purpose: cover this transaction's L2 gas automatically inside the bridge (an
             atomic Fee Juice swap). When the user's balance already covers gas there is nothing
@@ -648,61 +653,51 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
         )}
       </div>
 
-      {/* Requirement line — same fmt path as the balance below so the numbers stay consistent. */}
-      <div className="mt-1 text-xs text-latest-grey-500">
-        Est. L2 txn gas{' '}
-        <span className="font-semibold text-latest-black-300">
-          {claimFeeLoading || claimFeeLimit == null ? '…' : `~${formatFjAmount(claimFeeLimit, 2)} FJ`}
+      {/* Requirement (left) + balance & coverage (right) on one row. Both numbers route through
+          the same fmt path so they stay consistent. The public/private mode is implicit here — a
+          private claim can only spend private Fee Juice, and the user already sees privacy mode. */}
+      <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-latest-grey-700">
+        <span className="text-latest-grey-500">
+          Est. gas{' '}
+          <span className="font-semibold text-latest-black-300">
+            {claimFeeLoading || claimFeeLimit == null ? '…' : `~${formatFjAmount(claimFeeLimit, 2)} FJ`}
+          </span>
         </span>
-      </div>
-
-      {/* Consolidated Fee Juice status: one line carries the balance, the private/public marker,
-          and whether it covers L2 gas. Complexity lives in the two hover tooltips. */}
-      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-latest-grey-700">
-        <span
-          className="flex cursor-help items-center"
-          data-tooltip-id="fj-type"
-          data-tooltip-content={typeTooltip}
-        >
-          {usePrivateFj ? (
-            <Icon icon="ph:lock-key-fill" width={13} height={13} className="text-[#81133B]" />
-          ) : (
-            <Icon icon="ph:globe-hemisphere-west-fill" width={13} height={13} className="text-[#17235E]" />
-          )}
+        <span className="flex items-center gap-1.5">
+          <span className="font-medium">
+            You have{' '}
+            {activeFjLoading ? (
+              <span className="inline-block h-2.5 w-10 rounded bg-neutral-300 align-middle animate-pulse" />
+            ) : (
+              <span className="font-semibold text-latest-black-300">{fmtFj(activeFjBalance)} FJ</span>
+            )}
+          </span>
+          {!activeFjLoading &&
+            needFj != null &&
+            (gasCovered ? (
+              <Icon
+                icon="ph:check-circle-fill"
+                width={14}
+                height={14}
+                className="cursor-help text-[#17235E]"
+                data-tooltip-id="fj-suff"
+                data-tooltip-content={suffTooltip}
+              />
+            ) : (
+              <Icon
+                icon="ph:warning-circle-fill"
+                width={14}
+                height={14}
+                className="cursor-help text-[#81133B]"
+                data-tooltip-id="fj-suff"
+                data-tooltip-content={suffTooltip}
+              />
+            ))}
         </span>
-        <span className="font-medium">
-          You have{' '}
-          {activeFjLoading ? (
-            <span className="inline-block h-2.5 w-10 rounded bg-neutral-300 align-middle animate-pulse" />
-          ) : (
-            <span className="font-semibold text-latest-black-300">{fmtFj(activeFjBalance)} FJ</span>
-          )}
-        </span>
-        {!activeFjLoading &&
-          needFj != null &&
-          (gasCovered ? (
-            <Icon
-              icon="ph:check-circle-fill"
-              width={14}
-              height={14}
-              className="cursor-help text-[#17235E]"
-              data-tooltip-id="fj-suff"
-              data-tooltip-content={suffTooltip}
-            />
-          ) : (
-            <Icon
-              icon="ph:warning-circle-fill"
-              width={14}
-              height={14}
-              className="cursor-help text-[#81133B]"
-              data-tooltip-id="fj-suff"
-              data-tooltip-content={suffTooltip}
-            />
-          ))}
       </div>
 
       <ReactTooltip id="fj-suff" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
-      <ReactTooltip id="fj-type" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
+      <ReactTooltip id="fj-about" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
 
       {/* Short: existing FJ doesn't cover gas and the in-bridge swap isn't confirmed sufficient.
           The heavy top-up flow lives on /fee-juice, reached via a standalone secondary button

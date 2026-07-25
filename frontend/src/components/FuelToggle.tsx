@@ -342,14 +342,12 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
   // Worst-case FeeJuice the final L2 claim will cost, surfaced up front so the
   // user knows the gas requirement before committing the (irreversible) deposit.
   const { data: claimFeeLimit, isLoading: claimFeeLoading } = useClaimFeeEstimate(fuelType)
-  const claimFeeFj = claimFeeLimit != null ? formatFjAmount(claimFeeLimit, 2) : null
 
   // Only the FeeJuice balance for the active fuel mode is relevant: public fuel
   // pays the claim from the user's own FJ, private fuel from the BridgedFPC.
   const usePrivateFj = fuelType === 'private' && hasBridgedFpc
   const activeFjBalance = usePrivateFj ? privateFeeJuiceBalance : feeJuiceBalance
   const activeFjLoading = usePrivateFj ? privateFeeJuiceBalanceLoading : feeJuiceBalanceLoading
-  const activeFjZero = activeFjBalance != null && Number(activeFjBalance) === 0
   // Existing FeeJuice in the active mode's balance. For PUBLIC fuel this pays the L2 claim
   // alongside freshly-claimed FJ (existing + swap pay together), so it counts toward sufficiency.
   // For PRIVATE fuel the fresh bridge self-funds its own landing claim (BridgedFPC mint_and_pay_fee
@@ -586,142 +584,137 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
     })
   }, [fuelEnabled, isPrivacyModeEnabled, fuelType])
 
+  // Consistent FJ display: route BOTH the requirement estimate and the balance through
+  // formatFjAmount so "~11.84 FJ" and "25.81 FJ" always render with the same precision.
+  const toRawFj = (v: string | number): bigint | null => {
+    const s = (typeof v === 'number' ? String(v) : v).trim()
+    if (!s || !/^-?\d*\.?\d*$/.test(s)) return null
+    const neg = s.startsWith('-')
+    const [whole, frac = ''] = s.replace('-', '').split('.')
+    const raw = BigInt(whole || '0') * 10n ** 18n + BigInt((frac + '0'.repeat(18)).slice(0, 18))
+    return neg ? -raw : raw
+  }
+  const fmtFj = (v: string | number | null | undefined): string => {
+    if (v == null || v === '--' || v === '') return '--'
+    const raw = toRawFj(v)
+    return raw == null ? '--' : formatFjAmount(raw, 2)
+  }
+
+  // The L2 claim gas is "covered" when the user's existing FJ and/or the in-bridge fuel swap
+  // clear the requirement (effectiveSufficient already folds in alreadyCovered). A blue check
+  // reflects that; otherwise a maroon short marker + the "Top Up Gas" route.
+  const gasCovered = effectiveSufficient === true
+  const needsTopUp = needFj != null && !alreadyCovered && effectiveSufficient !== true
+  const shortfallFj = needFj != null ? Math.max(needFj - existingActiveFj, 0) : null
+  const suffTooltip = gasCovered
+    ? 'You hold enough Fee Juice to cover this transaction’s L2 gas.'
+    : shortfallFj != null
+      ? `You need about ${fmtFj(shortfallFj)} more FJ to cover this transaction’s L2 gas.`
+      : 'Checking whether your Fee Juice covers this transaction’s L2 gas.'
+  const typeTooltip = usePrivateFj
+    ? 'Private Fee Juice is held via the bridge and keeps your L2 claim anonymous.'
+    : 'Public Fee Juice pays for L2 gas from your public balance.'
+
   return (
     <div className="bg-[#F5F5F5] rounded-md p-2.5 mt-1.5 overflow-hidden">
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-1.5">
           <Icon icon="ph:gas-pump-fill" width={14} height={14} className="shrink-0 text-[#17235E]" />
-          <span className="text-sm font-medium text-latest-grey-700">Top up gas balance</span>
+          <span className="text-sm font-medium text-latest-grey-700">Top up Fee Juice</span>
         </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={fuelEnabled}
-          aria-label="Enable gas top-up"
-          className="relative shrink-0"
-          onClick={() => onToggle(!fuelEnabled)}
+        {/* Toggle purpose: cover this transaction's L2 gas automatically inside the bridge (an
+            atomic Fee Juice swap). When the user's balance already covers gas there is nothing
+            to enable, so the switch is hidden — no self-contradicting "enable + top up" prompt. */}
+        {!alreadyCovered && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={fuelEnabled}
+            aria-label="Cover L2 gas automatically in this bridge"
+            className="relative shrink-0"
+            onClick={() => onToggle(!fuelEnabled)}
+          >
+            <div
+              className="w-9 h-5 rounded-full transition-colors"
+              style={{ backgroundColor: fuelEnabled ? '#81133B' : '#d1d5db' }}
+            />
+            <div
+              className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
+              style={{
+                transform: fuelEnabled ? 'translateX(1rem)' : 'translateX(0)',
+              }}
+            />
+          </button>
+        )}
+      </div>
+
+      {/* Requirement line — same fmt path as the balance below so the numbers stay consistent. */}
+      <div className="mt-1 text-xs text-latest-grey-500">
+        Est. L2 txn gas{' '}
+        <span className="font-semibold text-latest-black-300">
+          {claimFeeLoading || claimFeeLimit == null ? '…' : `~${formatFjAmount(claimFeeLimit, 2)} FJ`}
+        </span>
+      </div>
+
+      {/* Consolidated Fee Juice status: one line carries the balance, the private/public marker,
+          and whether it covers L2 gas. Complexity lives in the two hover tooltips. */}
+      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-latest-grey-700">
+        <span
+          className="flex cursor-help items-center"
+          data-tooltip-id="fj-type"
+          data-tooltip-content={typeTooltip}
         >
-          <div
-            className="w-9 h-5 rounded-full transition-colors"
-            style={{ backgroundColor: fuelEnabled ? '#81133B' : '#d1d5db' }}
-          />
-          <div
-            className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
-            style={{
-              transform: fuelEnabled ? 'translateX(1rem)' : 'translateX(0)',
-            }}
-          />
-        </button>
-      </div>
-      <div className="mt-0.5 flex items-center justify-between text-xs text-latest-grey-500">
-        <span>
-          Est. L2 txn gas{' '}
-          <span className="font-semibold text-latest-black-300">
-            {claimFeeLoading || claimFeeFj == null ? '…' : `~${claimFeeFj} FJ`}
-          </span>
-        </span>
-        <span className="flex items-center gap-1">
-          you have
-          {activeFjLoading ? (
-            <span className="inline-block h-2.5 w-10 bg-neutral-300 rounded animate-pulse" />
-          ) : activeFjZero ? (
-            <>
-              <Icon
-                icon="ph:warning-circle-fill"
-                width={13}
-                height={13}
-                className="text-[#D92D20]"
-                data-tooltip-id="fj-warning"
-                data-tooltip-content="You need Fee Juice to complete the bridge transaction."
-              />
-              <span
-                className="font-semibold text-[#D92D20]"
-                data-tooltip-id="fj-warning"
-                data-tooltip-content="You need Fee Juice to complete the bridge transaction."
-              >
-                {activeFjBalance} FJ
-              </span>
-            </>
-          ) : (
-            <span className="font-semibold">{activeFjBalance ?? '--'} FJ</span>
-          )}
-        </span>
-      </div>
-      {fuelEnabled && (
-        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-latest-grey-500">
           {usePrivateFj ? (
-            <Icon icon="ph:lock-key-fill" width={11} height={11} className="text-[#81133B]" />
+            <Icon icon="ph:lock-key-fill" width={13} height={13} className="text-[#81133B]" />
           ) : (
-            <Icon icon="ph:globe-hemisphere-west-fill" width={11} height={11} className="text-[#17235E]" />
+            <Icon icon="ph:globe-hemisphere-west-fill" width={13} height={13} className="text-[#17235E]" />
           )}
-          <span
-            className="cursor-help"
-            data-tooltip-id="fuel-info"
-            data-tooltip-content="Fee Juice is gas on Aztec. Manage your gas balance on the Fee Juice screen."
-          >
-            {usePrivateFj ? 'Private Fee Juice' : 'Public Fee Juice'}
-          </span>
-        </div>
-      )}
+        </span>
+        <span className="font-medium">
+          You have{' '}
+          {activeFjLoading ? (
+            <span className="inline-block h-2.5 w-10 rounded bg-neutral-300 align-middle animate-pulse" />
+          ) : (
+            <span className="font-semibold text-latest-black-300">{fmtFj(activeFjBalance)} FJ</span>
+          )}
+        </span>
+        {!activeFjLoading &&
+          needFj != null &&
+          (gasCovered ? (
+            <Icon
+              icon="ph:check-circle-fill"
+              width={14}
+              height={14}
+              className="cursor-help text-[#17235E]"
+              data-tooltip-id="fj-suff"
+              data-tooltip-content={suffTooltip}
+            />
+          ) : (
+            <Icon
+              icon="ph:warning-circle-fill"
+              width={14}
+              height={14}
+              className="cursor-help text-[#81133B]"
+              data-tooltip-id="fj-suff"
+              data-tooltip-content={suffTooltip}
+            />
+          ))}
+      </div>
 
-      <ReactTooltip id="fj-warning" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
-      <ReactTooltip id="fuel-info" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
+      <ReactTooltip id="fj-suff" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
+      <ReactTooltip id="fj-type" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
 
-      {/* Already covered: the user's existing FJ meets the claim requirement, so no top-up is
-          needed. Collapsed to a single row — the calm "enough" note and the Set/Edit link share
-          one line (link right-aligned) instead of stacking, reclaiming a row in the card. */}
-      {fuelEnabled && alreadyCovered && (
-        <div className="mt-2 flex items-center justify-between gap-2 rounded-[8px] bg-[#17235E]/[0.08] px-2.5 py-1.5">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <Icon icon="ph:check-circle-fill" width={13} height={13} className="flex-shrink-0 text-[#17235E]" />
-            <span className="truncate text-[11px] font-semibold leading-[15px] text-[#17235E]">Enough Fee Juice</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => router.push('/fee-juice')}
-            className="shrink-0 text-[11px] font-medium text-[#17235E] hover:underline"
-          >
-            Top Up Gas
-          </button>
-        </div>
-      )}
-
-      {/* Bad-rate guard: only when a top-up is ACTUALLY needed (a genuine shortfall — existing FJ
-          doesn't cover the claim) AND the testnet pool would charge more than the sane ceiling to
-          buy the shortfall. We cap the auto-reserve instead of silently spending it — and say so,
-          with a one-tap opt-in to the honest amount. Hidden entirely once the user is covered. */}
-      {badRate && (
-        <div className="mt-2 flex items-center justify-between gap-2 rounded-[8px] bg-[#FDECEC] px-2.5 py-1.5">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <Icon icon="ph:warning-circle-fill" width={13} height={13} className="flex-shrink-0 text-[#D92D20]" />
-            <span className="truncate text-[11px] leading-[15px]">
-              <span className="font-semibold text-[#D92D20]">Gas rate high on testnet</span>
-              <span className="text-[#737373]">
-                {' · '}
-                {fuelAmount || '0'} {tokenSymbol} reserved
-              </span>
-            </span>
-          </span>
-          <button
-            type="button"
-            onClick={() => router.push('/fee-juice')}
-            className="shrink-0 text-[11px] font-medium text-[#81133B] hover:underline"
-          >
-            Top Up Gas
-          </button>
-        </div>
-      )}
-
-      {/* Short (not covered): the heavy top-up flow lives on the dedicated /fee-juice screen, so
-          the bridge form never grows past the viewport (SOP §5, no scroll). */}
-      {fuelEnabled && !alreadyCovered && !badRate && (
+      {/* Short: existing FJ doesn't cover gas and the in-bridge swap isn't confirmed sufficient.
+          The heavy top-up flow lives on /fee-juice, reached via a standalone secondary button
+          (navy outline) — never a text link buried in a callout (SOP §8/#386). */}
+      {needsTopUp && (
         <button
           type="button"
-          onClick={() => router.push("/fee-juice")}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-opacity hover:opacity-80"
+          onClick={() => router.push('/fee-juice')}
+          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#17235E] bg-transparent px-3 py-1.5 text-[12px] font-semibold text-[#17235E] transition-colors hover:bg-[#17235E]/[0.08]"
         >
           <Icon icon="ph:gas-pump-fill" width={14} height={14} />
-          {fuelNum > 0 ? `Top Up Gas (${fuelAmount} ${tokenSymbol} reserved)` : "Top Up Gas"}
+          Top Up Gas
         </button>
       )}
     </div>

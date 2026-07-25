@@ -717,6 +717,11 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               title: 'Bridge complete',
               message: 'Tokens claimed on Aztec.',
             })
+            // The op just reached its terminal 'completed' status on the backend.
+            // Refetch operations so Activity re-derives it as done (no Resume, no
+            // "N to finish") instead of serving the stale resumable status from the
+            // 30s cache.
+            queryClient.invalidateQueries({ queryKey: ['bridgeOperations', l1Address] })
             // The claim just landed on L2 — refresh the cUSDC / Clean USDC balance
             // so the user sees the credited funds without a manual reload (#230b).
             // Retry a couple of times because the PXE can lag a few seconds behind

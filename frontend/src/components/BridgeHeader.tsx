@@ -25,15 +25,18 @@ const ALERT_META: Record<'warning' | 'error', { icon: string; className: string 
 
 // Transient "keep this page open so your funds stay recoverable" safety banners,
 // keyed by their stable feed key. These are only meaningful while a transfer is
-// genuinely mid-flight — a state that only ever exists on the progress screens,
-// never on the idle bridge form (the flow navigates to /progress before the SDK
-// emits DO_NOT_RELOAD). The feed is now persisted, so a banner from a prior
-// transfer can survive a reload; gating it out of the ticker on the idle bridge
-// keeps a stale one from lingering there while still letting it show in-context.
+// genuinely mid-flight — a state that only ever exists on the progress screens
+// (the flow navigates to /progress before the SDK emits DO_NOT_RELOAD). The feed
+// is persisted, so a banner from a prior transfer can survive a reload; gating it
+// to the progress routes keeps a stale one from surfacing anywhere else (the idle
+// bridge, Activity, Fee Juice, Docs…) while still letting it show in-context.
 const SAFETY_BANNER_KEYS = new Set(['l1-to-l2-do-not-reload', 'l2-to-l1-do-not-reload'])
 
-// The single route where no transfer can be in progress: the bridge form itself.
-const IDLE_BRIDGE_PATH = '/'
+// The only routes where a transfer can genuinely be in progress. The do-not-reload
+// / funds-recoverable safety banners are relevant ONLY here; everywhere else they
+// are out of context and must not surface in the ticker. Allowlist, not denylist —
+// a new idle screen is safe by default.
+const PROGRESS_PATHS = new Set(['/progress', '/progress/resume'])
 
 // Marquee travels one full copy (translateX(-50%) across two stacked copies), so
 // the loop is seamless. Slower is calmer; px/sec keeps long and short alerts at a
@@ -66,6 +69,7 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
   const pathname = usePathname()
   const {
     getHeaderSteps,
+    getProgressSteps,
     headerStep,
     setHeaderStep
   } = useBridgeStore()
@@ -117,21 +121,52 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
   // still in the list is the current alert. The found object reference is stable
   // across renders until it changes, so this selector doesn't churn.
   //
-  // On the idle bridge form a transient "Do not reload" safety banner is out of
-  // context (no transfer is in flight here), so skip those keyed rows and let the
-  // ticker fall through to the next genuine alert — or to nothing. Genuine
-  // warnings/errors still surface everywhere; only the in-progress-only safety
-  // banners are gated. On the progress screens they show normally.
-  const isIdleBridge = pathname === IDLE_BRIDGE_PATH
-  const currentAlert = useNotificationsStore((s) =>
+  // Two context gates decide what the ticker is allowed to surface:
+  //  1. The in-progress-only "Do not reload" safety banners show ONLY on the
+  //     progress routes (an allowlist). Everywhere else — the idle bridge,
+  //     Activity, Fee Juice, Docs… — they are out of context and skipped, so the
+  //     ticker falls through to the next genuine alert, or to nothing.
+  //  2. Rows restored from localStorage (`rehydrated`) are a prior session's
+  //     alerts; the ticker ignores them so a fresh bridge never force-surfaces
+  //     yesterday's error. They remain in the Messages feed, and a new in-session
+  //     event clears the flag (store keyed upsert), so live alerts still show.
+  const isProgressRoute = PROGRESS_PATHS.has(pathname)
+
+  // A finished, successful transfer must not have a stale in-session error hovering
+  // over it. ProgressCard marks every progress step 'completed' on success (its own
+  // isAllComplete); reading the same store slice lets the ticker fall silent once the
+  // /progress screen shows its completed/success state. This is a separate case from
+  // the rehydrated and route gates: the offending error fired in-session, and the
+  // completed state lives on /progress (so neither of those gates catches it).
+  const progressSteps = getProgressSteps()
+  const isTransferComplete =
+    progressSteps.length > 0 && progressSteps.every((st) => st.status === 'completed')
+  const suppressCompletedAlerts = isProgressRoute && isTransferComplete
+
+  const rawAlert = useNotificationsStore((s) =>
     s.notifications.find(
       (n) =>
         (n.type === 'warning' || n.type === 'error') &&
-        !(isIdleBridge && n.key !== undefined && SAFETY_BANNER_KEYS.has(n.key)),
+        !n.rehydrated &&
+        !(!isProgressRoute && n.key !== undefined && SAFETY_BANNER_KEYS.has(n.key)),
     ),
   )
+  const currentAlert = suppressCompletedAlerts ? undefined : rawAlert
   const alertMeta = currentAlert ? ALERT_META[currentAlert.type as 'warning' | 'error'] : null
   const isAlertActive = !!(currentAlert && alertMeta)
+
+  // Dismiss the message currently shown in the ticker. A keyed row (e.g. a
+  // repeating progress ping) is retired by key so all of its copies clear at once;
+  // an un-keyed one-off is removed by id. Either way it leaves the feed, so the
+  // ticker falls through to the next genuine alert and the dismissed one does not
+  // pop back into the bar.
+  const dismiss = useNotificationsStore((s) => s.dismiss)
+  const dismissByKey = useNotificationsStore((s) => s.dismissByKey)
+  const dismissCurrentAlert = React.useCallback(() => {
+    if (!currentAlert) return
+    if (currentAlert.key !== undefined) dismissByKey(currentAlert.key)
+    else dismiss(currentAlert.id)
+  }, [currentAlert, dismiss, dismissByKey])
 
   // Single-line ticker text. Message adds context after the title when present;
   // middot keeps it one glanceable line (no em-dashes per house style).
@@ -248,51 +283,65 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
       {isAlertActive && alertMeta ? (
         // ACTIVE: a live warning/error message takes over the bar as a compact
         // single-line ticker. The brain glyph and the "BRIDGE" label are hidden to
-        // make room; the whole ticker is one tap target that opens Messages.
-        <button
-          type='button'
-          onClick={openMessages}
-          aria-label={`${currentAlert!.type === 'error' ? 'Error' : 'Warning'}: ${tickerText}. Open messages`}
-          className={`group flex min-w-0 flex-1 items-center gap-[8px] rounded-full px-[10px] py-[4px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A]/[0.2] ${alertMeta.className}`}
+        // make room. The message area is one tap target that opens Messages; a
+        // trailing close control lets the user dismiss the alert (kept as a sibling
+        // button, not nested, so it stays a valid, separately-focusable target).
+        <div
+          className={`group flex min-w-0 flex-1 items-center gap-[4px] rounded-full py-[4px] pl-[10px] pr-[4px] ${alertMeta.className}`}
         >
-          <Icon
-            icon={alertMeta.icon}
-            width={14}
-            height={14}
-            className='shrink-0 animate-pulse motion-reduce:animate-none'
-          />
-          <div
-            ref={tickerViewportRef}
-            aria-hidden='true'
-            className='relative min-w-0 flex-1 overflow-hidden text-left'
+          <button
+            type='button'
+            onClick={openMessages}
+            aria-label={`${currentAlert!.type === 'error' ? 'Error' : 'Warning'}: ${tickerText}. Open messages`}
+            className='flex min-w-0 flex-1 items-center gap-[8px] rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A]/[0.2]'
           >
-            {/* Always-mounted, out-of-flow width probe used to decide overflow. */}
-            <span
-              ref={tickerMeasureRef}
-              className={`invisible absolute left-0 top-0 ${tickerTextClass}`}
+            <Icon
+              icon={alertMeta.icon}
+              width={14}
+              height={14}
+              className='shrink-0 animate-pulse motion-reduce:animate-none'
+            />
+            <div
+              ref={tickerViewportRef}
+              aria-hidden='true'
+              className='relative min-w-0 flex-1 overflow-hidden text-left'
             >
-              {tickerText}
-            </span>
-            {tickerScroll ? (
-              <>
-                <style dangerouslySetInnerHTML={{ __html: TICKER_KEYFRAMES }} />
-                <div
-                  className='flex w-max [mask-image:linear-gradient(to_right,transparent,#000_12px,#000_calc(100%-12px),transparent)]'
-                  style={{ animation: `bridge-ticker ${tickerDurationS}s linear infinite` }}
-                >
-                  <span className={`${tickerTextClass}`} style={{ paddingRight: TICKER_GAP_PX }}>
-                    {tickerText}
-                  </span>
-                  <span className={`${tickerTextClass}`} style={{ paddingRight: TICKER_GAP_PX }}>
-                    {tickerText}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <span className={`block truncate ${tickerTextClass}`}>{tickerText}</span>
-            )}
-          </div>
-        </button>
+              {/* Always-mounted, out-of-flow width probe used to decide overflow. */}
+              <span
+                ref={tickerMeasureRef}
+                className={`invisible absolute left-0 top-0 ${tickerTextClass}`}
+              >
+                {tickerText}
+              </span>
+              {tickerScroll ? (
+                <>
+                  <style dangerouslySetInnerHTML={{ __html: TICKER_KEYFRAMES }} />
+                  <div
+                    className='flex w-max [mask-image:linear-gradient(to_right,transparent,#000_12px,#000_calc(100%-12px),transparent)]'
+                    style={{ animation: `bridge-ticker ${tickerDurationS}s linear infinite` }}
+                  >
+                    <span className={`${tickerTextClass}`} style={{ paddingRight: TICKER_GAP_PX }}>
+                      {tickerText}
+                    </span>
+                    <span className={`${tickerTextClass}`} style={{ paddingRight: TICKER_GAP_PX }}>
+                      {tickerText}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <span className={`block truncate ${tickerTextClass}`}>{tickerText}</span>
+              )}
+            </div>
+          </button>
+          <button
+            type='button'
+            onClick={dismissCurrentAlert}
+            aria-label='Dismiss message'
+            className='flex shrink-0 items-center justify-center rounded-full p-[3px] transition-colors hover:bg-[#0A0A0A]/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A]/[0.2]'
+          >
+            <Icon icon='ph:x-bold' width={12} height={12} className='shrink-0' />
+          </button>
+        </div>
       ) : (
         // IDLE: the glyph (only when the countdown slot is empty) + progress bar + "BRIDGE" label.
         <>
@@ -335,13 +384,19 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
           </div>
         </>
       )}
-      <button
-        onClick={() => router.push('/activity')}
-        className='ml-auto flex items-center justify-center p-1 rounded-full hover:bg-gray-100 transition-colors'
-        aria-label='Bridge activity'
-      >
-        <Icon icon='ph:clock-counter-clockwise' width={20} height={20} className='text-[#0A0A0A]' />
-      </button>
+      {/* History / Activity shortcut. While a transfer is actively in progress the
+          countdown is live (`remainingTime`), and this would be a click-away trap
+          that abandons the in-flight transfer — so it is removed for the duration.
+          On idle screens it stays as a useful shortcut. */}
+      {!remainingTime && (
+        <button
+          onClick={() => router.push('/activity')}
+          className='ml-auto flex items-center justify-center p-1 rounded-full hover:bg-gray-100 transition-colors'
+          aria-label='Bridge activity'
+        >
+          <Icon icon='ph:clock-counter-clockwise' width={20} height={20} className='text-[#0A0A0A]' />
+        </button>
+      )}
     </div>
   )
 }

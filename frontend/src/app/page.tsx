@@ -89,6 +89,19 @@ export default function Home() {
   // Live FJ output for the current fuel amount, surfaced by FuelToggle for the breakdown summary.
   const [fuelFjOutput, setFuelFjOutput] = useState<bigint | null>(null)
   const [showVerification, setShowVerification] = useState(false)
+  // Deep-link into verification: the account dropdown's "Complete verification" nudge routes
+  // here with ?verify=1 (the verify modal is local state, so it can't be opened from the
+  // dropdown directly). Open it once on mount, then strip the param so a refresh doesn't reopen.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('verify') === '1') {
+      setShowVerification(true)
+      params.delete('verify')
+      const qs = params.toString()
+      window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
+    }
+  }, [])
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   // Bottom scroll cue for the card's internal scroll region: the transaction breakdown

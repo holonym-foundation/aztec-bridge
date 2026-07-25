@@ -288,7 +288,7 @@ export function useNetworkHealth() {
 // -----------------------------------
 
 export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
-  const { waapAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address, signWaapMessage } = useWalletStore()
   const { aztecAddress, aztecLoginMethod } = useWalletStore()
   const queryClient = useQueryClient()
   const notify = useToast()
@@ -344,7 +344,14 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       walletAdapter: walletAdapter as any,
       signMessage: async (msg: string) => {
         verifyEncryptionDomain()
-        return (await requestWaapWallet(WAAP_METHOD.personal_sign, [msg, l1Address])) as string
+        // Route through the CACHED signer (not a raw personal_sign) so a
+        // same-session deposit + withdrawal signs the identical, deterministic
+        // "Unlock My Secrets" message ONCE. The message is byte-identical to the
+        // deposit path (useL1Operations), so the cache key (address+message)
+        // matches and the withdrawal never re-prompts (#408 / P1).
+        const sig = await signWaapMessage(msg)
+        if (!sig) throw new Error('Failed to sign message')
+        return sig
       },
       onStep: (step: number, status: StepStatus) => {
         setProgressStep(step, status)

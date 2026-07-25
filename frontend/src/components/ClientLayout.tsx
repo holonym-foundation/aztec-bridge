@@ -8,6 +8,7 @@ import ShieldOnboarding from '@/components/ShieldOnboarding'
 import BridgeStepsRail from '@/components/BridgeStepsRail'
 import ActivityDrawer from '@/components/ActivityDrawer'
 import NotificationsDrawer from '@/components/NotificationsDrawer'
+import SignaturePrompt from '@/components/SignaturePrompt'
 import SupportTab from '@/components/SupportTab'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
 import { useBridgeStore } from '@/stores/bridgeStore'
@@ -35,6 +36,10 @@ export default function ClientLayout({
   // so poll briefly and only flip this on once the widget reports it's openable
   // (i.e. the Support tab can actually reach it). If it never becomes openable, the
   // native bubble stays visible as the working fallback.
+  // #96: the Iris support service is intermittently unavailable (#379), so hide our
+  // Support binder tab until it's reliable. Flip back to true once Iris is stable. While
+  // off, we also stop suppressing the native Iris launcher so support isn't fully hidden.
+  const SUPPORT_TAB_ENABLED = false
   const [hideNativeBubble, setHideNativeBubble] = useState(false)
   useEffect(() => {
     if (isSupportOpenable()) {
@@ -142,6 +147,10 @@ export default function ClientLayout({
         <BannerAztecTestnet />
         <BannerAztecNodeError />
         <Header />
+        {/* Sticky "signature needed" bar (#408): sits IN FLOW just under the nav
+            so it reflows the card region down and never occludes the card CTA
+            (SOP §392). Renders nothing unless a wallet signature is pending. */}
+        <SignaturePrompt />
       </div>
       {/* Main content — a flex-grow column that owns its own overflow (min-h-0 +
           overflow-y-auto). On comfortable heights the card fits and nothing scrolls; only
@@ -176,7 +185,7 @@ export default function ClientLayout({
         {/* Only surface the Support tab once the Iris widget is actually
             openable; until then the native bubble is the working entry point and
             a tab that can't open anything would be dead. See shield.human.tech#86. */}
-        {hideNativeBubble && <SupportTab />}
+        {SUPPORT_TAB_ENABLED && hideNativeBubble && <SupportTab />}
       </div>
       {/* Below md the centered card leaves no right gutter, so the right-edge
           binder tabs would sit off-screen (#243). Relocate them to a compact,
@@ -187,12 +196,12 @@ export default function ClientLayout({
         <BridgeStepsRail variant="dock" />
         <ActivityDrawer variant="dock" />
         <NotificationsDrawer variant="dock" />
-        {hideNativeBubble && <SupportTab variant="dock" />}
+        {SUPPORT_TAB_ENABLED && hideNativeBubble && <SupportTab variant="dock" />}
       </div>
       {/* See shield.human.tech#86 — hide the native Iris floating bubble ONLY once
           it's programmatically openable, so the Support tab replaces it without ever
           leaving support unreachable. Until then the native launcher stays visible. */}
-      {hideNativeBubble && (
+      {SUPPORT_TAB_ENABLED && hideNativeBubble && (
         <style dangerouslySetInnerHTML={{ __html: '#iris-widget-host { display: none !important }' }} />
       )}
       <HowItWorksModal />

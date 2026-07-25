@@ -6,6 +6,7 @@ import { Icon } from '@iconify/react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { useCountdown } from 'usehooks-ts'
 import LoadingStepsBars from '@/components/LoadingStepsBars'
+import CryptexAnimation from '@/components/CryptexAnimation'
 import StyledImage from '@/components/StyledImage'
 import TextButton from '@/components/TextButton'
 import type { LoadingStep } from '@/stores/bridgeStore'
@@ -587,6 +588,12 @@ export default function ProgressCard({
       {isInProgress && (
         <div className="flex min-h-full flex-col justify-center py-4">
           <p className="text-center font-semibold text-md">Transaction in progress</p>
+
+          {/* Cryptex — concentric cipher rings settling around an Aztec diamond, filling the
+              slack the fixed-height card leaves above the From/To panel. Decorative and
+              reassuring ("privately processing"), never competing with the progress bar or
+              status line. In-progress only; success/failure keep their own content. */}
+          <CryptexAnimation height={132} className="mt-1" />
 
           {/* Privacy-mode mismatch — a public operation is on screen while the live toggle is on.
               The private case auto-enables Privacy Mode (no warning), so only the public case

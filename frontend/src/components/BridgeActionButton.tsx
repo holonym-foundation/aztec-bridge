@@ -8,6 +8,7 @@ import { parseUnits } from 'viem'
 import CongestionWarningModal from './model/CongestionWarningModal'
 import { useL2PendingTxCount, useNetworkHealth } from '@/hooks/useL2Operations'
 import { POCH_MINT_URL } from '@/config'
+import { PASSPORT_MAX_AMOUNT } from '@/config/env.config'
 
 // Single-loader policy (#298): progress lives in the top mini progress bar
 // (BridgeHeader's LoadingBar), so the button no longer renders its own spinner.
@@ -342,26 +343,46 @@ function BridgeActionButton({
         const decimals = 6 // USDC decimals
         const inputBigInt = BigInt(Math.floor(parseFloat(inputAmount || '0') * 10 ** decimals))
         if (inputBigInt > passportMaxAmount) {
-          const maxFormatted = (Number(passportMaxAmount) / 10 ** decimals).toFixed(2)
-          notify('error', {
-            heading: 'Amount Exceeds Human Passport Limit',
-            message: React.createElement(
-              'span',
-              null,
-              `Human Passport allows up to ${maxFormatted} USDC per transaction. `,
-              React.createElement(
-                'a',
-                {
-                  href: POCH_MINT_URL,
-                  target: '_blank',
-                  rel: 'noopener noreferrer',
-                  style: { color: '#BF1254', textDecoration: 'underline' },
+          // Two different blocks share this gate: the fixed per-transaction ceiling
+          // ($1,000) and a smaller leftover slice of the rolling daily limit. Name
+          // whichever one actually binds so the figure the user reads is truthful —
+          // showing the tiny daily remainder as a "per transaction" max is nonsense.
+          const perTxMaxUsd = Number(PASSPORT_MAX_AMOUNT) / 10 ** decimals
+          const dailyBinds = remainingDepositUsd != null && remainingDepositUsd < perTxMaxUsd
+          const verifyLink = React.createElement(
+            'a',
+            {
+              href: POCH_MINT_URL,
+              target: '_blank',
+              rel: 'noopener noreferrer',
+              style: { color: '#BF1254', textDecoration: 'underline' },
+            },
+            'Proof of Clean Hands',
+          )
+          notify(
+            'error',
+            dailyBinds
+              ? {
+                  heading: 'Amount Exceeds Your Daily Limit',
+                  message: React.createElement(
+                    'span',
+                    null,
+                    `You have $${remainingDepositUsd!.toFixed(2)} left of your daily limit. Verify `,
+                    verifyLink,
+                    ' to raise it.',
+                  ) as unknown as string,
+                }
+              : {
+                  heading: 'Amount Exceeds Human Passport Limit',
+                  message: React.createElement(
+                    'span',
+                    null,
+                    `Human Passport allows up to $${perTxMaxUsd.toLocaleString('en-US')} per transaction. Verify `,
+                    verifyLink,
+                    ' to raise your limit.',
+                  ) as unknown as string,
                 },
-                'get a Proof of Clean Hands',
-              ),
-              ' to remove this limit.',
-            ) as unknown as string,
-          })
+          )
           return
         }
       } catch {
@@ -417,6 +438,15 @@ function BridgeActionButton({
   const travelRuleHeldOut =
     holdUsd > 0 && !travelRuleBlocked && travelRuleRemainingUsd != null && travelRuleRemainingUsd <= 0
   const pendingHoldBlocked = depositHeldOut || travelRuleHeldOut
+
+  // Full explanation for the temporary hold, used both for the disabled CTA's
+  // aria-label/title (SOP §6) and to shape a concise on-button label. Names the
+  // reserved amount when the reservation figure is known.
+  const pendingHoldReason = pendingHoldBlocked
+    ? holdUsd > 0
+      ? `A pending deposit is using $${holdUsd.toFixed(2)} of your limit. It frees up when that deposit confirms (~30 min).`
+      : 'A pending deposit is using part of your limit. It frees up when that deposit confirms (~30 min).'
+    : undefined
 
   // Binding conflict is only meaningful once BOTH wallets are connected (it's
   // derived from the connected pair). Before that the button is a Connect CTA,
@@ -477,7 +507,9 @@ function BridgeActionButton({
     // Temporary reservation hold: a signed-but-unconfirmed deposit is holding the user's
     // budget. Distinct from a permanent cap — say it clears itself so they wait, not verify.
     if (pendingHoldBlocked) {
-      return 'Pending deposit, limit frees in under 30 min'
+      return holdUsd > 0
+        ? `$${holdUsd.toFixed(2)} held by a pending deposit (frees in ~30 min)`
+        : 'Pending deposit is holding your limit (frees in ~30 min)'
     }
 
     // Travel Rule: passport tier exhausted, POCH required (deposits only)
@@ -534,7 +566,13 @@ function BridgeActionButton({
   return (
     <>
       <div className="w-full">
-        <TextButton onClick={handleButtonClick} disabled={isButtonDisabled || isDisabled} className="">
+        <TextButton
+          onClick={handleButtonClick}
+          disabled={isButtonDisabled || isDisabled}
+          className=""
+          title={pendingHoldReason}
+          aria-label={pendingHoldReason}
+        >
           {showLoadingSpinner ? (
             <LoadingContent label={getLoadingText()} />
           ) : bridgeCompleted ? (

@@ -13,7 +13,7 @@ import { logInfo, logError, DatadogUserAction } from '@/utils/datadog'
 
 export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
   const { setProgressStep, setTransactionUrls, clearRecovery } = useBridgeStore()
-  const { waapAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address, signWaapMessage } = useWalletStore()
   const notify = useToast()
   const bridge = useBridge()
   const queryClient = useQueryClient()
@@ -48,7 +48,12 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
       },
       signMessage: async (msg: string) => {
         verifyEncryptionDomain()
-        return (await requestWaapWallet(WAAP_METHOD.personal_sign, [msg, withdrawRecipient])) as string
+        // Cached signer (not raw personal_sign): a same-session withdrawal resume
+        // reuses the deterministic "Unlock My Secrets" signature instead of
+        // re-prompting. Byte-identical message → matching cache key (#408 / P1).
+        const sig = await signWaapMessage(msg)
+        if (!sig) throw new Error('Failed to sign message')
+        return sig
       },
       onStep: (step, status) => setProgressStep(step, status),
       onEvent: (event: BridgeEvent) => {

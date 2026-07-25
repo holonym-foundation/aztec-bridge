@@ -545,6 +545,8 @@ export default function ShieldOnboarding() {
   const reduce = useReducedMotion() ?? false
   const connectWaapWallet = useWalletStore((s) => s.connectWaapWallet)
   const isWaapConnected = useWalletStore((s) => s.isWaapConnected)
+  const walletConnectionPhase = useWalletStore((s) => s.walletConnectionPhase)
+  const showWalletInstallPrompt = useWalletStore((s) => s.showWalletInstallPrompt)
   const setSplashActive = useOnboardingStore((s) => s.setSplashActive)
   const showSplashNonce = useOnboardingStore((s) => s.showSplashNonce)
   // Start in 'loading': the shader shell renders immediately (covering the bridge from
@@ -608,6 +610,17 @@ export default function ShieldOnboarding() {
     setSplashActive(mode === 'splash')
     return () => setSplashActive(false)
   }, [mode, setSplashActive])
+
+  // Connect from the splash nav (e.g. "Connect Aztec"): the connect modal renders
+  // BENEATH the splash overlay, so hitting connect on the splash would fire but stay
+  // hidden. Drop the splash the moment any connect flow starts (discovery/selecting,
+  // or the install prompt) so the modal is visible and the user can complete it
+  // (#370, same root cause as the frozen dropdown #349).
+  useEffect(() => {
+    if (mode === 'splash' && (walletConnectionPhase !== 'idle' || showWalletInstallPrompt)) {
+      setMode('hidden')
+    }
+  }, [mode, walletConnectionPhase, showWalletInstallPrompt])
 
   // Clicking the Shield brand returns the user to the splash (#103). The brand
   // link's own in-progress-transfer guard runs first (see Header), so by the

@@ -203,10 +203,10 @@ function ecosystemPanelSurface(isDark: boolean): string {
  * dropdown look liftable into a shared Storybook component later. It opens BELOW
  * the trigger (top-full) so it never overlaps the nav row.
  */
-const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; collapseLabel?: boolean }> = ({
+const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; showLabel?: boolean }> = ({
   isDark,
   onNavigate,
-  collapseLabel = false,
+  showLabel = true,
 }) => {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -246,7 +246,7 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; collaps
           height={16}
           className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'}
         />
-        <span className={collapseLabel ? 'hidden xl:inline' : ''}>Ecosystem</span>
+        <span className={showLabel ? '' : 'hidden'}>Ecosystem</span>
         <Icon
           icon="ph:caret-down"
           width={12}
@@ -419,6 +419,64 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     setMounted(true)
   }, [])
 
+  // #399 — measure-based label collapse. Instead of a fixed 1280px (`xl:`)
+  // breakpoint, the centered nav keeps full labels for exactly as long as they
+  // fit and drops to icon-only only when they would overflow. `navRef` is the
+  // available track (flex-1, so its clientWidth is the room the row has,
+  // independent of whether labels are currently shown); `ghostRef` is an inert,
+  // visually-hidden copy of the row rendered ALWAYS with labels, whose width is
+  // the space the labels REQUIRE. Comparing required-vs-available makes the
+  // decision monotonic (the ghost never collapses, so there is nothing to
+  // thrash against), and a small hysteresis buffer keeps a borderline width from
+  // flip-flopping. Default collapsed so the first paint is icon-only (the
+  // narrowest, never-overflowing state); the effect expands to labels only after
+  // it has measured that they fit — so it never flashes overflowing (SSR-safe:
+  // the real tree only renders once `mounted`, and the effect re-runs then).
+  const navRef = useRef<HTMLElement>(null)
+  const ghostRef = useRef<HTMLDivElement>(null)
+  const [labelsCollapsed, setLabelsCollapsed] = useState(true)
+  useEffect(() => {
+    const nav = navRef.current
+    const ghost = ghostRef.current
+    if (!nav || !ghost) return
+
+    // Dead zone (px) between "fits" and "expand" so a width parked right at the
+    // fit boundary doesn't oscillate label<->icon on sub-pixel resizes.
+    const NAV_FIT_BUFFER = 8
+    let raf = 0
+    const measure = () => {
+      raf = 0
+      const available = nav.clientWidth
+      const required = Math.ceil(ghost.scrollWidth)
+      // Below lg the nav is display:none (clientWidth 0) and the hamburger owns
+      // navigation; guard so a 0 width doesn't force a spurious collapse read.
+      if (available === 0 || required === 0) return
+      setLabelsCollapsed((prev) => {
+        if (required > available) return true
+        if (required + NAV_FIT_BUFFER <= available) return false
+        return prev
+      })
+    }
+    const schedule = () => {
+      if (raf) return
+      raf = requestAnimationFrame(measure)
+    }
+
+    schedule()
+    const ro = new ResizeObserver(schedule)
+    ro.observe(nav)
+    ro.observe(ghost)
+    // Web-font swap changes label widths after first paint — re-measure once
+    // fonts settle so the collapse point tracks the final metrics.
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      document.fonts.ready.then(schedule).catch(() => {})
+    }
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      ro.disconnect()
+    }
+  }, [mounted, isDocs])
+
   // No forced auto-switch (reverted #120): selecting a "wrong" Aztec account is
   // allowed and never silently overridden — the app must never change the user's
   // chosen account for them. Instead the linked account is MARKED in the switch
@@ -579,16 +637,17 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     />
   )
 
-  // #384 — graceful collapse so the nav NEVER overflows. In the desktop pill the
-  // center-nav labels are hidden between lg and xl (1024–1279px), where the full
-  // labels no longer fit beside the Privacy segment + account chip (chip is up to
-  // max-w-[360px]); the `ph:` glyph stays so every control is still reachable, and
-  // the labels return at xl+ (`hidden xl:inline`). Below lg the whole nav moves to
-  // the hamburger panel. In the mobile panel (`variant === 'mobile'`) labels are
-  // always shown — the panel isn't width-constrained. Native `title` keeps the
-  // icon-only controls named on hover (SOP §7, no new deps).
-  const renderSecondaryNav = (variant: 'desktop' | 'mobile') => {
-    const labelCls = variant === 'desktop' ? 'hidden xl:inline' : ''
+  // #384 / #399 — graceful collapse so the nav NEVER overflows. `showLabels`
+  // drives whether each control shows its word or just its `ph:` glyph. In the
+  // desktop pill it is set from the live fit measurement (labelsCollapsed): full
+  // labels while they fit, icon-only the moment they would overflow — no fixed
+  // pixel breakpoint. The `ph:` glyph plus the native `title`/`aria-label` keep
+  // every control reachable and named on hover in icon-only mode (SOP §7, no new
+  // deps). Below lg the whole nav moves to the hamburger panel. In the mobile
+  // panel and the hidden measurement ghost, labels are always shown — neither is
+  // width-constrained.
+  const renderSecondaryNav = (showLabels: boolean) => {
+    const labelCls = showLabels ? '' : 'hidden'
     return (
       <>
         {credentials && (
@@ -639,11 +698,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         {/* Ecosystem — click-to-open dropdown of external ecosystem links. Shares
             the sibling links' pill/hover/typography treatment; opens below the
             trigger so it clears the nav row. Label collapses with the siblings. */}
-        <EcosystemNav
-          isDark={isDark}
-          onNavigate={() => setMobileMenuOpen(false)}
-          collapseLabel={variant === 'desktop'}
-        />
+        <EcosystemNav isDark={isDark} onNavigate={() => setMobileMenuOpen(false)} showLabel={showLabels} />
       </>
     )
   }
@@ -705,10 +760,30 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         </div>
 
         {/* Centered nav links (#159). flex-1 + justify-center pins them to the
-            middle. Hidden below lg, where they move into the mobile panel. */}
-        <nav className="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0" aria-label="Secondary">
-          {renderSecondaryNav('desktop')}
+            middle. Hidden below lg, where they move into the mobile panel.
+            overflow-hidden is a §384 belt-and-suspenders: labels are dropped by
+            measurement BEFORE they overflow, so this only ever clips a transient
+            frame between a resize and the next measure, never a resting state. */}
+        <nav
+          ref={navRef}
+          className="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0 overflow-hidden"
+          aria-label="Secondary"
+        >
+          {renderSecondaryNav(!labelsCollapsed)}
         </nav>
+
+        {/* Hidden measurement ghost (#399). An inert, visually-hidden copy of the
+            nav rendered ALWAYS with labels; its scrollWidth is the width the full
+            labels REQUIRE, which the effect compares against the real nav's
+            available width to decide the collapse. `inert` keeps its duplicated
+            controls out of the tab order and the a11y tree; the w-0/h-0
+            overflow-hidden wrapper means it contributes nothing to layout or page
+            scroll while the inline-flex inner still sizes to its content. */}
+        <div aria-hidden inert className="absolute top-0 left-0 w-0 h-0 overflow-hidden pointer-events-none">
+          <div ref={ghostRef} className="inline-flex items-center gap-1 whitespace-nowrap">
+            {renderSecondaryNav(true)}
+          </div>
+        </div>
 
         {/* Mobile-nav toggle — only below lg, where the nav links collapse into
             the panel. */}
@@ -740,7 +815,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           not here. */}
       {mobileMenuOpen && (
         <div ref={mobileMenuRef} className={`lg:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}>
-          {renderSecondaryNav('mobile')}
+          {renderSecondaryNav(true)}
         </div>
       )}
 

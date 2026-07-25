@@ -15,7 +15,7 @@ import {
 import { BRIDGED_FPC_ADDRESS, L1_RPC_URL, L1_TOKENS, SWAP_BRIDGE_ROUTER_ADDRESS } from '@/config'
 import { useTokenPrices } from '@/utils/coinGeckoPrice'
 import { useClaimFeeEstimate } from '@/hooks/useL2Operations'
-import { useL1TopUpFeeJuice } from '@/hooks/useL1Operations'
+import { useL1TopUpFeeJuice, useL1TokenBalance } from '@/hooks/useL1Operations'
 import { useTopUpQuote, useTopUpSufficiency } from '@/components/WithdrawFuelPanel'
 import { useWalletStore } from '@/stores/walletStore'
 
@@ -252,6 +252,16 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
   const [optionalTopUpOpen, setOptionalTopUpOpen] = useState(false)
   const fuelAmount = deriveFuelAmount(spendAmount, fundingDecimals)
 
+  // Available L1 balance of the funding token (same balanceOf read the bridge form uses).
+  // The user cannot spend more of it than they hold, so it gates the buy CTA below.
+  const { data: fundingBalance } = useL1TokenBalance()
+  const fundingBalanceNum =
+    fundingBalance != null && fundingBalance !== '' && !isNaN(Number(fundingBalance)) ? Number(fundingBalance) : null
+  // Floor to 4 dp so the "you have" figure never reads higher than the real balance.
+  const fundingBalanceDisplay = fundingBalanceNum != null ? String(Math.floor(fundingBalanceNum * 1e4) / 1e4) : ''
+  const spendNum = spendAmount && !isNaN(Number(spendAmount)) ? Number(spendAmount) : 0
+  const exceedsBalance = fundingBalanceNum != null && spendNum > fundingBalanceNum
+
   const { fjOutput, loading: quoteLoading, error: quoteError } = useTopUpQuote(fuelAmount, fundingAddress, fundingDecimals)
   const { sufficient, feeLimitFj, loading: sufficiencyLoading } = useTopUpSufficiency(fjOutput, fuelType)
 
@@ -311,12 +321,28 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
     !canTopUp ||
     !walletsReady ||
     !amountValid ||
+    exceedsBalance ||
     quoteLoading ||
     fjOutput === null ||
     !!quoteError ||
     sufficiencyLoading ||
     topUpCovers === false ||
     topUp.isPending
+
+  // Reason surfaced on the disabled primary (SOP §6): every disabled state names why.
+  const confirmReason = !amountValid
+    ? 'Enter an amount to add'
+    : exceedsBalance
+      ? `Not enough ${fundingSymbol}. You have ${fundingBalanceDisplay} ${fundingSymbol}.`
+      : quoteLoading || sufficiencyLoading
+        ? 'Checking the quote'
+        : quoteError || fjOutput === null
+          ? 'Quote unavailable, try again'
+          : topUpCovers === false
+            ? 'Add more to cover a transaction'
+            : topUp.isPending
+              ? 'Buying Fee Juice'
+              : undefined
 
   const spend = (amount: string) => {
     const fuel = deriveFuelAmount(amount, fundingDecimals)
@@ -476,7 +502,22 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
                 <label htmlFor="fee-juice-amount" className="text-[13px] font-semibold text-latest-black-100">
                   Amount to add
                 </label>
-                <span className="text-[11px] text-latest-grey-500">Paid in {fundingSymbol} on Ethereum</span>
+                {fundingBalanceNum != null ? (
+                  <span className="flex items-baseline gap-1.5 text-[11px] text-latest-grey-500">
+                    Balance {fundingBalanceDisplay} {fundingSymbol}
+                    <button
+                      type="button"
+                      disabled={topUp.isPending}
+                      onClick={() => setSpendAmount(fundingBalance ?? '')}
+                      title={`Use full ${fundingSymbol} balance`}
+                      className="font-semibold text-[#81133B] transition-opacity hover:opacity-80 disabled:opacity-40"
+                    >
+                      Max
+                    </button>
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-latest-grey-500">Paid in {fundingSymbol} on Ethereum</span>
+                )}
               </div>
 
               {/* Focal amount entry: a large field with the token unit inline, plus quick presets. */}
@@ -537,10 +578,19 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
                 )}
               </div>
 
+              {/* Balance guard: one compact line, and it stands in for the quote readout (never
+                  stacked on top of it) so an over-balance amount can't grow the card past its
+                  fixed height. */}
+              {exceedsBalance && (
+                <p className="text-12 font-medium leading-[17px] text-[#D92D20]">
+                  Not enough {fundingSymbol}. You have {fundingBalanceDisplay} {fundingSymbol}.
+                </p>
+              )}
+
               {/* Live readout: what the spend converts to, and how much it adds to the current balance. */}
-              {amountValid && (quoteLoading || (fjOutput === null && !quoteError)) && <QuoteSkeleton />}
-              {amountValid && quoteError && <p className="text-12 text-red-500">{quoteError}</p>}
-              {amountValid && !quoteLoading && !quoteError && fjOutput !== null && (
+              {!exceedsBalance && amountValid && (quoteLoading || (fjOutput === null && !quoteError)) && <QuoteSkeleton />}
+              {!exceedsBalance && amountValid && quoteError && <p className="text-12 text-red-500">{quoteError}</p>}
+              {!exceedsBalance && amountValid && !quoteLoading && !quoteError && fjOutput !== null && (
                 <div className="rounded-lg bg-latest-grey-200 px-4 py-3 text-12 leading-[17px]">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-latest-grey-100">You receive</span>
@@ -574,6 +624,8 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
                   type="button"
                   onClick={handleConfirm}
                   disabled={confirmDisabled}
+                  title={confirmDisabled ? confirmReason : undefined}
+                  aria-label={confirmDisabled ? confirmReason : undefined}
                   className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#81133B] px-4 py-3 text-14 font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {topUp.isPending ? (

@@ -18,6 +18,7 @@ import { useBridgeStore } from '@/stores/bridgeStore'
 import { useToast } from '@/hooks/useToast'
 import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
 import { useResumeAttemptsStore } from '@/stores/useResumeAttemptsStore'
+import { pushNotification, dismissNotificationByKey } from '@/stores/useNotificationsStore'
 import { openSupport } from '@/utils/support'
 import { BridgeDirection } from '@/types/bridge'
 
@@ -155,6 +156,16 @@ function formatSeconds(totalSeconds: number): string {
   const seconds = totalSeconds % 60
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
+
+// Once the estimate reaches 0 the countdown must stop showing a frozen "00:00"
+// (reads as broken). It switches to a reassuring label instead: "Any moment now"
+// at/just past 0, then "Taking a little longer" once it runs this many seconds
+// past the estimate. Reassuring, never alarming.
+const OVERRUN_GRACE_SECONDS = 45
+
+// Stable feed key for the calm "keep this page open" in-progress notice, so it
+// upserts to a single Messages row and can be cleared by key on completion.
+const STAY_ON_PAGE_KEY = 'progress-stay-on-page'
 
 export default function ProgressCard({
   steps,
@@ -412,18 +423,43 @@ export default function ProgressCard({
   const formattedCountdown = formatSeconds(count)
   const initialEstimateFormatted = formatSeconds(estimatedTimeSeconds)
 
+  // `useCountdown` clamps at 0, so `count` never goes negative — it just sits at
+  // "00:00" while the transfer keeps running. That frozen zero is what reads as
+  // broken (#407). We measure how long we've been parked at 0 separately, and once
+  // the countdown hits 0 the display stops showing a number entirely.
+  const [overrunSeconds, setOverrunSeconds] = useState(0)
+  useEffect(() => {
+    if (count > 0 || !isInProgress) {
+      setOverrunSeconds(0)
+      return
+    }
+    const id = setInterval(() => setOverrunSeconds((s) => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [count, isInProgress])
+
+  // At/past 0 the number is replaced by a reassuring label; while counting, the
+  // label is null and the numeric "MM:SS" carries the estimate. Exactly one of the
+  // two is ever non-null in progress, so the mini-bar never renders a stuck 00:00.
+  const countdownRemaining = count > 0 ? formattedCountdown : null
+  const countdownLabel =
+    count > 0 ? null : overrunSeconds < OVERRUN_GRACE_SECONDS ? 'Any moment now' : 'Taking a little longer'
+
   // Stream the live countdown to the mini-bar (BridgeHeader), which renders it on the left in
   // place of the decorative glyph. BridgeHeader is a sibling and the shared store is off-limits,
-  // so the value crosses via a window event. Null while not in progress, and cleared on unmount
-  // so the glyph returns when the user leaves the progress screen.
+  // so the value crosses via a window event. `remaining` carries the number while counting;
+  // `label` carries the graceful zero/overrun copy once it reaches 0. Both null while not in
+  // progress, and cleared on unmount so the glyph returns when the user leaves the screen.
   useEffect(() => {
     if (typeof window === 'undefined') return
     window.dispatchEvent(
       new CustomEvent('shield:progress-timer', {
-        detail: { remaining: isInProgress ? formattedCountdown : null },
+        detail: {
+          remaining: isInProgress ? countdownRemaining : null,
+          label: isInProgress ? countdownLabel : null,
+        },
       }),
     )
-  }, [isInProgress, formattedCountdown])
+  }, [isInProgress, countdownRemaining, countdownLabel])
   useEffect(() => {
     return () => {
       if (typeof window === 'undefined') return
@@ -453,6 +489,35 @@ export default function ProgressCard({
       console.error('[ProgressCard] Export failed:', e)
     }
   }
+
+  // Calm, informational "keep this page open" notice, surfaced in the Messages feed
+  // while the transfer is actively in progress. Type `info` so it never hijacks the
+  // header ticker (which only surfaces warning/error) — it stays a quiet record that
+  // also carries the recovery-file download as an inline action. Keyed so it upserts
+  // to one row and clears cleanly the moment the transfer is no longer in progress
+  // (completed or failed), so it never lingers on the idle bridge later.
+  useEffect(() => {
+    if (!isInProgress) {
+      dismissNotificationByKey(STAY_ON_PAGE_KEY)
+      return
+    }
+    pushNotification({
+      type: 'info',
+      key: STAY_ON_PAGE_KEY,
+      title: 'Keep this page open',
+      message:
+        'Keep this page open while your transfer completes. If it is interrupted you can resume from Activity, or download a recovery file to restore it later.',
+      action:
+        direction && hasBackup ? { label: 'Download recovery file', onClick: handleExportBackup } : undefined,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInProgress, direction, hasBackup])
+
+  // Leaving the progress screen (unmount) also retires the notice, so a mid-transfer
+  // navigation away can't leave it sitting in the persisted feed.
+  useEffect(() => {
+    return () => dismissNotificationByKey(STAY_ON_PAGE_KEY)
+  }, [])
 
   const copyError = () => {
     if (!errorMessage) return
@@ -595,6 +660,29 @@ export default function ProgressCard({
           {/* Step-dots + live status line ("Exiting from Aztec…"). */}
           <div className="mt-4">
             <LoadingStepsBars steps={steps} currentStep={progressStep - 1} />
+          </div>
+
+          {/* Calm, reassuring "stay on this page" notice — informational, never a red alert.
+              Reframes the old "do not reload" banner as helpful guidance and points to the two
+              recovery paths (resume from Activity, or download a recovery file). Only shown while
+              in progress, so a completed/failed transfer never carries it. */}
+          <div className="mx-auto mt-3 flex max-w-sm items-start gap-2 rounded-md bg-[#F5F5F5] px-3 py-2">
+            <Icon icon="ph:info" width={14} height={14} className="mt-[1px] flex-shrink-0 text-latest-grey-500" />
+            <div className="text-[11px] font-medium leading-snug text-latest-grey-500">
+              <p>
+                Keep this page open while your transfer completes. If it is interrupted you can resume from
+                Activity, or download a recovery file to restore it later.
+              </p>
+              {direction && hasBackup && (
+                <button
+                  onClick={handleExportBackup}
+                  className="mt-1 inline-flex items-center gap-1 font-semibold text-[#047857] underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                >
+                  <Icon icon="ph:download-simple" width={13} height={13} />
+                  Download recovery file
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Escape hatch during the L2 claim: the claim pays gas from bridged Fee Juice and can

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useWalletStore } from '@/stores/walletStore'
@@ -543,6 +544,8 @@ function ZkPulse() {
 
 export default function ShieldOnboarding() {
   const reduce = useReducedMotion() ?? false
+  const router = useRouter()
+  const pathname = usePathname()
   const connectWaapWallet = useWalletStore((s) => s.connectWaapWallet)
   const isWaapConnected = useWalletStore((s) => s.isWaapConnected)
   const walletConnectionPhase = useWalletStore((s) => s.walletConnectionPhase)
@@ -643,9 +646,21 @@ export default function ShieldOnboarding() {
     } catch {}
   }
 
+  // Entering the bridge from the splash/flow must always land on the bridge form (/),
+  // never wherever the splash happened to be overlaying. The splash shows for every
+  // onboarded user on top of the current route, so a returning user sitting on
+  // /activity (the recovery view, reached after a completed/interrupted bridge) would
+  // otherwise be dropped straight back onto it with no visible step to connect Aztec or
+  // start a bridge. The bridge form is the one place the action button surfaces the
+  // "Connect Aztec Wallet" next step, so route there before dismissing.
+  const enterApp = () => {
+    if (pathname !== '/') router.push('/')
+    setMode('hidden')
+  }
+
   const finishFlow = () => {
     markOnboarded()
-    setMode('hidden')
+    enterApp()
   }
 
   const skip = () => finishFlow()
@@ -670,11 +685,11 @@ export default function ShieldOnboarding() {
     // connected yet: start the same WaaP connect flow the app uses and only enter
     // once it resolves, so the splash stays put if the user cancels the login.
     if (isWaapConnected) {
-      setMode('hidden')
+      enterApp()
       return
     }
     connectWaapWallet()
-      .then(() => setMode('hidden'))
+      .then(() => enterApp())
       .catch(() => {})
   }
 
@@ -845,7 +860,7 @@ export default function ShieldOnboarding() {
           onAnimationComplete={() => {
             markOnboarded()
             setLeaving(false)
-            setMode('hidden')
+            enterApp()
           }}
         >
           <motion.div

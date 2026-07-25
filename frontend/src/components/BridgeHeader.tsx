@@ -192,15 +192,25 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
   // event. ProgressCard is a sibling (not a parent) and the shared store is off-limits, so the
   // countdown crosses over here. When a countdown is live it takes the left slot in place of the
   // decorative glyph; otherwise the glyph returns. The progress screen clears it on unmount.
+  // `remaining` is the numeric "MM:SS" while the estimate is counting down; once it
+  // reaches 0 the number is dropped and `label` carries a reassuring copy instead
+  // ("Any moment now" / "Taking a little longer") so the timer never freezes at
+  // ~00:00 (#407). Exactly one of the two is set while a transfer is in progress.
   const [remainingTime, setRemainingTime] = React.useState<string | null>(null)
+  const [timerLabel, setTimerLabel] = React.useState<string | null>(null)
   React.useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ remaining: string | null }>).detail
+      const detail = (e as CustomEvent<{ remaining: string | null; label?: string | null }>).detail
       setRemainingTime(detail?.remaining ?? null)
+      setTimerLabel(detail?.label ?? null)
     }
     window.addEventListener('shield:progress-timer', handler as EventListener)
     return () => window.removeEventListener('shield:progress-timer', handler as EventListener)
   }, [])
+  // The timer occupies its slot whenever either form is present. All the "is a
+  // transfer live?" chrome gates (glyph, Activity shortcut) key off this, not the
+  // numeric value, so they stay correct through the zero/overrun handoff.
+  const timerActive = remainingTime !== null || timerLabel !== null
 
   // Only scroll the ticker when the text actually overflows the viewport. A
   // stable, always-mounted invisible measurer avoids the measure->switch->remeasure
@@ -258,12 +268,12 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
   // independently of the alert ticker. During a transfer an active warning/error would
   // otherwise take over the whole bar and hide the timer; keeping the timer in a dedicated
   // slot lets the countdown and the ticker coexist so the estimate is always visible.
-  const timerSlot = remainingTime ? (
+  const timerSlot = timerActive ? (
     <div
       className='flex shrink-0 items-center gap-[4px]'
       role='timer'
-      aria-label={`Estimated time remaining ${remainingTime}`}
-      title='Estimated time remaining'
+      aria-label={remainingTime ? `Estimated time remaining ${remainingTime}` : (timerLabel ?? 'Finishing your transfer')}
+      title={remainingTime ? 'Estimated time remaining' : 'Finishing your transfer'}
     >
       <Icon
         icon='ph:clock-countdown'
@@ -271,9 +281,15 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
         height={18}
         className='shrink-0 animate-pulse text-[#0A0A0A] motion-reduce:animate-none'
       />
-      <span className="text-[13px] font-[600] leading-[16px] tracking-[0.2px] tabular-nums text-[#0A0A0A] font-['Suisse_Intl']">
-        ~{remainingTime}
-      </span>
+      {remainingTime ? (
+        <span className="text-[13px] font-[600] leading-[16px] tracking-[0.2px] tabular-nums text-[#0A0A0A] font-['Suisse_Intl']">
+          ~{remainingTime}
+        </span>
+      ) : (
+        <span className="whitespace-nowrap text-[13px] font-[600] leading-[16px] tracking-[0.2px] text-[#0A0A0A] font-['Suisse_Intl']">
+          {timerLabel}
+        </span>
+      )}
     </div>
   ) : null
 
@@ -345,7 +361,7 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
       ) : (
         // IDLE: the glyph (only when the countdown slot is empty) + progress bar + "BRIDGE" label.
         <>
-          {!remainingTime && (
+          {!timerActive && (
             <img
               src='/assets/svg/human.aztec.svg'
               alt=''
@@ -388,7 +404,7 @@ const BridgeHeader: React.FC<BridgeHeaderProps> = ({ title = 'BRIDGE' }) => {
           countdown is live (`remainingTime`), and this would be a click-away trap
           that abandons the in-flight transfer — so it is removed for the duration.
           On idle screens it stays as a useful shortcut. */}
-      {!remainingTime && (
+      {!timerActive && (
         <button
           onClick={() => router.push('/activity')}
           className='ml-auto flex items-center justify-center p-1 rounded-full hover:bg-gray-100 transition-colors'

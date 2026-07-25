@@ -59,6 +59,12 @@ export interface AppNotification {
   mode?: 'public' | 'private'
   timestamp: number
   read: boolean
+  // True only for rows restored from localStorage on load, before any new event
+  // has fired in this session. The mini-bar ticker uses this to stay silent about
+  // a prior session's error/warning on a fresh bridge — the row still lives in the
+  // Messages feed, it just isn't force-surfaced in the ticker. Cleared the moment a
+  // new push refreshes the row (a genuine in-session event), so live alerts show.
+  rehydrated?: boolean
 }
 
 // Signal the drawer uses to fire the "genie into Messages" animation exactly
@@ -138,6 +144,9 @@ export const useNotificationsStore = create<NotificationsState>()(
             amount,
             mode,
             timestamp: Date.now(),
+            // A fresh event fired on this row, so it is no longer a stale
+            // rehydrated carryover — let the ticker surface it again.
+            rehydrated: false,
           }
           scheduledId = existing.id
           const rest = state.notifications.filter((_, i) => i !== idx)
@@ -213,6 +222,15 @@ export const useNotificationsStore = create<NotificationsState>()(
       // server and first client render both start empty — no hydration mismatch
       // on the unread badge or feed.
       skipHydration: true,
+      // Tag every restored row as `rehydrated` so the mini-bar ticker can ignore a
+      // prior session's error/warning on load (it would otherwise force-surface
+      // yesterday's alert on a fresh bridge). The rows stay in the Messages feed;
+      // a new in-session push clears the tag (see the keyed upsert) so live alerts
+      // still surface. Persisted value is harmless — it is re-set on each load.
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        state.notifications = state.notifications.map((n) => ({ ...n, rehydrated: true }))
+      },
       // Persist only serializable fields: drop the live `action` onClick (a
       // function) and never persist the one-shot genie animation signal.
       partialize: (state) => ({

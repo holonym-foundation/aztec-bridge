@@ -2,6 +2,7 @@
 
 import { Icon, loadIcons } from '@iconify/react'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
@@ -302,6 +303,12 @@ const AccountChip: React.FC<AccountChipProps> = ({
       ? availableAccounts.find((a) => a.address.toLowerCase() === linkedAccountAddress.toLowerCase())
       : undefined
 
+  // #349: dropdown actions that start a flow (Aztec connect, in-app verification)
+  // must transition the user to where the flow lives — the connect UI renders at
+  // z-20 while this menu is portaled at z-[60], so a control that only fires the
+  // handler leaves the menu frozen over the flow it just started.
+  const router = useRouter()
+
   const [open, setOpen] = useState(false)
   const [aztecSwitchOpen, setAztecSwitchOpen] = useState(false)
   // #275: which wallet row was just copied (keyed by address) so the check +
@@ -506,7 +513,10 @@ const AccountChip: React.FC<AccountChipProps> = ({
         {isWaapConnected && !isAztecConnected && (
           <button
             type="button"
-            onClick={onConnectAztec}
+            onClick={() => {
+              setOpen(false)
+              onConnectAztec()
+            }}
             disabled={isL2Connecting}
             title="Connect Aztec wallet"
             className={`flex items-center gap-1 flex-shrink-0 h-9 pl-2.5 pr-2 border-l text-[11px] font-medium ${
@@ -713,7 +723,10 @@ const AccountChip: React.FC<AccountChipProps> = ({
               </span>
               <button
                 type="button"
-                onClick={onConnectAztec}
+                onClick={() => {
+                  setOpen(false)
+                  onConnectAztec()
+                }}
                 disabled={isL2Connecting}
                 title="Connect Aztec wallet"
                 className={`flex items-center gap-1 flex-shrink-0 pl-1.5 pr-2 py-1 rounded-full text-[11px] font-medium border ${
@@ -787,23 +800,42 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 - Passport tier, no Clean Hands → Upgrade to Clean Hands;
                 - no proof yet → Get verified;
                 - already Clean Hands → hidden. */}
-          {!l1IsPoch && (
-            <a
-              href={l1OnPassportTier ? POCH_MINT_URL : 'https://app.passport.xyz'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
-            >
-              <Icon icon="ph:plus-circle" width={16} height={16} className={accentPink(isDark)} />
-              <span className={`text-xs font-medium ${navText(isDark)}`}>
-                {l1Verified && !attVerified
-                  ? 'Complete verification'
-                  : l1OnPassportTier
-                    ? 'Upgrade to Clean Hands'
-                    : 'Get verified'}
-              </span>
-            </a>
-          )}
+          {!l1IsPoch &&
+            (l1Verified && !attVerified ? (
+              // #349: the wallet already holds an L1 proof but the authed Shield
+              // attestation is incomplete — the missing step is the IN-APP humanity
+              // re-check (VerificationStep, surfaced on the bridge page), NOT an
+              // external passport rebuild. Route into the app's verify flow and
+              // close the dropdown so it can never sit frozen over the page.
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false)
+                  router.push('/?verify=1')
+                }}
+                className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
+              >
+                <Icon icon="ph:plus-circle" width={16} height={16} className={accentPink(isDark)} />
+                <span className={`text-xs font-medium ${navText(isDark)}`}>Complete verification</span>
+              </button>
+            ) : (
+              // Building a Passport score / minting Clean Hands are genuinely
+              // external steps (the same destinations BridgeStepsRail and
+              // VerificationStep link to). Keep the external link, but close the
+              // dropdown on click so it doesn't stay frozen open behind the tab.
+              <a
+                href={l1OnPassportTier ? POCH_MINT_URL : 'https://app.passport.xyz'}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
+              >
+                <Icon icon="ph:plus-circle" width={16} height={16} className={accentPink(isDark)} />
+                <span className={`text-xs font-medium ${navText(isDark)}`}>
+                  {l1OnPassportTier ? 'Upgrade to Clean Hands' : 'Get verified'}
+                </span>
+              </a>
+            ))}
 
           <Divider isDark={isDark} />
 

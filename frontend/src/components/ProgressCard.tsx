@@ -176,7 +176,8 @@ export default function ProgressCard({
   const notify = useToast()
 
   const { waapAddress: l1Address, signWaapMessage } = useWalletStore()
-  const { setRecovery, setWithdrawalRecovery, setDirection } = useBridgeStore()
+  const { setRecovery, setWithdrawalRecovery, setDirection, isPrivacyModeEnabled, setPrivacyModeEnabled } =
+    useBridgeStore()
   const { data: operations } = useBridgeOperations()
   const [resuming, setResuming] = useState(false)
 
@@ -209,6 +210,15 @@ export default function ProgressCard({
   // two disagree we surface a warning so the user doesn't resume in the wrong mode.
   const modeKnown = isPrivate !== undefined
   const privacyMismatch = modeKnown && currentPrivacyMode !== undefined && isPrivate !== currentPrivacyMode
+
+  // The operation on screen is private, so match the user's intent by enabling Privacy Mode
+  // automatically instead of warning about a mismatch. Guarded to fire only while the op is
+  // private and the toggle is still off, so it settles after a single set and never loops.
+  useEffect(() => {
+    if (isPrivate === true && !isPrivacyModeEnabled) {
+      setPrivacyModeEnabled(true)
+    }
+  }, [isPrivate, isPrivacyModeEnabled, setPrivacyModeEnabled])
   // Fall back to offering top-up only when the deposit already landed on L1 (l1TxUrl set)
   // — i.e. we're at/after the claim boundary where Fee Juice matters. A pre-deposit
   // failure moved no funds and needs no gas top-up.
@@ -456,6 +466,23 @@ export default function ProgressCard({
 
   const showBackButton = isAllComplete || hasError
 
+  // The From/To marks follow the direction, so each mark always matches the network named beside
+  // it: a deposit (L1→L2) runs Eth→Aztec, a withdrawal (L2→L1) runs Aztec→Eth. The Aztec mark
+  // keeps its dark-chip treatment. Direction unknown falls back to the deposit orientation.
+  const isWithdrawal = direction === 'L2_TO_L1'
+  const renderEthMark = (small = false) => (
+    <StyledImage src="/assets/svg/ethLogo.svg" alt="" className={small ? 'h-5 w-5' : 'h-6 w-6'} />
+  )
+  const renderAztecMark = (small = false) => (
+    <span
+      className={`inline-flex ${small ? 'h-5 w-5' : 'h-6 w-6'} shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]`}
+    >
+      <StyledImage src="/assets/svg/aztec.svg" alt="" className={small ? 'h-[15px] w-[15px]' : 'h-[18px] w-[18px]'} />
+    </span>
+  )
+  const renderFromMark = (small = false) => (isWithdrawal ? renderAztecMark(small) : renderEthMark(small))
+  const renderToMark = (small = false) => (isWithdrawal ? renderEthMark(small) : renderAztecMark(small))
+
   // One compact, icon-led explorer-link row used across every state (in-progress, success,
   // failure). Kept near the status so it never sinks to the bottom of the card where the big
   // pills used to clip (#200) — and it stays inside the no-scroll budget.
@@ -496,15 +523,14 @@ export default function ProgressCard({
         <div className="flex min-h-full flex-col justify-center py-4">
           <p className="text-center font-semibold text-md">Transaction in progress</p>
 
-          {/* Privacy-mode mismatch — the operation on screen was created in the opposite mode from
-              the live toggle. Concise, icon-led, only on the mismatch edge case. */}
-          {privacyMismatch && (
+          {/* Privacy-mode mismatch — a public operation is on screen while the live toggle is on.
+              The private case auto-enables Privacy Mode (no warning), so only the public case
+              surfaces here. Concise, icon-led, only on that edge case. */}
+          {privacyMismatch && !isPrivate && (
             <div className="mx-auto mt-2 flex max-w-sm items-start gap-1.5 rounded-md bg-light-yellow px-2.5 py-1.5">
               <Icon icon="ph:warning-fill" width={13} height={13} className="mt-[1px] flex-shrink-0 text-dark-yellow" />
               <p className="text-[11px] font-medium leading-snug text-dark-yellow">
-                {isPrivate
-                  ? 'This transfer is Private, but Privacy Mode is off.'
-                  : 'This transfer is Public, but Privacy Mode is on.'}
+                This transfer is Public, but Privacy Mode is on.
               </p>
             </div>
           )}
@@ -543,16 +569,14 @@ export default function ProgressCard({
               <div>
                 <p className="text-14 font-semibold text-latest-grey-100">From</p>
                 <div className="flex gap-2 mt-2">
-                  <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-6 w-6" />
+                  {renderFromMark()}
                   <p className="text-16 font-medium text-latest-black-100 w-[106px]">{fromNetwork}</p>
                 </div>
               </div>
               <div>
                 <p className="text-14 font-semibold text-latest-grey-100">To</p>
                 <div className="flex gap-2 mt-2">
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]">
-                    <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-[18px] w-[18px]" />
-                  </span>
+                  {renderToMark()}
                   <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
                 </div>
               </div>
@@ -652,16 +676,14 @@ export default function ProgressCard({
 
         {hasError && <p className="text-center text-12 text-latest-grey-500 mt-1 px-2">{failure.message}</p>}
 
-        {/* Privacy-mode mismatch warning — the operation on screen was created in the opposite mode
-            from the live toggle (e.g. resuming a public claim while Privacy Mode is on). Concise,
-            icon-led, only rendered on the mismatch edge case so it never eats the no-scroll budget. */}
-        {privacyMismatch && (
+        {/* Privacy-mode mismatch warning — a public operation is on screen while Privacy Mode is on
+            (e.g. resuming a public claim). The private case auto-enables Privacy Mode instead of
+            warning, so only the public case renders here, keeping it inside the no-scroll budget. */}
+        {privacyMismatch && !isPrivate && (
           <div className="mt-2 flex items-start gap-1.5 rounded-md bg-light-yellow px-2.5 py-1.5">
             <Icon icon="ph:warning-fill" width={13} height={13} className="mt-[1px] flex-shrink-0 text-dark-yellow" />
             <p className="text-[11px] font-medium leading-snug text-dark-yellow">
-              {isPrivate
-                ? 'This transfer is Private, but Privacy Mode is off.'
-                : 'This transfer is Public, but Privacy Mode is on.'}
+              This transfer is Public, but Privacy Mode is on.
             </p>
           </div>
         )}
@@ -700,14 +722,12 @@ export default function ProgressCard({
       {hasError ? (
         <div className="bg-[#F5F5F5] rounded-md mt-3 px-4 py-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
           <span className="inline-flex items-center gap-1.5">
-            <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-5 w-5" />
+            {renderFromMark(true)}
             <span className="text-14 font-medium text-latest-black-100">{fromNetwork}</span>
           </span>
           <Icon icon="ph:arrow-right-bold" width={13} height={13} className="text-latest-grey-100" />
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]">
-              <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-[15px] w-[15px]" />
-            </span>
+            {renderToMark(true)}
             <span className="text-14 font-medium text-latest-black-100">{toNetwork}</span>
           </span>
           <span className="text-latest-grey-300">·</span>
@@ -719,16 +739,14 @@ export default function ProgressCard({
             <div>
               <p className="text-14 font-semibold text-latest-grey-100">From</p>
               <div className="flex gap-2 mt-1.5">
-                <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-6 w-6" />
+                {renderFromMark()}
                 <p className="text-16 font-medium text-latest-black-100 w-[106px]">{fromNetwork}</p>
               </div>
             </div>
             <div>
               <p className="text-14 font-semibold text-latest-grey-100">To</p>
               <div className="flex gap-2 mt-1.5">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]">
-                  <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-[18px] w-[18px]" />
-                </span>
+                {renderToMark()}
                 <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
               </div>
             </div>
@@ -772,10 +790,10 @@ export default function ProgressCard({
 
       {/* Error recovery actions — the primary CTA (resume, or top-up for a diagnosed fuel
           shortfall) shares one row with a real back button in an ~80/20 split. The alternate
-          recovery path and the Activity link ride underneath as light text links, so the whole
-          block stays inside the no-scroll budget instead of stacking full-width pills. */}
+          recovery path and the Activity link sit directly beneath the CTA as light text links,
+          grouped tightly with it rather than floated to the card footer. */}
       {hasError && !isAlreadyCompleted && direction && (
-        <div className="mt-auto mb-6 pt-3 flex flex-col items-center gap-2">
+        <div className="mt-4 mb-6 flex flex-col items-center gap-2">
           <div className="flex w-full items-stretch gap-2">
             <button
               onClick={() => router.push('/?app=1')}

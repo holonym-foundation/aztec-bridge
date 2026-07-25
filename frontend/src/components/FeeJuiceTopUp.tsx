@@ -252,7 +252,7 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
   const fuelAmount = deriveFuelAmount(spendAmount, fundingDecimals)
 
   const { fjOutput, loading: quoteLoading, error: quoteError } = useTopUpQuote(fuelAmount, fundingAddress, fundingDecimals)
-  const { feeLimitFj, loading: sufficiencyLoading } = useTopUpSufficiency(fjOutput, fuelType)
+  const { sufficient, feeLimitFj, loading: sufficiencyLoading } = useTopUpSufficiency(fjOutput, fuelType)
 
   // The FJ that pays an L2 claim comes from the user's ACCOUNT balance: public
   // FJ for public fuel, BridgedFPC balance for private fuel, so the existing
@@ -274,14 +274,12 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
   // recovery (deposit likely already completed) is exactly that case, so it can't be "enough".
   const alreadyEnough =
     needFj != null && existingFj >= needFj && !selfFundLandingShort && !depositLikelyCompleted
-  const effectiveSufficient: boolean | null =
-    alreadyEnough
-      ? true
-      : needFj == null || swapFj == null
-        ? null
-        : fuelType === 'public'
-          ? existingFj + swapFj >= needFj
-          : swapFj >= needFj
+  // Whether the CHOSEN top-up amount will actually land: a fresh fuel bridge self-funds its own
+  // L2 claim, so the swap output alone must clear the claim fee, regardless of any existing
+  // balance. `sufficient` (fjOutput >= feeLimit) is the exact gate the SDK asserts before it
+  // throws "Insufficient fuel". An existing balance covers other txs but never this fresh claim,
+  // so it must not be added in here or the UI would promise coverage the top-up can't deliver.
+  const topUpCovers = sufficient
 
   // Tell the page whether the interrupted claim is already fundable from the existing balance
   // (only possible in public mode) so it can offer Resume without a redundant top-up.
@@ -316,7 +314,7 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
     fjOutput === null ||
     !!quoteError ||
     sufficiencyLoading ||
-    effectiveSufficient === false ||
+    topUpCovers === false ||
     topUp.isPending
 
   const spend = (amount: string) => {
@@ -552,17 +550,17 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
                       <span className="font-medium text-latest-grey-100">+{pctOfBalance.toFixed(0)}%</span>
                     </div>
                   )}
-                  {!sufficiencyLoading && (
+                  {!sufficiencyLoading && topUpCovers !== null && (
                     <div
                       className={`mt-2 border-t border-latest-grey-300 pt-2 font-medium ${
-                        effectiveSufficient === false ? 'text-[#D92D20]' : 'text-[#17235E]'
+                        topUpCovers ? 'text-[#17235E]' : 'text-[#D92D20]'
                       }`}
                     >
-                      {effectiveSufficient === false
-                        ? recommended
-                          ? `Not enough yet. Add about ${recommended} ${fundingSymbol} to cover a transaction.`
-                          : 'Not enough yet. Increase the amount.'
-                        : `Covers a transaction (about ${feeLimitFj ?? claimFeeFj} FJ needed).`}
+                      {topUpCovers
+                        ? `Covers a transaction (about ${feeLimitFj ?? claimFeeFj} FJ needed).`
+                        : `This produces ~${formatFjAmount(fjOutput)} FJ but the transaction needs ~${
+                            feeLimitFj ?? claimFeeFj
+                          } FJ. ${recommended ? `Add about ${recommended} ${fundingSymbol}.` : 'Increase the amount.'}`}
                     </div>
                   )}
                 </div>
@@ -607,23 +605,6 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
               )}
             </div>
           )}
-
-          {/* Send / withdraw affordance. Fee Juice is gas on Aztec and cannot be moved once it lands,
-              so there is no share or claim back action to wire yet. Surface the affordance, state why
-              it is unavailable, and leave the TODO.
-              TODO(#331): wire a "send fresh Fee Juice to another Aztec account" flow once the standalone
-              top up supports a recipient override (the primitive exists on the deposit path via
-              FuelToggle's fuelRecipientOverride, but is not exposed for a standalone top up). There is
-              no claim back / withdraw of existing Fee Juice: the protocol makes it non-transferable. */}
-          <div className="flex items-start gap-2 rounded-lg border border-dashed border-latest-grey-300 px-4 py-3">
-            <Icon icon="ph:paper-plane-tilt" width={15} height={15} className="mt-0.5 flex-shrink-0 text-latest-grey-500" />
-            <div className="text-12 leading-[17px] text-latest-grey-100">
-              <p className="font-semibold text-latest-grey-100">Send or withdraw Fee Juice</p>
-              <p className="text-latest-grey-500">
-                Not available yet. Fee Juice is gas on Aztec and cannot be moved once it lands.
-              </p>
-            </div>
-          </div>
         </>
       )}
     </div>

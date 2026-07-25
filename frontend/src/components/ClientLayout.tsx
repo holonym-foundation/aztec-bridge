@@ -64,15 +64,15 @@ export default function ClientLayout({
 
   return (
     <div
-      // App shell: a flex column at least one viewport tall (min-h-[100dvh]). On
-      // comfortable heights the flex-grow content region fills the slack so the footer
-      // rests flush at the viewport bottom and nothing scrolls (RootStyle caps the card
-      // so header + card + footer fit exactly). When a viewport is genuinely too short,
-      // the container grows past the viewport and the DOCUMENT scrolls so the footer is
-      // always reachable — never clipped (#328) and never overflowing into a bare strip
-      // below a fixed shell (#347). min-height, not a fixed height, is what keeps the
-      // background covering the full page and the footer correctly placed.
-      className="relative flex flex-col w-full min-w-0 overflow-x-hidden min-h-[100dvh]"
+      // Static-viewport app shell (#363): pinned to exactly one viewport (h-[100dvh])
+      // with overflow HIDDEN, so the page never scrolls and nothing ever spills below
+      // the footer into a bare dark strip (the #347 regression — that earlier fixed-height
+      // attempt lacked this clip). It is a flex column: header (top) + card region
+      // (flex-grow, scrolls INTERNALLY only if the card genuinely can't fit) + footer
+      // (bottom). On comfortable heights everything fits with no scroll at all — the
+      // "looking through a window, see everything" experience. The clip guarantees the
+      // footer is always visible and never pushed off-screen.
+      className="relative flex flex-col w-full min-w-0 overflow-hidden h-[100dvh]"
       style={{ minWidth: 0 }}
     >
       {/* Onboarding is skipped on docs so the guides render without connecting a wallet. */}
@@ -143,11 +143,12 @@ export default function ClientLayout({
         <BannerAztecNodeError />
         <Header />
       </div>
-      {/* Main content — a flex-grow column so the card region absorbs the slack and
-          pushes the footer to the bottom on comfortable heights. When content genuinely
-          exceeds the viewport the whole page scrolls (the container is min-height), so
-          the footer is revealed rather than clipped or floated mid-page. */}
-      <div className="relative z-20 flex flex-grow flex-col min-h-0">
+      {/* Main content — a flex-grow column that owns its own overflow (min-h-0 +
+          overflow-y-auto). On comfortable heights the card fits and nothing scrolls; only
+          when a card is genuinely taller than the space between header and footer does
+          THIS region scroll internally, so the page (h-[100dvh], clipped) never scrolls
+          and the footer stays pinned. */}
+      <div className="relative z-20 flex flex-grow flex-col min-h-0 overflow-y-auto">
         <div className="flex-grow">{children}</div>
       </div>
       {/* Footer pinned to the bottom of the fixed shell (shrink-0 so it keeps its

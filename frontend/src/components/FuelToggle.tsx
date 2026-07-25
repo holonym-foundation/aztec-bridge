@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { AztecAddress } from '@aztec/stdlib/aztec-address'
@@ -323,7 +323,7 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
   const isValid = fuelNum > 0 && fuelNum < bridgeNum
   const netBridge = bridgeNum - fuelNum
   const hasBridgedFpc = !!BRIDGED_FPC_ADDRESS
-  const shouldReduceMotion = useReducedMotion()
+  const router = useRouter()
 
   // The enable switch and the detail accordion are independent: fuel top-up defaults ON
   // (business logic), but its editing UI (public/private, amount, send-to) stays collapsed
@@ -557,17 +557,13 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
         `full amount to fully cover gas.`,
       key: 'fuel-bad-rate',
       action: {
-        label: `Reserve ${honest} ${tokenSymbol} to fully cover gas`,
-        onClick: () => {
-          setDetailOpen(true)
-          onAmountChange(honest)
-        },
+        label: 'Top Up Gas',
+        onClick: () => router.push('/fee-juice'),
       },
     })
-    // setDetailOpen is stable enough for this transient handler; excluding it keeps the effect
-    // keyed on the alert's data, not on the accordion state.
+    // router is stable across renders; excluding it keeps the effect keyed on the alert's data.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [badRate, recommendedFuel, fuelAmount, tokenSymbol, onAmountChange])
+  }, [badRate, recommendedFuel, fuelAmount, tokenSymbol])
 
   // Transient heads-up (#5): public fuel while privacy mode is on would deanonymize the claim.
   // Fire once per entry into that state as an auto-dismissing reminder (privacy mode force-flips
@@ -590,33 +586,13 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
     })
   }, [fuelEnabled, isPrivacyModeEnabled, fuelType])
 
-  const detailId = 'fuel-toggle-detail'
-
   return (
     <div className="bg-[#F5F5F5] rounded-md p-2.5 mt-1.5 overflow-hidden">
       <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          className="flex items-center gap-1.5 min-w-0 text-left disabled:cursor-default"
-          onClick={() => setDetailOpen((open) => !open)}
-          disabled={!fuelEnabled}
-          aria-expanded={fuelEnabled && detailOpen}
-          aria-controls={detailId}
-        >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <Icon icon="ph:gas-pump-fill" width={14} height={14} className="shrink-0 text-[#17235E]" />
           <span className="text-sm font-medium text-latest-grey-700">Top up gas balance</span>
-          {fuelEnabled && (
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              fill="none"
-              className={`shrink-0 transition-transform ${detailOpen ? 'rotate-180' : ''}`}
-              aria-hidden="true"
-            >
-              <path d="M1 3L5 7L9 3" stroke="#747474" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-        </button>
+        </span>
         <button
           type="button"
           role="switch"
@@ -671,6 +647,23 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
           )}
         </span>
       </div>
+      {fuelEnabled && (
+        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-latest-grey-500">
+          {usePrivateFj ? (
+            <Icon icon="ph:lock-key-fill" width={11} height={11} className="text-[#81133B]" />
+          ) : (
+            <Icon icon="ph:globe-hemisphere-west-fill" width={11} height={11} className="text-[#17235E]" />
+          )}
+          <span
+            className="cursor-help"
+            data-tooltip-id="fuel-info"
+            data-tooltip-content="Fee Juice is gas on Aztec. Manage your gas balance on the Fee Juice screen."
+          >
+            {usePrivateFj ? 'Private Fee Juice' : 'Public Fee Juice'}
+          </span>
+        </div>
+      )}
+
       <ReactTooltip id="fj-warning" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
       <ReactTooltip id="fuel-info" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
 
@@ -683,15 +676,13 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
             <Icon icon="ph:check-circle-fill" width={13} height={13} className="flex-shrink-0 text-[#17235E]" />
             <span className="truncate text-[11px] font-semibold leading-[15px] text-[#17235E]">Enough Fee Juice</span>
           </span>
-          {!detailOpen && (
-            <button
-              type="button"
-              onClick={() => setDetailOpen(true)}
-              className="shrink-0 text-[11px] font-medium text-[#17235E] hover:underline"
-            >
-              {fuelNum > 0 ? 'Edit amount' : 'Set an amount'}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => router.push('/fee-juice')}
+            className="shrink-0 text-[11px] font-medium text-[#17235E] hover:underline"
+          >
+            Top Up Gas
+          </button>
         </div>
       )}
 
@@ -713,261 +704,26 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
           </span>
           <button
             type="button"
-            onClick={() => setDetailOpen(true)}
+            onClick={() => router.push('/fee-juice')}
             className="shrink-0 text-[11px] font-medium text-[#81133B] hover:underline"
           >
-            Details
+            Top Up Gas
           </button>
         </div>
       )}
 
-      {/* Standalone Set/Edit link — only when NOT already covered (the covered row above carries
-          its own inline link). Keeps the collapsed panel to a single actionable row. */}
-      {fuelEnabled && !alreadyCovered && !detailOpen && (
+      {/* Short (not covered): the heavy top-up flow lives on the dedicated /fee-juice screen, so
+          the bridge form never grows past the viewport (SOP §5, no scroll). */}
+      {fuelEnabled && !alreadyCovered && !badRate && (
         <button
           type="button"
-          onClick={() => setDetailOpen(true)}
-          className="mt-1 flex w-full items-center gap-1 text-left text-xs font-medium text-[#17235E] transition-colors hover:underline"
+          onClick={() => router.push("/fee-juice")}
+          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#17235E] px-3 py-1.5 text-[12px] font-semibold text-white transition-opacity hover:opacity-80"
         >
-          <Icon icon="ph:sliders-horizontal-fill" width={12} height={12} className="flex-shrink-0" />
-          {fuelNum > 0 ? `${fuelAmount} ${tokenSymbol} reserved for gas. Edit amount` : 'Set an amount'}
+          <Icon icon="ph:gas-pump-fill" width={14} height={14} />
+          {fuelNum > 0 ? `Top Up Gas (${fuelAmount} ${tokenSymbol} reserved)` : "Top Up Gas"}
         </button>
       )}
-
-      <AnimatePresence initial={false}>
-        {fuelEnabled && detailOpen && (
-          <motion.div
-            id={detailId}
-            key="fuel-detail"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: shouldReduceMotion ? 0 : DS_DUR_NORMAL, ease: DS_EASE_DEFAULT }}
-            className="overflow-hidden"
-          >
-            <div className="mt-3 space-y-2">
-              <div className="text-xs text-latest-grey-500 space-y-0.5">
-                <div className="flex justify-between items-center h-4">
-                  <span className="flex items-center gap-1">
-                    <Icon icon="ph:globe-hemisphere-west-fill" width={11} height={11} className="text-[#17235E]" />
-                    Public Fee Juice
-                    <Icon
-                      icon="ph:info"
-                      width={11}
-                      height={11}
-                      className="cursor-help text-latest-grey-500"
-                      data-tooltip-id="fuel-info"
-                      data-tooltip-content="Fee Juice is gas on Aztec. Add a bit extra so you stay funded for your next transactions."
-                    />
-                  </span>
-                  <span className="font-semibold">
-                    {feeJuiceBalanceLoading ? (
-                      <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
-                    ) : (
-                      (feeJuiceBalance ?? '--')
-                    )}
-                  </span>
-                </div>
-                {hasBridgedFpc && (
-                  <div className="flex justify-between items-center h-4">
-                    <span
-                      className="flex items-center gap-1 cursor-help"
-                      data-tooltip-id="fuel-info"
-                      data-tooltip-content={
-                        isPrivacyModeEnabled
-                          ? 'Private Fee Juice enforced. Privacy mode pays L2 gas from private fee juice so your claim stays anonymous.'
-                          : 'Private Fee Juice pays L2 gas from the BridgedFPC so your claim stays anonymous.'
-                      }
-                    >
-                      <Icon icon="ph:lock-key-fill" width={11} height={11} className="text-[#81133B]" />
-                      Private Fee Juice
-                    </span>
-                    <span className="font-semibold">
-                      {privateFeeJuiceBalanceLoading ? (
-                        <span className="inline-block h-2.5 w-12 bg-neutral-300 rounded animate-pulse" />
-                      ) : (
-                        (privateFeeJuiceBalance ?? '--')
-                      )}
-                    </span>
-                  </div>
-                )}
-              </div>
-              {pricesError && <p className="text-xs text-amber-600">Live prices unavailable, using fallback prices</p>}
-
-              <div className="flex items-center gap-1.5 max-w-full">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder={`Amount in ${tokenSymbol}`}
-                  value={fuelAmount}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    if (v === '' || !isNaN(Number(v))) onAmountChange(v)
-                  }}
-                  className="flex-1 min-w-0 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                {USD_PRESETS.map((usd) => {
-                  const tokenEquiv = usdToTokenAmount(usd, tokenSymbol, prices)
-                  return (
-                    <button
-                      key={usd}
-                      onClick={() => onAmountChange(tokenEquiv)}
-                      title={`${tokenEquiv} ${tokenSymbol}`}
-                      className={`shrink-0 px-1.5 py-1 text-xs rounded border ${
-                        activePreset === usd
-                          ? 'border-blue-500 bg-blue-50 text-blue-600'
-                          : 'border-gray-300 text-gray-600 hover:border-gray-400'
-                      }`}
-                    >
-                      ${usd}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {fuelAmount && !isValid && fuelNum >= bridgeNum && (
-                <p className="text-xs text-red-500">Gas amount must be less than bridge amount</p>
-              )}
-              {isValid && (loading || (fjOutput === null && !error)) && <QuoteSkeleton />}
-              {isValid && error && <p className="text-xs text-red-500">{error}</p>}
-              {isValid && !loading && !error && fjOutput !== null && (
-                <div className="text-xs text-latest-grey-700 space-y-0.5">
-                  <p>
-                    Swapping {fuelNum} {tokenSymbol} → ~{formatFjAmount(fjOutput)} FJ
-                  </p>
-                  <p>
-                    You&apos;ll receive: {youWillReceive ?? Number(netBridge.toFixed(6))} {tokenSymbol} + ~
-                    {formatFjAmount(fjOutput)} Fee
-                    Juice
-                  </p>
-                  {!sufficiencyLoading && effectiveSufficient === false && (
-                    <p className="text-red font-medium mt-1">
-                      Not enough gas: ~{formatFjAmount(fjOutput)} FJ from swap but ~{feeLimitFj} FJ needed for L2 claim.
-                      {fuelNum >= bridgeNum * 0.9
-                        ? ' Gas costs nearly your whole bridge, so increase the bridge amount.'
-                        : ' Increase the fuel amount.'}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {((hasBridgedFpc && !isPrivacyModeEnabled) || recipientOverrideAvailable) && (
-                <div className="border-t border-gray-200 pt-2 mt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvanced((v) => !v)}
-                    className="flex items-center gap-1 text-xs font-medium text-latest-grey-700 hover:text-black transition-colors"
-                  >
-                    Advanced options
-                    <Icon icon={showAdvanced ? 'ph:caret-up' : 'ph:caret-down'} width={12} height={12} />
-                  </button>
-                  {showAdvanced && (
-                    <div className="mt-2 space-y-2">
-                      {hasBridgedFpc && !isPrivacyModeEnabled && (
-                        <div className="flex rounded-md overflow-hidden border border-gray-200 text-xs">
-                          <button
-                            onClick={() => onFuelTypeChange('public')}
-                            className={`flex-1 py-1.5 px-3 font-medium transition-colors ${
-                              fuelType === 'public' ? 'bg-black text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            Public
-                          </button>
-                          <button
-                            onClick={() => onFuelTypeChange('private')}
-                            className={`flex-1 py-1.5 px-3 font-medium transition-colors ${
-                              fuelType === 'private' ? 'bg-black text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            Private
-                          </button>
-                        </div>
-                      )}
-
-                      {recipientOverrideAvailable && (
-                        <div className="text-xs">
-                          <div className="flex items-center justify-between">
-                            <div className="flex flex-col">
-                              <span className="text-latest-grey-700 font-medium">Send fee juice to</span>
-                              <span className="text-latest-grey-500">
-                                {recipientStatus.parsed && recipientStatus.isThirdParty
-                                  ? shortenAztecAddress(recipientStatus.parsed)
-                                  : selfAztecAddress
-                                    ? `${shortenAztecAddress(selfAztecAddress)} (this wallet)`
-                                    : 'this wallet'}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const next = !recipientOverrideOpen
-                                setRecipientOverrideOpen(next)
-                                if (!next) {
-                                  // Closing the panel cancels any pending override.
-                                  if (fuelRecipientOverride.length > 0) onFuelRecipientOverrideChange('')
-                                  setConfirmedThirdParty(false)
-                                }
-                              }}
-                              className="text-blue-600 hover:underline"
-                            >
-                              {recipientOverrideOpen ? 'Cancel' : 'Edit'}
-                            </button>
-                          </div>
-
-                          {recipientOverrideOpen && (
-                            <div className="mt-2 space-y-2">
-                              <input
-                                type="text"
-                                spellCheck={false}
-                                autoComplete="off"
-                                placeholder="Aztec L2 address (0x…)"
-                                value={fuelRecipientOverride}
-                                onChange={(e) => onFuelRecipientOverrideChange(e.target.value.trim())}
-                                className={`w-full px-3 py-1.5 text-xs border rounded-md focus:outline-none focus:ring-1 ${
-                                  recipientStatus.error
-                                    ? 'border-red-400 focus:ring-red-400'
-                                    : 'border-gray-300 focus:ring-blue-500'
-                                }`}
-                              />
-                              {recipientStatus.error && <p className="text-red-500">{recipientStatus.error}</p>}
-                              {recipientStatus.valid && recipientStatus.isThirdParty && (
-                                <div className="rounded-md bg-amber-50 border border-amber-200 p-2 space-y-1.5">
-                                  <p className="text-amber-800">
-                                    <span className="font-semibold">Heads up:</span> fee juice is non-transferable on
-                                    Aztec. Once it lands at this address it cannot be moved. The recipient will need a
-                                    claim link from you to actually receive it.
-                                  </p>
-                                  <p className="text-amber-800">
-                                    Your token claim will pay L2 gas from your{' '}
-                                    <span className="font-semibold">existing</span> Fee Juice balance
-                                    {feeJuiceBalance ? ` (currently ${feeJuiceBalance})` : ''}, so make sure you have
-                                    enough or your token claim will fail.
-                                  </p>
-                                  <label className="flex items-start gap-2 cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={confirmedThirdParty}
-                                      onChange={(e) => setConfirmedThirdParty(e.target.checked)}
-                                      className="mt-0.5 shrink-0"
-                                    />
-                                    <span className="text-amber-800">
-                                      I&apos;ve double-checked the address and understand this is irreversible.
-                                    </span>
-                                  </label>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   )
 }

@@ -168,11 +168,10 @@ const sections: DocsSection[] = [
         <Callout tone="info">
           <strong>Pending-deposit holds (Human Passport).</strong> When you request a Human Passport attestation for a
           deposit, that deposit&apos;s amount is briefly reserved against your limits so a signed authorization
-          can&apos;t be stockpiled and spent later to slip past the caps. The hold clears the moment the deposit
+          can&apos;t be stockpiled and spent later to slip past the caps. The hold clears once the deposit
           confirms on-chain, so successful deposits back-to-back are unaffected. If a deposit fails or is abandoned, its
-          hold releases automatically within 30 minutes — so a retry that would exceed your remaining budget may need to
-          wait for it to clear. The button shows &quot;Pending deposit — limit frees in ≤30 min&quot; while a hold is
-          blocking it.
+          hold releases automatically. A retry that would exceed your remaining budget may need to wait for the hold to
+          clear. While a hold is blocking a deposit, the app notes that part of your limit is held by a pending deposit.
         </Callout>
       </>
     ),
@@ -351,11 +350,10 @@ const sections: DocsSection[] = [
             (rolling 24h). Budget frees up as your earlier deposits age past 24 hours.
           </li>
           <li>
-            <strong>&quot;Pending deposit — limit frees in ≤30 min&quot;.</strong> A Human Passport deposit you started
+            <strong>Limit held by a pending deposit.</strong> A Human Passport deposit you started
             is still holding part of your limit (see{' '}
             <a href="#limits" className="text-latest-blue-100 underline">Rate Limits &amp; Caps</a>). Once that deposit
-            confirms the hold clears immediately; if it failed or was abandoned, the hold releases on its own within 30
-            minutes and you can retry.
+            confirms the hold clears; if it failed or was abandoned, the hold releases on its own and you can retry.
           </li>
           <li>
             <strong>An RPC/batch error toast.</strong> Some free RPC endpoints reject batched requests. Use a paid RPC

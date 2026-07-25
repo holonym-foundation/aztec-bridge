@@ -736,9 +736,29 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         {/* Version chip — its own rounded, visually distinct chip. The
             DeploymentSelector supplies its own tinted pill material, caret, and
             expandable network/version dropdown; here it simply sits centered
-            directly under the brand chip. */}
+            directly under the brand chip.
+
+            #413: the selector's own fill is nearly transparent (0.04 light /
+            0.06 dark), so its text used to read straight off the PAGE background
+            — the deep-maroon Privacy-Mode field in particular washed the muted
+            tokens (v · Aztec Testnet, the ALPHA tag) below legibility. Back it
+            with a SOLID theme-aware surface so those tokens always sit on a
+            defined, high-contrast backing instead of the page: opaque white on
+            light, opaque deep-maroon in Privacy Mode. The selector's translucent
+            fill layers over this, so the chip still reads as one unit while the
+            solid surface underneath carries the contrast. Same isDark the
+            selector computes internally, so surface and text tones stay matched.
+            No dropdown/behaviour change — this is purely a legibility backing. */}
         <div className="flex justify-center">
-          <DeploymentSelector />
+          <div
+            className={`inline-flex rounded-full ${
+              isDark
+                ? 'bg-[#2A0E1C]/[0.95] shadow-[0_2px_10px_-3px_rgba(0,0,0,0.55)]'
+                : 'bg-white shadow-[0_2px_10px_-3px_rgba(15,15,15,0.16)]'
+            }`}
+          >
+            <DeploymentSelector />
+          </div>
         </div>
       </div>
 

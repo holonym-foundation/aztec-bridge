@@ -467,11 +467,18 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
         {recentOps.length > 0 && <ul className="flex flex-col">{recentOps.map(renderOp)}</ul>}
       </div>
       <div className="mt-3 shrink-0 border-t border-[#F0F0F0] pt-3">
+        {/* #416: the "see more" affordance was a small, left-aligned, muted-grey
+            row that was easy to miss. Make it the clear centered call-to-action
+            it should be: full-width and centered, a step larger, semibold, in
+            brand maroon (text-shield, #81133B) with the activity glyph — high
+            contrast on the white panel and unmistakable as the way to the full
+            history. Soft maroon hover wash + focus ring mirror the recover
+            button above so the two footer affordances read as one family. */}
         <button
           onClick={() => router.push('/activity')}
-          className="flex items-center gap-1.5 text-[12px] font-medium text-[#737373] transition-colors hover:text-[#0A0A0A]"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[13px] font-semibold text-[#81133B] transition-colors hover:bg-[#FDE7F3] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#81133B]/40"
         >
-          <Icon icon="ph:clock-counter-clockwise" width={15} height={15} />
+          <Icon icon="ph:clock-counter-clockwise" width={16} height={16} />
           View full activity
         </button>
       </div>

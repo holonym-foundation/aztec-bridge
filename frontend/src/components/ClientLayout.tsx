@@ -8,11 +8,11 @@ import ShieldOnboarding from '@/components/ShieldOnboarding'
 import BridgeStepsRail from '@/components/BridgeStepsRail'
 import ActivityDrawer from '@/components/ActivityDrawer'
 import NotificationsDrawer from '@/components/NotificationsDrawer'
-import SignaturePrompt from '@/components/SignaturePrompt'
 import SupportTab from '@/components/SupportTab'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useNotificationsStore } from '@/stores/useNotificationsStore'
+import { useWalletStore } from '@/stores/walletStore'
 import { isSupportOpenable } from '@/utils/support'
 import { motion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
@@ -66,6 +66,21 @@ export default function ClientLayout({
   useEffect(() => {
     void useNotificationsStore.persist.rehydrate()
   }, [])
+
+  // Tab-title flip while a wallet signature is pending (#417): a user who tabbed
+  // away is pulled back by the title. This is not a banner and never touches the
+  // layout — the "signature needed" notice itself lives in the mini-bar ticker +
+  // the Messages feed. Restored to the original title the moment it clears.
+  const isSignaturePending = useWalletStore((s) => !!s.pendingSignature)
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    if (!isSignaturePending) return
+    const original = document.title
+    document.title = 'Signature needed · Shield'
+    return () => {
+      document.title = original
+    }
+  }, [isSignaturePending])
 
   return (
     <div
@@ -147,10 +162,6 @@ export default function ClientLayout({
         <BannerAztecTestnet />
         <BannerAztecNodeError />
         <Header />
-        {/* Sticky "signature needed" bar (#408): sits IN FLOW just under the nav
-            so it reflows the card region down and never occludes the card CTA
-            (SOP §392). Renders nothing unless a wallet signature is pending. */}
-        <SignaturePrompt />
       </div>
       {/* Main content — a flex-grow column that owns its own overflow (min-h-0 +
           overflow-y-auto). On comfortable heights the card fits and nothing scrolls; only

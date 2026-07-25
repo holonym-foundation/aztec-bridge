@@ -614,6 +614,18 @@ export default function ShieldOnboarding() {
     return () => setSplashActive(false)
   }, [mode, setSplashActive])
 
+  // A Shield-brand click that returns the user to the splash is DELIBERATE and must
+  // win over the auto-dismiss below, even when a connect flow was already active at
+  // click-time (a wallet modal open, or the install prompt up). This flag marks the
+  // current splash as brand-initiated; the connect-dismiss effect then only tears it
+  // down for a genuinely NEW connect the user starts from it, never for the stale
+  // phase that was already running when they hit the brand (#414).
+  const brandSplashRef = useRef(false)
+  // Tracks whether a connect flow was active on the previous render so the effect can
+  // detect a rising edge (idle -> connecting) — a fresh connect — versus a phase that
+  // was already active before the splash appeared.
+  const prevConnectActiveRef = useRef(false)
+
   // Connect from the splash nav (e.g. "Connect Aztec"): the connect modal renders
   // BENEATH the splash overlay, so hitting connect on the splash would fire but stay
   // hidden. Drop the splash the moment an ACTIVE connect flow starts (discovering /
@@ -623,9 +635,25 @@ export default function ShieldOnboarding() {
   // bounced straight back to the app (#409).
   useEffect(() => {
     const connecting = walletConnectionPhase === 'discovering' || walletConnectionPhase === 'selecting'
-    if (mode === 'splash' && (connecting || showWalletInstallPrompt)) {
-      setMode('hidden')
-    }
+    const active = connecting || showWalletInstallPrompt
+    // Rising edge = a connect flow that just STARTED this render. Compute before the
+    // ref is refreshed, and refresh it unconditionally so the edge stays accurate even
+    // while the splash is hidden (the flow may start, resolve, and restart in the app).
+    const rising = active && !prevConnectActiveRef.current
+    prevConnectActiveRef.current = active
+
+    if (mode !== 'splash' || !active) return
+
+    // A brand-requested splash only yields to a connect the user starts FROM it — a
+    // rising edge after the splash appeared. A connect that was already active when the
+    // brand was clicked (a stale modal / install prompt) is NOT a fresh start, so the
+    // splash holds until the user acts (#414). Non-brand splashes keep the original
+    // level-triggered dismiss so a fresh connect from the splash nav still shows the
+    // modal (#370).
+    if (brandSplashRef.current && !rising) return
+
+    brandSplashRef.current = false
+    setMode('hidden')
   }, [mode, walletConnectionPhase, showWalletInstallPrompt])
 
   // Clicking the Shield brand returns the user to the splash (#103). The brand
@@ -638,6 +666,7 @@ export default function ShieldOnboarding() {
       didMountSplashRequest.current = true
       return
     }
+    brandSplashRef.current = true
     setLeaving(false)
     setIndex(0)
     setMode('splash')
@@ -657,6 +686,7 @@ export default function ShieldOnboarding() {
   // start a bridge. The bridge form is the one place the action button surfaces the
   // "Connect Aztec Wallet" next step, so route there before dismissing.
   const enterApp = () => {
+    brandSplashRef.current = false
     if (pathname !== '/') router.push('/')
     setMode('hidden')
   }

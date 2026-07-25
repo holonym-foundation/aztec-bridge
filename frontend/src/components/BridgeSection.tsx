@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import StyledImage from './StyledImage'
 import { BridgeDirection, BridgeState, Network as NetworkType, Token as TokenType } from '@/types/bridge'
 import { motion } from 'framer-motion'
@@ -49,6 +49,12 @@ interface BridgeSectionProps {
   // fits inside the card's no-scroll budget instead of scrolling. Restores on collapse.
   compact?: boolean
 }
+
+// Amount fit-to-width bounds. The typed amount stays at the prominent max until the value is
+// too wide for the input, then scales DOWN to the exact size that fits — never below the floor,
+// which is low enough that even a max-length balance shows every character rather than clipping.
+const AMOUNT_MAX_FONT_PX = 32
+const AMOUNT_MIN_FONT_PX = 11
 
 // Full USD for the limit headline / hold detail: 1000 → "$1,000",
 // 1234.5 → "$1,234.50". Drops cents when the amount is whole.
@@ -149,11 +155,49 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   // LEAVING Aztec is misleading and implies double-counting, so the limit indicator (both
   // the "Limit: $X" state and the Clean Hands nudge) renders only when this flow is a deposit.
   const isDeposit = direction === BridgeDirection.L1_TO_L2
-  // Fit-to-width: the typed amount owns the free space and steps its font size DOWN as the
-  // value grows so a long number (e.g. "1234.5678") stays fully visible instead of being
-  // clipped behind the input's right edge. Short values keep the prominent size.
-  const amountLength = (inputAmount || '0').length
-  const amountFontPx = Math.min(32, Math.max(16, Math.round(200 / Math.max(amountLength, 1))))
+  // Fit-to-width: the typed amount owns the free space and scales its font size DOWN so a long
+  // number (e.g. "1234.5678", or a full balance) stays fully visible instead of being clipped
+  // behind the input's right edge. A prior length-based heuristic (200/length) ignored the real
+  // pixel width the input actually gets, so it still clipped when the row's right column was wide.
+  // Instead we measure the rendered text against the input's true content width and pick the exact
+  // size that fits: text width scales linearly with font-size, so fit = max * (available / width).
+  // A ResizeObserver re-fits whenever the input's width changes (e.g. the balance figure grows or
+  // the layout reflows), keeping the number un-clipped without touching the row's height.
+  const [amountFontPx, setAmountFontPx] = useState(AMOUNT_MAX_FONT_PX)
+  const amountMeasureCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el || typeof window === 'undefined') return
+
+    const fitAmountFont = () => {
+      const styles = window.getComputedStyle(el)
+      const paddingX = parseFloat(styles.paddingLeft || '0') + parseFloat(styles.paddingRight || '0')
+      const available = el.clientWidth - paddingX
+      if (!(available > 0)) return
+
+      const canvas = amountMeasureCanvasRef.current ?? (amountMeasureCanvasRef.current = document.createElement('canvas'))
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+
+      const text = inputAmount || el.placeholder || '0'
+      ctx.font = `${styles.fontWeight} ${AMOUNT_MAX_FONT_PX}px ${styles.fontFamily}`
+      const widthAtMax = ctx.measureText(text).width
+
+      // 0.98 leaves a hair of slack so sub-pixel rounding never re-introduces a clip.
+      let next = AMOUNT_MAX_FONT_PX
+      if (widthAtMax > available) {
+        next = Math.floor(AMOUNT_MAX_FONT_PX * (available / widthAtMax) * 0.98)
+      }
+      next = Math.max(AMOUNT_MIN_FONT_PX, Math.min(AMOUNT_MAX_FONT_PX, next))
+      setAmountFontPx((prev) => (prev === next ? prev : next))
+    }
+
+    fitAmountFont()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(fitAmountFont)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [inputAmount, inputRef])
   // Mutually exclusive with the "Limit: $X" indicator: once a Passport-only user crosses the
   // tier cap, the Clean Hands nudge REPLACES the limit indicator in the same slot. PoCH users
   // already hold the higher cap, so they keep the plain limit indicator and are never nagged.
@@ -170,16 +214,17 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   const badgeClass = isPoch
     ? 'bg-[rgba(15,123,79,0.10)] text-[#0F7B4F]'
     : 'bg-[rgba(23,35,94,0.08)] text-[#17235E]'
-  // Compact per-human cap shown under the balance. The "per human" framing lives in the tooltip.
-  const limitLabel = tierLimitUsd > 0 ? `Limit: ${formatUsd(tierLimitUsd)}` : null
+  // Compact cap shown under the balance. Passport is a per-human tier limit; the Clean Hands cap
+  // ($25k) is a DAILY cap, so it carries a "/day" suffix. The "per human" framing lives in the tooltip.
+  const limitLabel = tierLimitUsd > 0 ? `Limit: ${formatUsd(tierLimitUsd)}${isPoch ? '/day' : ''}` : null
   // Temporary hold from a pending deposit, appended to the badge tooltip when present.
   const reservedNote =
     reservedDepositUsd != null && reservedDepositUsd > 0
       ? ` ${formatUsd(reservedDepositUsd)} on hold from a pending deposit.`
       : ''
   const badgeTooltip = isPoch
-    ? `Verified with Proof of Clean Hands. Bridge up to ${formatUsd(cleanHandsLimitUsd)} per human.${reservedNote}`
-    : `Verified with Passport (score above ${passportScoreThreshold}). Bridge up to ${formatUsd(passportLimitUsd)} per human.${reservedNote} Verify with Proof of Clean Hands to unlock ${formatUsd(cleanHandsLimitUsd)}.`
+    ? `Verified with Proof of Clean Hands. Bridge up to ${formatUsd(cleanHandsLimitUsd)}/day per human.${reservedNote}`
+    : `Verified with Passport (score above ${passportScoreThreshold}). Bridge up to ${formatUsd(passportLimitUsd)} per human.${reservedNote} Verify with Proof of Clean Hands to unlock ${formatUsd(cleanHandsLimitUsd)}/day.`
 
   // Compact summary rows shown while a detail accordion is expanded — e.g.
   // "From Eth Sepolia · 100 USDC" / "To Aztec · cUSDC". Tapping either row reopens the
@@ -320,49 +365,53 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                 <p className="text-latest-grey-500 text-12 font-medium">Fee Juice</p>
               </div>
             )}
-            {/* One slot, mutually exclusive: under the cap we show "Limit: $X" with the tier
-                brand mark + per-human tooltip; once the amount exceeds the cap (Passport tier)
-                the linked Clean Hands nudge REPLACES it. Never both. Deposit-only: the cap
-                does not apply to withdrawals (L2->L1), so nothing limit-related renders there. */}
-            {isDeposit &&
-              attestationMethod &&
-              (showCleanHandsNudge ? (
-                <a
-                  href={POCH_MINT_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708] hover:bg-[rgba(181,71,8,0.18)] transition-colors"
-                >
-                  <Icon icon="ph:arrow-up-right-bold" width={11} height={11} className="shrink-0" />
-                  Above {formatUsd(passportLimitUsd)} needs Proof of Clean Hands
-                </a>
-              ) : (
-                limitLabel && (
-                  <span
-                    data-tooltip-id="attestation-info"
-                    data-tooltip-content={badgeTooltip}
-                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold cursor-default ${badgeClass}`}
-                  >
-                    <span>{limitLabel}</span>
-                    <span
-                      aria-hidden
-                      className="inline-block h-[12px] w-[12px] shrink-0 bg-[#0A0A0A]"
-                      style={{
-                        maskImage: `url(${badgeIconSrc})`,
-                        WebkitMaskImage: `url(${badgeIconSrc})`,
-                        maskRepeat: 'no-repeat',
-                        WebkitMaskRepeat: 'no-repeat',
-                        maskPosition: 'center',
-                        WebkitMaskPosition: 'center',
-                        maskSize: 'contain',
-                        WebkitMaskSize: 'contain',
-                      }}
-                    />
-                  </span>
-                )
-              ))}
           </div>
         </div>
+        {/* Deposit limit indicator on its OWN full-width row below the amount, right-aligned, so it
+            never competes with the amount input for horizontal space. The wide Clean Hands nudge
+            used to sit in the amount row's right column and squeezed the number down to a couple of
+            visible digits. One slot, mutually exclusive: under the cap the "Limit: $X" pill (tier
+            brand mark + per-human tooltip); once a Passport-tier amount exceeds the cap the linked
+            Clean Hands nudge REPLACES it. Deposit-only: the cap does not apply to withdrawals. */}
+        {isDeposit && attestationMethod && (
+          <div className="mt-1 flex justify-end">
+            {showCleanHandsNudge ? (
+              <a
+                href={POCH_MINT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708] hover:bg-[rgba(181,71,8,0.18)] transition-colors"
+              >
+                <Icon icon="ph:arrow-up-right-bold" width={11} height={11} className="shrink-0" />
+                Above {formatUsd(passportLimitUsd)} needs Proof of Clean Hands
+              </a>
+            ) : (
+              limitLabel && (
+                <span
+                  data-tooltip-id="attestation-info"
+                  data-tooltip-content={badgeTooltip}
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold cursor-default ${badgeClass}`}
+                >
+                  <span>{limitLabel}</span>
+                  <span
+                    aria-hidden
+                    className="inline-block h-[12px] w-[12px] shrink-0 bg-[#0A0A0A]"
+                    style={{
+                      maskImage: `url(${badgeIconSrc})`,
+                      WebkitMaskImage: `url(${badgeIconSrc})`,
+                      maskRepeat: 'no-repeat',
+                      WebkitMaskRepeat: 'no-repeat',
+                      maskPosition: 'center',
+                      WebkitMaskPosition: 'center',
+                      maskSize: 'contain',
+                      WebkitMaskSize: 'contain',
+                    }}
+                  />
+                </span>
+              )
+            )}
+          </div>
+        )}
         {isDeposit && attestationMethod && !showCleanHandsNudge && limitLabel && (
           <ReactTooltip
             id="attestation-info"

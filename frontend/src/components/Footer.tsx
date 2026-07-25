@@ -49,7 +49,7 @@ const SocialIcons: React.FC<{ className?: string }> = ({ className }) => (
         rel='noopener noreferrer'
         aria-label={label}
         title={label}
-        className='text-latest-grey-600 hover:text-shield transition-colors'>
+        className='text-neutral-600 hover:text-shield transition-colors'>
         <Icon icon={icon} width={16} height={16} aria-hidden='true' />
       </Link>
     ))}
@@ -62,7 +62,7 @@ const ResourceLinks: React.FC<{ className?: string }> = ({ className }) => (
       <Link
         key={label}
         href={href}
-        className='text-latest-grey-600 hover:text-black transition-colors'
+        className='text-neutral-600 hover:text-black transition-colors'
         {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
         {label}
       </Link>
@@ -72,9 +72,9 @@ const ResourceLinks: React.FC<{ className?: string }> = ({ className }) => (
 
 const Footer: React.FC<FooterProps> = ({ className }) => {
   return (
-    <footer className={`relative w-full text-xs pb-8 ${className || ''}`}>
-      {/* Desktop Footer */}
-      <div className='hidden md:flex flex-col w-full px-10 gap-4'>
+    <footer className={`relative w-full text-xs ${className || ''}`}>
+      {/* Desktop Footer — single row, already compact vertically. */}
+      <div className='hidden md:flex flex-col w-full px-10 pb-8 gap-4'>
         <div className='flex justify-between items-center w-full relative'>
           {/* Left Side Social Icons */}
           <SocialIcons />
@@ -89,17 +89,32 @@ const Footer: React.FC<FooterProps> = ({ className }) => {
         </div>
       </div>
 
-      {/* Mobile Footer */}
-      <div className='md:hidden flex flex-col items-center w-full px-4 py-6 gap-6'>
-        {/* Top Social Icons */}
-        <SocialIcons className='justify-center flex-wrap' />
+      {/* Mobile Footer (below md). Height-adaptive: the card is the priority
+          surface, so on short viewports the footer collapses to a single minimal
+          row and can never squeeze the card's primary CTA out of view. The full
+          stacked footer only returns where there's vertical room to spare. */}
+      <div className='md:hidden w-full'>
+        {/* Compact row — short viewports (<=820px tall): copyright + the two
+            essential links only, minimal padding. */}
+        <div className='[@media(min-height:821px)]:hidden flex flex-wrap items-center justify-center gap-x-4 gap-y-1 w-full px-4 pt-3 pb-4'>
+          <ResourceLinks className='justify-center' />
+          <span className='text-latest-grey-700 text-center'>
+            © 2025 human.tech. All rights reserved.
+          </span>
+        </div>
 
-        {/* Middle Resource Links */}
-        <ResourceLinks className='justify-center' />
+        {/* Full stack — taller viewports (>820px) with room for the richer layout. */}
+        <div className='hidden [@media(min-height:821px)]:flex flex-col items-center w-full px-4 py-6 gap-6'>
+          {/* Top Social Icons */}
+          <SocialIcons className='justify-center flex-wrap' />
 
-        {/* Bottom Copyright */}
-        <div className='text-latest-grey-700 text-center'>
-          © 2025 human.tech. All rights reserved.
+          {/* Middle Resource Links */}
+          <ResourceLinks className='justify-center' />
+
+          {/* Bottom Copyright */}
+          <div className='text-latest-grey-700 text-center'>
+            © 2025 human.tech. All rights reserved.
+          </div>
         </div>
       </div>
     </footer>

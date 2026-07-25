@@ -510,6 +510,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               title: 'Withdrawal complete',
               message: 'Tokens withdrawn to Ethereum.',
             })
+            // The op just reached its terminal 'completed' status on the backend.
+            // Refetch operations so Activity re-derives it as done (no Resume, no
+            // "N to finish") instead of serving the stale resumable status from the
+            // 30s cache.
+            queryClient.invalidateQueries({ queryKey: ['bridgeOperations', l1Address] })
             break
           }
           case BridgeEventType.ATTESTATION_FETCH:
@@ -718,6 +723,7 @@ export function useL2RecoverWithdrawal() {
   const { setProgressStep, setTransactionUrls, l2TxUrl: currentL2TxUrl } = useBridgeStore()
   const bridge = useBridge()
   const notify = useToast()
+  const queryClient = useQueryClient()
 
   const mutationFn = async ({ l2TxHash, l1Address: paramL1Address }: { l2TxHash: string; l1Address: string }) => {
     const resolvedL1Address = paramL1Address || l1Address
@@ -798,6 +804,9 @@ export function useL2RecoverWithdrawal() {
               const l1Url = `${getEtherscanUrl(L1_CHAIN_ID)}/tx/${event.l1TxHash}`
               setTransactionUrls(l1Url, null)
             }
+            // Terminal 'completed' on the backend — refetch operations so Activity
+            // stops offering Resume for this now-finished withdrawal.
+            queryClient.invalidateQueries({ queryKey: ['bridgeOperations', l1Address] })
             break
           case BridgeEventType.PATCH_FAILED:
             logError(`Resume PATCH failed: ${event.label}`, {

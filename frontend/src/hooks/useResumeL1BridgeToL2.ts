@@ -168,6 +168,11 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
             refreshL2Balances()
             setTimeout(refreshL2Balances, 6000)
             setTimeout(refreshL2Balances, 15000)
+            // The op just reached its terminal 'completed' status on the backend.
+            // Refetch operations (prefix-matched, since the query keys on the
+            // connected wallet, not this deposit's l1Address) so Activity
+            // re-derives it as done rather than still resumable.
+            queryClient.invalidateQueries({ queryKey: ['bridgeOperations'] })
             break
           case BridgeEventType.ATTESTATION_FETCH:
             logInfo('Resume attestation fetch', {

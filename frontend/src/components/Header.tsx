@@ -203,7 +203,11 @@ function ecosystemPanelSurface(isDark: boolean): string {
  * dropdown look liftable into a shared Storybook component later. It opens BELOW
  * the trigger (top-full) so it never overlaps the nav row.
  */
-const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void }> = ({ isDark, onNavigate }) => {
+const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; collapseLabel?: boolean }> = ({
+  isDark,
+  onNavigate,
+  collapseLabel = false,
+}) => {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -232,6 +236,8 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void }> = ({ 
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label="Ecosystem"
+        title="Ecosystem"
         className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
       >
         <Icon
@@ -240,7 +246,7 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void }> = ({ 
           height={16}
           className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'}
         />
-        Ecosystem
+        <span className={collapseLabel ? 'hidden xl:inline' : ''}>Ecosystem</span>
         <Icon
           icon="ph:caret-down"
           width={12}
@@ -573,53 +579,74 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     />
   )
 
-  const secondaryNav = (
-    <>
-      {credentials && (
-        <div
-          className={`text-sm font-medium cursor-pointer transition-colors duration-200 whitespace-nowrap ${navText(isDark)} ${
-            isDark ? 'hover:text-white' : 'hover:text-latest-grey-800'
-          }`}
+  // #384 — graceful collapse so the nav NEVER overflows. In the desktop pill the
+  // center-nav labels are hidden between lg and xl (1024–1279px), where the full
+  // labels no longer fit beside the Privacy segment + account chip (chip is up to
+  // max-w-[360px]); the `ph:` glyph stays so every control is still reachable, and
+  // the labels return at xl+ (`hidden xl:inline`). Below lg the whole nav moves to
+  // the hamburger panel. In the mobile panel (`variant === 'mobile'`) labels are
+  // always shown — the panel isn't width-constrained. Native `title` keeps the
+  // icon-only controls named on hover (SOP §7, no new deps).
+  const renderSecondaryNav = (variant: 'desktop' | 'mobile') => {
+    const labelCls = variant === 'desktop' ? 'hidden xl:inline' : ''
+    return (
+      <>
+        {credentials && (
+          <div
+            className={`text-sm font-medium cursor-pointer transition-colors duration-200 whitespace-nowrap ${navText(isDark)} ${
+              isDark ? 'hover:text-white' : 'hover:text-latest-grey-800'
+            }`}
+          >
+            {credentials}
+          </div>
+        )}
+        <button
+          onClick={() => {
+            openHowItWorks()
+            setMobileMenuOpen(false)
+          }}
+          aria-label="How it works"
+          title="How it works"
+          className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
         >
-          {credentials}
-        </div>
-      )}
-      <button
-        onClick={() => {
-          openHowItWorks()
-          setMobileMenuOpen(false)
-        }}
-        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
-      >
-        <Icon icon="ph:question" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
-        How it works
-      </button>
-      <Link
-        href="/docs"
-        onClick={() => setMobileMenuOpen(false)}
-        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
-      >
-        <Icon icon="ph:book-open" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
-        Docs
-      </Link>
-      {/* Direct, always-available entry to the Fee Juice screen — previously only
-          reachable by failing a claim (#146). Same pattern/tone as the sibling
-          links; shared by the desktop nav and the mobile panel so the label stays
-          visible in both. whitespace-nowrap keeps it from wrapping the nav row. */}
-      <Link
-        href="/fee-juice"
-        onClick={() => setMobileMenuOpen(false)}
-        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
-      >
-        <Icon icon="ph:gas-pump" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
-        Fee Juice
-      </Link>
-      {/* Ecosystem — click-to-open dropdown of external ecosystem links. Shares
-          the sibling links' pill/hover/typography treatment; opens below the
-          trigger so it clears the nav row. */}
-      <EcosystemNav isDark={isDark} onNavigate={() => setMobileMenuOpen(false)} />
-    </>
-  )
+          <Icon icon="ph:question" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
+          <span className={labelCls}>How it works</span>
+        </button>
+        <Link
+          href="/docs"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="Docs"
+          title="Docs"
+          className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+        >
+          <Icon icon="ph:book-open" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
+          <span className={labelCls}>Docs</span>
+        </Link>
+        {/* Direct, always-available entry to the Fee Juice screen — previously only
+            reachable by failing a claim (#146). Same pattern/tone as the sibling
+            links; shared by the desktop nav and the mobile panel. whitespace-nowrap
+            keeps it from wrapping the nav row. */}
+        <Link
+          href="/fee-juice"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="Fee Juice"
+          title="Fee Juice"
+          className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+        >
+          <Icon icon="ph:gas-pump" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
+          <span className={labelCls}>Fee Juice</span>
+        </Link>
+        {/* Ecosystem — click-to-open dropdown of external ecosystem links. Shares
+            the sibling links' pill/hover/typography treatment; opens below the
+            trigger so it clears the nav row. Label collapses with the siblings. */}
+        <EcosystemNav
+          isDark={isDark}
+          onNavigate={() => setMobileMenuOpen(false)}
+          collapseLabel={variant === 'desktop'}
+        />
+      </>
+    )
+  }
 
   return (
     <header className="w-full px-3 sm:px-4 pt-3 flex items-start gap-2 sm:gap-3 relative" style={{ containerType: 'inline-size' }}>
@@ -680,7 +707,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
         {/* Centered nav links (#159). flex-1 + justify-center pins them to the
             middle. Hidden below lg, where they move into the mobile panel. */}
         <nav className="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0" aria-label="Secondary">
-          {secondaryNav}
+          {renderSecondaryNav('desktop')}
         </nav>
 
         {/* Mobile-nav toggle — only below lg, where the nav links collapse into
@@ -713,7 +740,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           not here. */}
       {mobileMenuOpen && (
         <div ref={mobileMenuRef} className={`lg:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}>
-          {secondaryNav}
+          {renderSecondaryNav('mobile')}
         </div>
       )}
 

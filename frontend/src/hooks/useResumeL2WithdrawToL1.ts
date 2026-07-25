@@ -1,8 +1,9 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import type { RecoveryWithdrawalData } from '@human.tech/clean.sdk'
 import { useWalletStore, requestWaapWallet, WAAP_METHOD } from '@/stores/walletStore'
 import { useToast } from './useToast'
+import { dismissNotificationByKey } from '@/stores/useNotificationsStore'
 import { useBridge } from '@/hooks/useBridge'
 import type { BridgeEvent } from '@human.tech/clean.sdk'
 import { BridgeEventType } from '@human.tech/clean.sdk'
@@ -15,8 +16,14 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
   const { waapAddress: l1Address } = useWalletStore()
   const notify = useToast()
   const bridge = useBridge()
+  const queryClient = useQueryClient()
 
   const mutationFn = async (data: RecoveryWithdrawalData): Promise<string | undefined> => {
+    // Stable, per-operation key so the resume-error feed row can be retired by
+    // key the moment THIS op genuinely completes (see OPERATION_COMPLETED). Keyed
+    // by operationId so completing one stuck withdrawal never clears another's
+    // still-valid resume error.
+    const resumeErrorKey = `l2-to-l1-resume-error-${data.operationId}`
     // Require explicit recipientL1Address — falling back to connected wallet
     // could withdraw funds to the wrong L1 address if the user switched wallets.
     const withdrawRecipient = data.recipientL1Address || l1Address
@@ -148,6 +155,14 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
               const l1Url = `${getEtherscanUrl(L1_CHAIN_ID)}/tx/${event.l1TxHash}`
               setTransactionUrls(l1Url, data.l2TxUrl ?? null)
             }
+            // The op just reached its terminal 'completed' status on the backend.
+            // Refetch operations so Activity re-derives it as done (no Resume, no
+            // "N to finish") instead of serving the stale resumable status.
+            queryClient.invalidateQueries({ queryKey: ['bridgeOperations', l1Address] })
+            // Retire any lingering "Resume Error — Funds Safe" feed row for this
+            // op — the withdrawal finished, so the resume affordance it pointed to
+            // is gone. Mirrors round-16's dismiss of the do-not-reload banner.
+            dismissNotificationByKey(resumeErrorKey)
             break
           }
           case BridgeEventType.ERROR:
@@ -169,7 +184,9 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
                   heading: 'Resume Error — Funds Safe',
                   message: 'Your withdrawal proof is saved. Go to Activity to try again.',
                 },
-                { autoClose: false },
+                // Keyed so this feed row is dismissed by key on genuine completion
+                // of the same op (see OPERATION_COMPLETED).
+                { autoClose: false, toastId: resumeErrorKey },
               )
             }
             break

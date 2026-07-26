@@ -32,6 +32,11 @@ interface BridgeSectionProps {
   // Max USD the user can bridge right now (remaining budget under the active cap). Undefined
   // when the cap is disabled — the pill then falls back to the static cap label.
   remainingDepositUsd?: number
+  // Passport tier is bound by the Travel Rule (the $1,000 lifetime threshold), not the $25k
+  // deposit cap. This is the USD left before that threshold — the remaining figure the pill must
+  // show for a Passport user. remainingDepositUsd is the deposit-cap remainder and does not apply
+  // to them, so using it produced the "$24,700 of $1,000 left" nonsense.
+  travelRuleRemainingUsd?: number
   // Passport tier score vs threshold, for the "score ≥ threshold" badge tooltip.
   passportScore?: number
   passportThreshold?: number
@@ -106,6 +111,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   attestationMethod,
   passportMaxAmount,
   remainingDepositUsd,
+  travelRuleRemainingUsd,
   passportScore,
   passportThreshold,
   reservedDepositUsd,
@@ -217,12 +223,20 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   // Compact cap shown under the balance. Passport is a per-human tier limit; the Clean Hands cap
   // ($25k) is a DAILY cap, so it carries a "/day" suffix. The "per human" framing lives in the tooltip.
   const limitLabel = tierLimitUsd > 0 ? `Limit: ${formatUsd(tierLimitUsd)}${isPoch ? '/day' : ''}` : null
+  // Tier-appropriate remaining budget for the pill. A PoCH user is bound by the $25k/day deposit
+  // cap, so theirs is remainingDepositUsd. A Passport user is bound by the Travel Rule (the $1k
+  // lifetime threshold), so theirs is travelRuleRemainingUsd — remainingDepositUsd would surface
+  // a deposit-cap remainder they can never reach. Clamp into [0, tierLimitUsd] so the pill never
+  // reads a remaining larger than the tier's own cap.
+  const tierRemainingRaw = attestationMethod === 'passport' ? travelRuleRemainingUsd : remainingDepositUsd
+  const remaining =
+    tierRemainingRaw != null ? Math.min(Math.max(tierRemainingRaw, 0), tierLimitUsd) : undefined
   // Live remaining budget under the active cap, shown in the same slot as the static limit
   // pill (e.g. "$740 of $1,000 left"). Falls back to the static cap label when the backend
   // doesn't surface a remaining figure (cap disabled). Deposit-only, like the rest of this slot.
-  const remainingKnown = remainingDepositUsd != null && tierLimitUsd > 0
+  const remainingKnown = remaining != null && tierLimitUsd > 0
   const remainingLabel = remainingKnown
-    ? `${formatUsd(remainingDepositUsd as number)} of ${formatUsd(tierLimitUsd)} left`
+    ? `${formatUsd(remaining as number)} of ${formatUsd(tierLimitUsd)} left`
     : limitLabel
   // Heads-up: the entered amount would spend past what's left of the cap. Distinct from the
   // Clean Hands nudge, which fires only once the amount clears the FULL tier cap; guard on
@@ -232,7 +246,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
     remainingKnown &&
     !isNaN(amountNum) &&
     amountNum > 0 &&
-    amountNum > (remainingDepositUsd as number) &&
+    amountNum > (remaining as number) &&
     !showCleanHandsNudge
   // Temporary hold from a pending deposit, appended to the badge tooltip when present.
   const reservedNote =
@@ -404,7 +418,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
               </a>
             ) : overRemaining ? (
               <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708]">
-                Over your limit, {formatUsd(remainingDepositUsd as number)} left
+                Over your limit, {formatUsd(remaining as number)} left
               </span>
             ) : (
               remainingLabel && (

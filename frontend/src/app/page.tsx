@@ -668,7 +668,20 @@ export default function Home() {
         )}
         {/* Wallet selection is now handled by WalletDiscoveryModal above */}
 
-        {showVerification && <VerificationStep onClose={() => setShowVerification(false)} />}
+        {/* A user who is ALREADY Passport-verified can only be here to unlock a higher
+            cap, so the verify screen must route them to Proof of Clean Hands (the
+            upgrade), never show the Passport success they already hold (#422). An
+            unverified user gets the first-time cascade. */}
+        {showVerification && (
+          <VerificationStep
+            onClose={() => setShowVerification(false)}
+            intent={
+              attestationData?.eligible && attestationData?.method === 'passport'
+                ? 'upgrade'
+                : 'initial'
+            }
+          />
+        )}
 
         {/* No-scroll budget: a flex column capped at the same 90vh-5rem viewport
             floor as the card. Header + footer are shrink-0; only the middle region
@@ -716,6 +729,7 @@ export default function Home() {
               attestationMethod={attestationData?.method ?? null}
               passportMaxAmount={attestationData?.passportMaxAmount}
               remainingDepositUsd={attestationData?.remainingDepositUsd}
+              travelRuleRemainingUsd={attestationData?.travelRuleRemainingUsd}
               passportScore={attestationData?.passportScore}
               passportThreshold={attestationData?.passportThreshold}
               reservedDepositUsd={attestationData?.reservedDepositUsd}

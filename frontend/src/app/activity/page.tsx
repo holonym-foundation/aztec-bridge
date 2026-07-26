@@ -294,7 +294,7 @@ export default function ActivityPage() {
         <div className="mt-3 flex w-full shrink-0 items-stretch gap-2">
           <button
             type="button"
-            onClick={() => router.push('/')}
+            onClick={() => router.push('/?app=1')}
             title="Back to Bridge"
             aria-label="Back to Bridge"
             className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"

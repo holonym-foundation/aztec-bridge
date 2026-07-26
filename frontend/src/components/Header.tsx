@@ -7,7 +7,7 @@ import { useBridgeStore } from '@/stores/bridgeStore'
 import { useL1TokenBalances } from '@/hooks/useL1Operations'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { L1_CHAIN_ID, POCH_MINT_URL } from '@/config'
@@ -403,6 +403,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
   // The docs pages are a standalone reading view — no wallet, privacy toggle, or
   // deployment badge.
   const pathname = usePathname()
+  const router = useRouter()
   const isDocs = pathname?.startsWith('/docs') ?? false
 
   const { data: l1TokenBalances = [] } = useL1TokenBalances()
@@ -530,6 +531,10 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
   }
 
   const handleConnectAztecOnly = async () => {
+    // Clicking the Aztec wallet from the top-right takes the user to the app-shell
+    // home first, where the "Connect Aztec Wallet" step lives, so the connect flow
+    // always runs in context on the bridge rather than over whatever route they were on.
+    if (pathname !== '/') router.push('/?app=1')
     try {
       await connectAztecWallet()
     } catch (error) {

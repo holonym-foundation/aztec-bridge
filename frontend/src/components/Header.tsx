@@ -12,6 +12,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { L1_CHAIN_ID, POCH_MINT_URL } from '@/config'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
+import { useHumnPoints } from '@/hooks/useHumnPoints'
 import AccountChip from '@/components/AccountChip'
 import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
@@ -67,8 +68,7 @@ if (typeof window !== 'undefined') {
  */
 const GLASS_PILL =
   'backdrop-blur-md bg-white/[0.85] border border-[#E5E5E5]/80 shadow-[0_6px_18px_-6px_rgba(15,15,15,0.18),0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200'
-const GLASS_PILL_HOVER =
-  'hover:bg-white hover:shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
+const GLASS_PILL_HOVER = 'hover:bg-white hover:shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
 const GLASS_PILL_ACTIVE = 'bg-white shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
 
 /**
@@ -84,7 +84,8 @@ const GLASS_PILL_DARK =
   'backdrop-blur-md bg-white/[0.07] border border-white/[0.14] shadow-[0_6px_18px_-6px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.35)] transition-all duration-200'
 const GLASS_PILL_DARK_HOVER =
   'hover:bg-white/[0.12] hover:border-white/[0.22] hover:shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.35)]'
-const GLASS_PILL_DARK_ACTIVE = 'bg-white/[0.14] border-white/[0.22] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.35)]'
+const GLASS_PILL_DARK_ACTIVE =
+  'bg-white/[0.14] border-white/[0.22] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.35)]'
 
 /** Merges the base/hover/active glass-pill classes for the given theme in one call. */
 function glassPill(isDark: boolean, active = false): string {
@@ -137,13 +138,10 @@ function panelSurface(isDark: boolean): string {
     : 'bg-white/[0.95] backdrop-blur-md border border-[#E5E5E5]/80'
 }
 
-// TODO: Points still has NO live per-user source in this app (no points API,
-// hook, or store exists today). This stub must be replaced by a real fetch from
-// the points backend (the passport/Covenant HUMN Points service) threaded
-// through the `points` prop into AccountChip, where the value is now folded into
-// the account chip itself. Until then the placeholder is shown — never a
-// fabricated per-action breakdown.
-const PLACEHOLDER_POINTS = 1240
+// HUMN Points are sourced live from Human Passport (Season 1) via useHumnPoints
+// (/api/points), keyed on the connected L1 address, and folded into the account
+// chip. AccountChip hides the value when the wallet has none (or none loaded
+// yet) — no placeholder is ever shown.
 
 // Same copy the BridgeHeader guard uses — keep them identical so the warning
 // reads the same whether it fires from the bridge header or the top nav.
@@ -152,8 +150,6 @@ const TRANSFER_LEAVE_CONFIRM =
 
 interface HeaderProps {
   credentials?: React.ReactNode
-  /** Live points balance. Defaults to a stubbed placeholder — see PLACEHOLDER_POINTS. */
-  points?: number
 }
 
 /**
@@ -311,7 +307,7 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; showLab
   )
 }
 
-const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINTS }) => {
+const Header: React.FC<HeaderProps> = ({ credentials }) => {
   const {
     waapAddress,
     isWaapConnected,
@@ -351,6 +347,11 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   // dropdown reopen even after the transient conflict response has cleared. In
   // memory only (never localStorage); null until something has been disclosed.
   const sessionLinkedL2 = useSessionLinkedL2(waapAddress)
+
+  // Live Season-1 HUMN Points for the connected L1 wallet (Human Passport via
+  // /api/points). Undefined until an address is connected and the lookup
+  // resolves; AccountChip hides the value unless it's a positive number.
+  const { data: humnPoints } = useHumnPoints(waapAddress || undefined)
 
   // Is that server-disclosed linked account one of the Azguard accounts the user
   // already has connected? Used only to tune the inline notice copy.
@@ -406,9 +407,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
 
   const { data: l1TokenBalances = [] } = useL1TokenBalances()
 
-  const sepoliaNativeTokens = l1TokenBalances.find(
-    (t) => t.type === 'native' && t.network?.chainId === L1_CHAIN_ID,
-  )
+  const sepoliaNativeTokens = l1TokenBalances.find((t) => t.type === 'native' && t.network?.chainId === L1_CHAIN_ID)
   const l1NativeBalance = sepoliaNativeTokens?.balance_formatted?.toString()
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -543,7 +542,8 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   }
 
   const isL1Connecting = !isWaapConnected && walletConnectionPhase !== 'idle'
-  const isL2Connecting = isWaapConnected && !isAztecConnected && (walletButtonPressed || walletConnectionPhase !== 'idle')
+  const isL2Connecting =
+    isWaapConnected && !isAztecConnected && (walletButtonPressed || walletConnectionPhase !== 'idle')
 
   if (!mounted) {
     return (
@@ -586,7 +586,9 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       </span>
       <button
         className={`flex w-[36px] h-[22px] sm:w-[40px] sm:h-[24px] py-[3px] px-1 items-center rounded-full transition-all duration-200 border-0 focus:outline-none relative z-10 flex-shrink-0 ${
-          isPrivacyModeEnabled ? 'bg-[#3B3B3B] justify-end pl-[17px] sm:pl-[19px]' : 'bg-[#D4D4D4] justify-start pr-[17px] sm:pr-[19px]'
+          isPrivacyModeEnabled
+            ? 'bg-[#3B3B3B] justify-end pl-[17px] sm:pl-[19px]'
+            : 'bg-[#D4D4D4] justify-start pr-[17px] sm:pr-[19px]'
         }`}
         onClick={() => {
           setPrivacyModeEnabled(!isPrivacyModeEnabled)
@@ -630,7 +632,7 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       l1NativeBalance={l1NativeBalance}
       actionsLocked={isTransferInProgress}
       loginMethod={loginMethod}
-      points={points}
+      points={humnPoints?.totalPoints}
       conflictNotice={walletNotice || undefined}
       conflictSevere={!!conflict}
       linkedAccountAddress={sessionLinkedL2 || undefined}
@@ -678,7 +680,12 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           title="Docs"
           className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
         >
-          <Icon icon="ph:book-open" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
+          <Icon
+            icon="ph:book-open"
+            width={16}
+            height={16}
+            className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'}
+          />
           <span className={labelCls}>Docs</span>
         </Link>
         {/* Direct, always-available entry to the Fee Juice screen — previously only
@@ -704,7 +711,10 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   }
 
   return (
-    <header className="w-full px-3 sm:px-4 pt-3 flex items-start gap-2 sm:gap-3 relative" style={{ containerType: 'inline-size' }}>
+    <header
+      className="w-full px-3 sm:px-4 pt-3 flex items-start gap-2 sm:gap-3 relative"
+      style={{ containerType: 'inline-size' }}
+    >
       {/* Left column — the Shield BRAND chip on top (brand only), and the
           version/network selector as its OWN separate chip directly beneath it
           (#113). No chip-in-chip: the version dropdown is no longer stacked
@@ -730,7 +740,12 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
             }}
             className="flex items-center justify-center hover:opacity-80 transition-opacity duration-200"
           >
-            <Image src={isDark ? '/assets/svg/shield-lockup-white.svg' : '/assets/svg/shield-lockup-maroon.svg'} alt="Shield" width={100} height={27} />
+            <Image
+              src={isDark ? '/assets/svg/shield-lockup-white.svg' : '/assets/svg/shield-lockup-maroon.svg'}
+              alt="Shield"
+              width={100}
+              height={27}
+            />
           </Link>
         </div>
         {/* Version chip — its own rounded, visually distinct chip. The
@@ -767,7 +782,9 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           top-row height. No nested chips: the account chip (with HUMN Points now
           folded in, #313) lives in its own standalone chip to the right of this
           pill. */}
-      <div className={`${CHIP_H} flex-1 min-w-0 flex items-center justify-between gap-2 pl-4 pr-2 sm:pl-5 sm:pr-3 rounded-full ${glassPill(isDark)}`}>
+      <div
+        className={`${CHIP_H} flex-1 min-w-0 flex items-center justify-between gap-2 pl-4 pr-2 sm:pl-5 sm:pr-3 rounded-full ${glassPill(isDark)}`}
+      >
         {/* Privacy Mode — pinned far left (#159), a flat segment (#185) with a
             flush hairline on its right edge dividing it from the centered nav
             links at lg+. Below lg the border collapses so no hairline floats. */}
@@ -826,15 +843,16 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
           folded into this chip, and the humanity score lives only in the
           dropdown's Identity section. The binding-conflict notice renders as a
           static banner inside that dropdown (#282), not a floating overlay. */}
-      <div className="relative z-40 flex-shrink-0">
-        {accountChip}
-      </div>
+      <div className="relative z-40 flex-shrink-0">{accountChip}</div>
 
       {/* Mobile secondary-nav panel (credentials / How it works / Docs / Fee
           Juice) — the version chip lives under the Shield brand chip now (#113),
           not here. */}
       {mobileMenuOpen && (
-        <div ref={mobileMenuRef} className={`lg:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}>
+        <div
+          ref={mobileMenuRef}
+          className={`lg:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}
+        >
           {renderSecondaryNav(true)}
         </div>
       )}

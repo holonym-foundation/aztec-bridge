@@ -248,6 +248,9 @@ const AccountChip: React.FC<AccountChipProps> = ({
   // the wallet disconnects the chip collapses to the connect state (below), so
   // there is no persisted/stale value left to clear.
   const showPoints = isWaapConnected && typeof points === 'number' && points > 0
+  // A positive, real balance — drives the accent treatment on the dropdown points
+  // row (#427), which (unlike the nav chip) stays visible at 0 while connected.
+  const hasPoints = typeof points === 'number' && points > 0
 
   // #306: current-tier deposit limits derived from the L1 proof tier
   // (useL1Humanity), NOT gated behind an authed attestation session. Clean Hands
@@ -843,6 +846,31 @@ const AccountChip: React.FC<AccountChipProps> = ({
             status={l1Fetching ? 'Checking…' : l1IsPoch ? 'Verified' : 'Not held'}
             good={l1IsPoch}
           />
+          {/* HUMN Points readout (#427). The number beside Passport above is the
+              humanity SCORE, not points — users conflate the two, and the nav
+              points chip hides at 0, so a user with none has nowhere to look. This
+              row is the authoritative points answer: labelled, always shown while
+              the wallet is connected, and it shows a real 0 rather than vanishing.
+              Uses the HUMN Points glyph (not a ph: icon) so it can't be mistaken
+              for a credential row. */}
+          {isWaapConnected && (
+            <div className="flex items-center gap-2 px-4 py-1.5">
+              <HumanPointsIcon
+                className={`w-4 h-4 ${hasPoints ? accentPink(isDark) : mutedIconText(isDark)}`}
+              />
+              <span className="flex flex-col min-w-0 flex-1">
+                <span className={`text-xs font-medium ${navText(isDark)}`}>HUMN Points</span>
+                <span className={`text-[10px] ${subtleText(isDark)}`}>Rewards for verified humans</span>
+              </span>
+              <span
+                className={`flex-shrink-0 text-[11px] font-semibold ${
+                  hasPoints ? accentPink(isDark) : subtleText(isDark)
+                }`}
+              >
+                {typeof points === 'number' ? points.toLocaleString() : '—'}
+              </span>
+            </div>
+          )}
           {/* Contextual next step (driven by the SAME L1 humanity result as the
               face, so it stays consistent):
                 - real humanity but the authed Shield attestation is incomplete

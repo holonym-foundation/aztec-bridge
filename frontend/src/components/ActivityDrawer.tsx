@@ -203,15 +203,19 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
 
   // Measure the space above the tab's bottom edge and cap the panel to it, so the
   // upward-growing panel is never clipped by the viewport top and never crosses
-  // into the top nav bar (#318). Reserving NAV_SAFE_TOP lands the panel's top edge
-  // just below the nav so the list scrolls internally instead of growing over the
-  // account/points chip. Re-measures on resize.
+  // into the top nav bar (#318). The top boundary is the LIVE bottom of the nav
+  // (banners + Header), which grows when a banner shows — a static reservation
+  // lands the panel's top edge behind a taller nav (z-50), hiding the header row
+  // and top op. Measure the same `.ob-header-elevate` wrapper BridgeStepsRail and
+  // NotificationsDrawer read; fall back to NAV_SAFE_TOP. Re-measures on resize.
   useEffect(() => {
     if (!open) return
     const measure = () => {
       const rect = handleRef.current?.getBoundingClientRect()
       if (!rect) return
-      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - NAV_SAFE_TOP)))
+      const header = typeof document !== 'undefined' ? document.querySelector('.ob-header-elevate') : null
+      const navBottom = header ? header.getBoundingClientRect().bottom : NAV_SAFE_TOP
+      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - navBottom)))
     }
     measure()
     window.addEventListener('resize', measure)

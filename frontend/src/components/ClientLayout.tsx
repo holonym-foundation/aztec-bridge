@@ -40,6 +40,11 @@ export default function ClientLayout({
   // Support binder tab until it's reliable. Flip back to true once Iris is stable. While
   // off, we also stop suppressing the native Iris launcher so support isn't fully hidden.
   const SUPPORT_TAB_ENABLED = false
+  // Iris support is unreliable right now, so pull the native floating bubble entirely
+  // until Maylynne has it working — a support entry point that opens nothing (or a
+  // broken widget) is worse than none. Flip back to true once Iris is stable (pairs
+  // with SUPPORT_TAB_ENABLED / shield.human.tech#96).
+  const IRIS_ENABLED = false
   const [hideNativeBubble, setHideNativeBubble] = useState(false)
   useEffect(() => {
     if (isSupportOpenable()) {
@@ -214,6 +219,16 @@ export default function ClientLayout({
           leaving support unreachable. Until then the native launcher stays visible. */}
       {SUPPORT_TAB_ENABLED && hideNativeBubble && (
         <style dangerouslySetInnerHTML={{ __html: '#iris-widget-host { display: none !important }' }} />
+      )}
+      {/* Iris disabled: pull the native bubble entirely until it's fixed. Kept as its
+          own unconditional rule so it hides regardless of the Support-tab state above. */}
+      {!IRIS_ENABLED && (
+        <style
+          dangerouslySetInnerHTML={{
+            __html:
+              '#iris-widget-host, .iris-bubble, [data-iris-launcher], [aria-label="Open chat"] { display: none !important }',
+          }}
+        />
       )}
       <HowItWorksModal />
     </div>

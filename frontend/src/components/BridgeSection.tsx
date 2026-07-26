@@ -464,7 +464,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   // doesn't surface a remaining figure (cap disabled). Deposit-only, like the rest of this slot.
   const remainingKnown = remaining != null && tierLimitUsd > 0
   const remainingLabel = remainingKnown
-    ? `${formatUsd(remaining as number)} of ${formatUsd(tierLimitUsd)} left`
+    ? `Limit: ${formatUsd(remaining as number)} of ${formatUsd(tierLimitUsd)} left`
     : limitLabel
   // Heads-up: the entered amount would spend past what's left of the cap. Distinct from the
   // Clean Hands nudge, which fires only once the amount clears the FULL tier cap; guard on

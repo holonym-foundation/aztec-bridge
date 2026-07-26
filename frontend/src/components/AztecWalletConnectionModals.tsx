@@ -280,15 +280,19 @@ export function AztecWalletConnectionModals() {
           check. Hold a loading state here so the modal never blinks out and
           looks like the click did nothing. */}
       {walletConnectionPhase === 'verifying' && !verificationEmojis && (
-        <div className='absolute inset-0 bg-latest-grey-1000 z-20 rounded-lg flex flex-col items-center justify-center gap-4'>
-          <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />
-          <p className='text-neutral-600 text-14 font-medium'>Connecting to wallet...</p>
+        <div className='fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4'>
+          <div className='flex flex-col items-center gap-4 rounded-2xl bg-white px-8 py-7 shadow-xl'>
+            <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />
+            <p className='text-neutral-600 text-14 font-medium'>Connecting to wallet...</p>
+          </div>
         </div>
       )}
       {walletConnectionPhase === 'requesting' && (
-        <div className='absolute inset-0 bg-latest-grey-1000 z-20 rounded-lg flex flex-col items-center justify-center gap-4'>
-          <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />
-          <p className='text-neutral-600 text-14 font-medium'>Requesting permissions...</p>
+        <div className='fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4'>
+          <div className='flex flex-col items-center gap-4 rounded-2xl bg-white px-8 py-7 shadow-xl'>
+            <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />
+            <p className='text-neutral-600 text-14 font-medium'>Requesting permissions...</p>
+          </div>
         </div>
       )}
       {walletConnectionPhase === 'account-select' && (

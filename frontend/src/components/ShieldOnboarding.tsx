@@ -9,6 +9,14 @@ import { useOnboardingStore } from '@/stores/useOnboardingStore'
 import { PASSPORT_BUILD_URL } from '@/config'
 
 const ONBOARDED_KEY = 'shield_onboarded'
+
+// Module-scoped, so it survives client-side navigations (React remounts) but resets on a
+// true document reload/refresh. Once the user has entered the app this page-load, NO
+// route change may re-show the splash — the only ways back to it are a refresh (module
+// re-initialises → false) or the top-left Shield brand (requestShowSplash). This is the
+// root fix for dangling routes that bounced users to the splash (#419/#437), independent
+// of whether any given navigation remembered the ?app=1 marker.
+let hasEnteredAppThisLoad = false
 const BRAND = '#81133B'
 const CLEAN_SDK = 'https://human.tech/clean-sdk'
 const DOCS_CLEAN_HANDS = '/docs/users'
@@ -590,7 +598,7 @@ export default function ShieldOnboarding() {
     } catch {
       onboarded = false
     }
-    setMode(returnToApp ? 'hidden' : onboarded ? 'splash' : 'flow')
+    setMode(returnToApp || hasEnteredAppThisLoad ? 'hidden' : onboarded ? 'splash' : 'flow')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -688,6 +696,11 @@ export default function ShieldOnboarding() {
   // "Connect Aztec Wallet" next step, so route there before dismissing.
   const enterApp = () => {
     brandSplashRef.current = false
+    // Mark the app as entered for this page-load so no later navigation re-shows the
+    // splash, and ALWAYS land on the app-shell home (#437 + "enter app → home"): the
+    // splash overlays whatever route was underneath, so a user who opened it from
+    // /activity must be taken to the bridge, never dropped back onto that route.
+    hasEnteredAppThisLoad = true
     if (pathname !== '/') router.push('/')
     setMode('hidden')
   }

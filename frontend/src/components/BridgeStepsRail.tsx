@@ -10,7 +10,7 @@ import { useL2FeeJuiceBalance, useClaimFeeEstimate } from '@/hooks/useL2Operatio
 import { useBridgeOperations } from '@/hooks/useBridgeOperations'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { EXPLAINER_STEPS } from '@/components/model/HowItWorksModal'
-import { POCH_MINT_URL } from '@/config'
+import { POCH_MINT_URL, PASSPORT_BUILD_URL } from '@/config'
 
 // Motion values mirrored from the human-tech design system (docs/tokens.css):
 // --dur-enter / --ease-slide for the panel that slides out from the tab.
@@ -24,7 +24,6 @@ type PeekSignal = { id: string; open: boolean }
 
 // Human Passport builder (matches VerificationStep's constant). Clean Hands mint
 // comes from config so it tracks the active network (sandbox vs production).
-const PASSPORT_BUILD_URL = 'https://app.passport.xyz'
 
 // The top nav row is pt-3 (12px) + CHIP_H (h-14 = 56px) ≈ 68px tall (#316). The
 // upward-growing steps panel must stop below it, so reserve this much space from

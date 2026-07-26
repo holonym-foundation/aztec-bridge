@@ -10,7 +10,7 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 import { useL1Humanity } from '@/hooks/useL1Humanity'
 import { shortAddr, accountLabel } from '@/hooks/useBindingStatus'
-import { POCH_MINT_URL, IS_MAINNET } from '@/config'
+import { POCH_MINT_URL, PASSPORT_BUILD_URL, IS_MAINNET } from '@/config'
 import { BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD } from '@/config/env.config'
 import { silkUrl } from '@/config/l1.config'
 import { LOGIN_METHODS } from '@/types/wallet'
@@ -904,7 +904,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
               // verification" (implies done) or "upgrade to Clean Hands" (implies
               // they passed the lower tier). External, closes the dropdown on click.
               <a
-                href="https://app.passport.xyz"
+                href={PASSPORT_BUILD_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setOpen(false)}
@@ -934,7 +934,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
               // A passing (attested) Passport → upgrade to Clean Hands; no proof yet
               // → get verified. Both are external steps; close the dropdown on click.
               <a
-                href={l1ScorePasses ? POCH_MINT_URL : 'https://app.passport.xyz'}
+                href={l1ScorePasses ? POCH_MINT_URL : PASSPORT_BUILD_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setOpen(false)}

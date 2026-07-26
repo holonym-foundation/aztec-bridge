@@ -131,6 +131,10 @@ export const POCH_MINT_URL = IS_MAINNET
   ? 'https://id.human.tech/clean-hands'
   : 'https://id.human.tech/sandbox/clean-hands'
 
+// Where a user builds up their Human Passport score (add stamps). Single source of
+// truth — was duplicated as a local const in several components (#70 Phase-0 prep).
+export const PASSPORT_BUILD_URL = 'https://app.passport.xyz'
+
 export const AZTECSCAN_URLS: Record<number, string> = {
   [L2_CHAIN_ID]: activeEnvConfig.aztecscanUrl,
 }

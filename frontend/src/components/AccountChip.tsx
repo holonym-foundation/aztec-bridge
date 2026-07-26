@@ -50,6 +50,15 @@ const EVM_WALLET_FALLBACK = '/assets/wallets/wally-dark.svg'
 // (Rabby/MetaMask) that waapWalletIcon may carry for a browser-extension login.
 const WAAP_WALLET_ICON = '/assets/svg/silk-logo.svg'
 
+// HUMN Points display is OFF until it reads from a working source (#427/#429).
+// The current /api/points proxy hits Passport's public Stamps API, whose
+// points_data field is now hardcoded null (the campaign moved) — so it returns 0
+// for everyone, even a wallet showing 1,200 on the Passport dApp. Showing that 0
+// is worse than showing nothing (a false balance). Flip this back to true once
+// fetchPassportPoints is repointed at the Covenant HUMN Points service (needs its
+// base URL + auth). Until then both the nav chip and the dropdown row stay hidden.
+const HUMN_POINTS_LIVE = false
+
 // Compliance figures surfaced in the account dropdown. Both come from env
 // (BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD) — never hardcoded — so
 // they track config. Neither is NEXT_PUBLIC, so on the client `process.env`
@@ -247,7 +256,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
   // while the EVM wallet is connected AND a real numeric balance is present. When
   // the wallet disconnects the chip collapses to the connect state (below), so
   // there is no persisted/stale value left to clear.
-  const showPoints = isWaapConnected && typeof points === 'number' && points > 0
+  const showPoints = HUMN_POINTS_LIVE && isWaapConnected && typeof points === 'number' && points > 0
   // A positive, real balance — drives the accent treatment on the dropdown points
   // row (#427), which (unlike the nav chip) stays visible at 0 while connected.
   const hasPoints = typeof points === 'number' && points > 0
@@ -853,7 +862,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
               the wallet is connected, and it shows a real 0 rather than vanishing.
               Uses the HUMN Points glyph (not a ph: icon) so it can't be mistaken
               for a credential row. */}
-          {isWaapConnected && (
+          {HUMN_POINTS_LIVE && isWaapConnected && (
             <div className="flex items-center gap-2 px-4 py-1.5">
               <HumanPointsIcon
                 className={`w-4 h-4 ${hasPoints ? accentPink(isDark) : mutedIconText(isDark)}`}

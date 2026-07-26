@@ -7,6 +7,38 @@ import { Icon } from '@iconify/react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { POCH_MINT_URL } from '@/config'
 import { BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD, PASSPORT_SCORE_THRESHOLD } from '@/config/env.config'
+import { useWalletStore } from '@/stores/walletStore'
+
+// The connected wallet on a box's network, shown beside the From/To header (#423).
+// Matters for the shielding story: the user needs to SEE which address funds land
+// on (e.g. withdrawing to a fresh L1 address with no history). Truncated, copyable,
+// and self-labelled — never the interaction focus. Uses the same 0x123…abcd shape
+// as the account dropdown so the two never disagree.
+function AddressChip({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false)
+  const short = `${address.slice(0, 6)}…${address.slice(-4)}`
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        navigator.clipboard?.writeText(address).then(
+          () => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1200)
+          },
+          () => {},
+        )
+      }}
+      title={copied ? 'Copied' : `Copy address ${address}`}
+      aria-label={copied ? 'Address copied' : `Copy address ${short}`}
+      className="flex shrink-0 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-latest-grey-500 transition-colors hover:text-latest-black-100"
+    >
+      <span>{short}</span>
+      <Icon icon={copied ? 'ph:check-bold' : 'ph:copy'} width={11} height={11} className="shrink-0" />
+    </button>
+  )
+}
 
 interface BridgeSectionProps {
   bridgeConfig: BridgeState
@@ -161,6 +193,14 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   // LEAVING Aztec is misleading and implies double-counting, so the limit indicator (both
   // the "Limit: $X" state and the Clean Hands nudge) renders only when this flow is a deposit.
   const isDeposit = direction === BridgeDirection.L1_TO_L2
+  // Each box shows the address of the wallet on THAT box's network, so it stays
+  // correct in both directions: L1 (Ethereum) uses the EVM/WaaP address, L2 (Aztec)
+  // uses the Aztec address. On a deposit From is L1 and To is L2; a withdrawal flips
+  // both. Read live from the store so a disconnect/switch clears them (SOP §8/#303).
+  const waapAddress = useWalletStore((s) => s.waapAddress)
+  const aztecAddress = useWalletStore((s) => s.aztecAddress)
+  const fromAddress = isDeposit ? waapAddress : aztecAddress
+  const toAddress = isDeposit ? aztecAddress : waapAddress
   // Fit-to-width: the typed amount owns the free space and scales its font size DOWN so a long
   // number (e.g. "1234.5678", or a full balance) stays fully visible instead of being clipped
   // behind the input's right edge. A prior length-based heuristic (200/length) ignored the real
@@ -312,7 +352,10 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
           toggle, which is absolutely positioned at bottom-[-30px] and straddles the
           From/To boundary. Without it the toggle's top edge overlaps the attestation pill. */}
       <div className="bg-[#F5F5F5] rounded-md p-2.5 pb-5 relative">
-        <p className="text-14 font-semibold text-latest-grey-100">From</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-14 font-semibold text-latest-grey-100">From</p>
+          {fromAddress && <AddressChip address={fromAddress} />}
+        </div>
         <div className="flex justify-between">
           {/* Network selector */}
           <div className="flex flex-col mt-1 gap-0.5">
@@ -462,7 +505,10 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
       {/* mt-6 opens the inter-card gap so the swap toggle (44px, hanging 30px below the
           From card) has clear space and does not crowd the "To" header below it. */}
       <div className="mt-6 bg-[#F5F5F5] rounded-md p-2.5">
-        <p className="text-14 font-semibold text-latest-grey-100">To</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-14 font-semibold text-latest-grey-100">To</p>
+          {toAddress && <AddressChip address={toAddress} />}
+        </div>
         <div className="flex justify-between">
           {/* Network selector */}
           <div className="flex flex-col mt-1 gap-0.5">

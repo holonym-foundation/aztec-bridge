@@ -123,7 +123,7 @@ function AztecAddressMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-[224px] rounded-md border border-latest-grey-300 bg-white p-1 shadow-lg"
+          className="absolute left-0 top-full z-30 mt-1 w-[224px] rounded-md border border-latest-grey-300 bg-white p-1 shadow-lg"
         >
           {accounts.map((acc, i) => {
             const isCurrent = acc.address === address
@@ -638,7 +638,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             brand mark + per-human tooltip); once a Passport-tier amount exceeds the cap the linked
             Clean Hands nudge REPLACES it. Deposit-only: the cap does not apply to withdrawals. */}
         {isDeposit && attestationMethod && (
-          <div className="mt-1 flex justify-end">
+          <div className="mt-1 flex justify-start">
             {showCleanHandsNudge ? (
               <a
                 href={POCH_MINT_URL}

@@ -249,6 +249,15 @@ const AccountChip: React.FC<AccountChipProps> = ({
   // Verified indicator reflects the humanity result (same as the nav), NOT the
   // authed attestation — so the seal/state can never contradict the nav.
   const l1Verified = l1HasScore || l1IsPoch || (l1Humanity?.eligible ?? false)
+  // #434: PERSONHOOD is only proven by a PASSING score or Clean Hands — a score
+  // below the threshold (e.g. 11 when the bar is 20) is NOT verified. The seal must
+  // use this, never `l1Verified` (which is true for any score > 0), or it contradicts
+  // the Passport row's own passing state.
+  const l1PersonhoodVerified = l1ScorePasses || l1IsPoch
+  // Has a Passport score but BELOW the passing threshold — the next step is to RAISE
+  // the score (add stamps), not "complete verification" or "upgrade to Clean Hands"
+  // (both of which assume they already passed) (#434).
+  const l1BelowThreshold = l1HasScore && !l1ScorePasses && !l1IsPoch
   // Has a Passport score but not yet Clean Hands.
   const l1OnPassportTier = !l1IsPoch && l1HasScore
 
@@ -551,7 +560,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
           <span className={`text-xs font-medium truncate ${navText(isDark)}`} title={waapAddress || ''}>
             {label}
           </span>
-          {bothConnected && l1Verified && (
+          {bothConnected && l1PersonhoodVerified && (
             <Icon
               icon="ph:seal-check-fill"
               width={15}
@@ -889,8 +898,23 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 - no proof yet → Get verified;
                 - already Clean Hands → hidden. */}
           {!l1IsPoch &&
-            (l1Verified && !attVerified ? (
-              // #349: the wallet already holds an L1 proof but the authed Shield
+            (l1BelowThreshold ? (
+              // #434: has a score but BELOW the passing threshold — the honest next
+              // step is to RAISE it (add stamps on Passport), not "complete
+              // verification" (implies done) or "upgrade to Clean Hands" (implies
+              // they passed the lower tier). External, closes the dropdown on click.
+              <a
+                href="https://app.passport.xyz"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2 mx-2 px-2 py-1.5 rounded-lg ${menuItemHover(isDark)} cursor-pointer transition-colors duration-150`}
+              >
+                <Icon icon="ph:plus-circle" width={16} height={16} className={accentPink(isDark)} />
+                <span className={`text-xs font-medium ${navText(isDark)}`}>Raise your Passport score</span>
+              </a>
+            ) : l1ScorePasses && !attVerified ? (
+              // #349: the wallet holds a PASSING L1 proof but the authed Shield
               // attestation is incomplete — the missing step is the IN-APP humanity
               // re-check (VerificationStep, surfaced on the bridge page), NOT an
               // external passport rebuild. Route into the app's verify flow and
@@ -907,12 +931,10 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 <span className={`text-xs font-medium ${navText(isDark)}`}>Complete verification</span>
               </button>
             ) : (
-              // Building a Passport score / minting Clean Hands are genuinely
-              // external steps (the same destinations BridgeStepsRail and
-              // VerificationStep link to). Keep the external link, but close the
-              // dropdown on click so it doesn't stay frozen open behind the tab.
+              // A passing (attested) Passport → upgrade to Clean Hands; no proof yet
+              // → get verified. Both are external steps; close the dropdown on click.
               <a
-                href={l1OnPassportTier ? POCH_MINT_URL : 'https://app.passport.xyz'}
+                href={l1ScorePasses ? POCH_MINT_URL : 'https://app.passport.xyz'}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setOpen(false)}
@@ -920,7 +942,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
               >
                 <Icon icon="ph:plus-circle" width={16} height={16} className={accentPink(isDark)} />
                 <span className={`text-xs font-medium ${navText(isDark)}`}>
-                  {l1OnPassportTier ? 'Upgrade to Clean Hands' : 'Get verified'}
+                  {l1ScorePasses ? 'Upgrade to Clean Hands' : 'Get verified'}
                 </span>
               </a>
             ))}

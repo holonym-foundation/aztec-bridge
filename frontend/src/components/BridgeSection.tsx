@@ -99,26 +99,43 @@ function AztecAddressMenu({
 
   return (
     <div className="relative shrink-0" ref={rootRef}>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          setOpen((o) => !o)
-        }}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={`Aztec account ${address}`}
-        className="flex shrink-0 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-latest-grey-500 transition-colors hover:text-latest-black-100"
-      >
-        <StyledImage src={icon} alt="" className="h-3.5 w-3.5 shrink-0 rounded-full" />
-        <span>{short}</span>
-        <Icon
-          icon="ph:caret-down"
-          width={11}
-          height={11}
-          className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
+      {/* Symmetry with the L1 address chip (#434): the address itself is a one-click
+          COPY target (icon + address + copy glyph, exactly like AddressChip); the caret
+          is a SEPARATE button that opens the account switcher. Both live in one chip. */}
+      <div className="flex shrink-0 items-center rounded-full bg-white pl-2 pr-1 py-0.5 text-[11px] font-medium text-latest-grey-500">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            copy()
+          }}
+          title={copied ? 'Copied' : `Copy address ${address}`}
+          aria-label={copied ? 'Address copied' : `Copy address ${short}`}
+          className="flex items-center gap-1 transition-colors hover:text-latest-black-100"
+        >
+          <StyledImage src={icon} alt="" className="h-3.5 w-3.5 shrink-0 rounded-full" />
+          <span>{short}</span>
+          <Icon icon={copied ? 'ph:check-bold' : 'ph:copy'} width={11} height={11} className="shrink-0" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            setOpen((o) => !o)
+          }}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          title="Switch Aztec account"
+          className="ml-1 flex items-center border-l border-latest-grey-300 pl-1 transition-colors hover:text-latest-black-100"
+        >
+          <Icon
+            icon="ph:caret-down"
+            width={11}
+            height={11}
+            className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          />
+        </button>
+      </div>
 
       {open && (
         <div

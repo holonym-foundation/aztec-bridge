@@ -168,12 +168,16 @@ export default function ClientLayout({
         <BannerAztecNodeError />
         <Header />
       </div>
-      {/* Main content — a flex-grow column that owns its own overflow (min-h-0 +
-          overflow-y-auto). On comfortable heights the card fits and nothing scrolls; only
-          when a card is genuinely taller than the space between header and footer does
-          THIS region scroll internally, so the page (h-[100dvh], clipped) never scrolls
-          and the footer stays pinned. */}
-      <div className="relative z-20 flex flex-grow flex-col min-h-0 overflow-y-auto">
+      {/* Main content — a flex-grow column between header and footer. It is
+          overflow-VISIBLE, not a clipped scroller: the fixed-height card is sized to
+          fit this space (RootStyle: h-[min(85vh,100dvh-11rem)]), and each page scrolls
+          INSIDE its own card (the card is overflow-hidden with an internal scroll
+          region). A clip here (overflow-y-auto) cut the card's drop shadow off exactly
+          at the footer's top edge, drawing a hard horizontal line where the card met the
+          pink background (#432). With overflow-visible the shadow fades softly behind the
+          transparent footer; the page still never scrolls because the root shell
+          (h-[100dvh], overflow-hidden) clips any spill below the footer. */}
+      <div className="relative z-20 flex flex-grow flex-col min-h-0 overflow-visible">
         <div className="flex-grow">{children}</div>
       </div>
       {/* Footer pinned to the bottom of the fixed shell (shrink-0 so it keeps its

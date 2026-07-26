@@ -137,7 +137,7 @@ function FeeJuicePageInner() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/?app=1')}
               title="Back to main screen"
               aria-label="Back to main screen"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-latest-grey-100 transition-colors hover:bg-latest-grey-200 hover:text-latest-black-100"

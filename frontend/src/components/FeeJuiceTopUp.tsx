@@ -18,6 +18,7 @@ import { useClaimFeeEstimate } from '@/hooks/useL2Operations'
 import { useL1TopUpFeeJuice, useL1TokenBalance } from '@/hooks/useL1Operations'
 import { useTopUpQuote, useTopUpSufficiency } from '@/components/WithdrawFuelPanel'
 import { useWalletStore } from '@/stores/walletStore'
+import { useAttestationCheck } from '@/hooks/useAttestationCheck'
 
 const USD_PRESETS = [1, 5, 10]
 
@@ -317,18 +318,32 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
 
   const walletsReady = isWaapConnected && isAztecConnected
   const amountValid = !!fuelAmount && Number(fuelAmount) > 0
-  // Fee Juice is non-transferable L2 gas, not a bridged asset, so a top-up must NEVER be gated
-  // by (or shown against) the compliance deposit limit — only real token bridges consume it. The
-  // gates below are intentionally limit-free: no remaining-cap check, no limit block, no pill.
-  // NOTE: the underlying buy+bridge still runs through `useL1TopUpFeeJuice` -> `bridge.bridgeL1ToL2`,
-  // whose attestation cascade counts the spend against the deposit limit at the backend. That
-  // consumption can only be exempted server-side (a fuel-only deposit flag on the attestation
-  // request) and is out of scope for this frontend; see the backend follow-up.
+
+  // Keep the frontend in sync with the backend on the deposit limit. The buy+bridge below runs
+  // through `useL1TopUpFeeJuice` -> `bridge.bridgeL1ToL2`, whose attestation cascade STILL counts
+  // the spend against the compliance deposit cap. So we gate the top-up on the same remaining
+  // figure the bridge form uses, and never let the user confirm a top-up the backend will reject.
+  // Tier-appropriate remaining: a Passport user is bound by the Travel Rule (travelRuleRemainingUsd),
+  // a PoCH user by the $25k/day deposit cap (remainingDepositUsd); undefined = cap disabled, no gate.
+  // This can be relaxed ONLY once the backend ships a fuel-only-deposit exemption (a `fuelOnly` flag
+  // on the attestation request that skips fuel spend from the cap), at which point both layers drop
+  // the gate together.
+  const { data: attestation } = useAttestationCheck()
+  const tierRemainingUsd =
+    attestation?.method === 'passport' ? attestation?.travelRuleRemainingUsd : attestation?.remainingDepositUsd
+  const spendUsd = spendNum > 0 ? spendNum * getTokenPriceUsd(fundingSymbol, prices) : 0
+  const overDepositLimit = tierRemainingUsd != null && spendUsd > tierRemainingUsd
+  const depositLimitMessage =
+    tierRemainingUsd != null && tierRemainingUsd > 0
+      ? `That amount is over your remaining limit. You can bridge up to $${tierRemainingUsd.toFixed(2)} more right now.`
+      : 'You have reached your deposit limit for now. It frees up as your recent deposits settle.'
+
   const confirmDisabled =
     !canTopUp ||
     !walletsReady ||
     !amountValid ||
     exceedsBalance ||
+    overDepositLimit ||
     quoteLoading ||
     fjOutput === null ||
     !!quoteError ||
@@ -341,7 +356,9 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
     ? 'Enter an amount to add'
     : exceedsBalance
       ? `Not enough ${fundingSymbol}. You have ${fundingBalanceDisplay} ${fundingSymbol}.`
-      : quoteLoading || sufficiencyLoading
+      : overDepositLimit
+        ? depositLimitMessage
+        : quoteLoading || sufficiencyLoading
         ? 'Checking the quote'
         : quoteError || fjOutput === null
           ? 'Quote unavailable, try again'
@@ -594,10 +611,17 @@ const FeeJuiceTopUp: React.FC<FeeJuiceTopUpProps> = ({
                 </p>
               )}
 
+              {/* Deposit-limit guard: one compact line that also stands in for the quote readout,
+                  so an over-limit amount never stacks a second block or grows the card past its
+                  fixed height. Mirrors the backend cap the buy+bridge is counted against. */}
+              {!exceedsBalance && overDepositLimit && (
+                <p className="text-12 font-medium leading-[17px] text-[#D92D20]">{depositLimitMessage}</p>
+              )}
+
               {/* Live readout: what the spend converts to, and how much it adds to the current balance. */}
-              {!exceedsBalance && amountValid && (quoteLoading || (fjOutput === null && !quoteError)) && <QuoteSkeleton />}
-              {!exceedsBalance && amountValid && quoteError && <p className="text-12 text-red-500">{quoteError}</p>}
-              {!exceedsBalance && amountValid && !quoteLoading && !quoteError && fjOutput !== null && (
+              {!exceedsBalance && !overDepositLimit && amountValid && (quoteLoading || (fjOutput === null && !quoteError)) && <QuoteSkeleton />}
+              {!exceedsBalance && !overDepositLimit && amountValid && quoteError && <p className="text-12 text-red-500">{quoteError}</p>}
+              {!exceedsBalance && !overDepositLimit && amountValid && !quoteLoading && !quoteError && fjOutput !== null && (
                 <div className="rounded-lg bg-latest-grey-200 px-4 py-3 text-12 leading-[17px]">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-latest-grey-100">You receive</span>

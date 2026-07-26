@@ -132,7 +132,7 @@ export default function ProgressPage() {
         operationStarted.current = true
         handleBridgeOperation()
       } else if (Number(bridgeAmount) === 0) {
-        router.push('/')
+        router.push('/?app=1')
       }
     }, 2000)
   }, [bridgeAmount, bridgeConfig.direction, bridgeTokensToL2, withdrawTokensToL1, router, handleBridgeOperation])

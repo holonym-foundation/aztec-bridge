@@ -799,7 +799,7 @@ export function LocalRecoveryPanel({ variant = 'page', onClose }: LocalRecoveryP
         ) : (
           <>
             <TextButton onClick={() => router.push('/activity')}>Back to Activity</TextButton>
-            <TextButton onClick={() => router.push('/')}>Back to Bridge</TextButton>
+            <TextButton onClick={() => router.push('/?app=1')}>Back to Bridge</TextButton>
           </>
         )}
       </div>

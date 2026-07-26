@@ -8,13 +8,16 @@ import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { POCH_MINT_URL } from '@/config'
 import { BRIDGE_MAX_DEPOSIT_USD, TRAVEL_RULE_THRESHOLD_USD, PASSPORT_SCORE_THRESHOLD } from '@/config/env.config'
 import { useWalletStore } from '@/stores/walletStore'
+import { useSessionLinkedL2 } from '@/hooks/useBindingStatus'
+import { LOGIN_METHODS } from '@/types/wallet'
 
-// The connected wallet on a box's network, shown beside the From/To header (#423).
-// Matters for the shielding story: the user needs to SEE which address funds land
-// on (e.g. withdrawing to a fresh L1 address with no history). Truncated, copyable,
-// and self-labelled — never the interaction focus. Uses the same 0x123…abcd shape
-// as the account dropdown so the two never disagree.
-function AddressChip({ address }: { address: string }) {
+// The connected wallet on a box's network, shown beside the From/To header (#423,
+// #428). Reads `From  [wallet-icon] 0x123…abcd` — the wallet-type icon sits before
+// the truncated address so the box self-identifies which wallet funds land on.
+// Matters for the shielding story: the user needs to SEE the destination (e.g.
+// withdrawing to a fresh L1 address with no history). Copyable, never the focus.
+// Uses the same 0x123…abcd shape as the account dropdown so the two never disagree.
+function AddressChip({ address, icon }: { address: string; icon?: string }) {
   const [copied, setCopied] = useState(false)
   const short = `${address.slice(0, 6)}…${address.slice(-4)}`
   return (
@@ -34,9 +37,154 @@ function AddressChip({ address }: { address: string }) {
       aria-label={copied ? 'Address copied' : `Copy address ${short}`}
       className="flex shrink-0 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-latest-grey-500 transition-colors hover:text-latest-black-100"
     >
+      {icon && <StyledImage src={icon} alt="" className="h-3.5 w-3.5 shrink-0 rounded-full" />}
       <span>{short}</span>
       <Icon icon={copied ? 'ph:check-bold' : 'ph:copy'} width={11} height={11} className="shrink-0" />
     </button>
+  )
+}
+
+// Aztec box address selector (#428). The Aztec network can carry several connected
+// Azguard accounts, so its box header is a dropdown (the L1/WaaP box can't switch
+// accounts yet, so it stays a plain AddressChip). Trigger mirrors AddressChip
+// (wallet icon + truncated 0x… + caret). The menu lists every connected account;
+// only the LINKED account (server-disclosed pair for this wallet) plus the CURRENT
+// one are selectable — unlinked accounts are grayed, disabled and non-selectable
+// with a reason, since switching to an unlinked L2 would break the wallet pairing.
+// Absolutely-positioned overlay so it never pushes layout or grows the fixed card.
+function AztecAddressMenu({
+  address,
+  icon,
+  accounts,
+  linkedL2,
+  onSwitch,
+}: {
+  address: string
+  icon: string
+  accounts: Array<{ alias: string; address: string; index: number }>
+  linkedL2: string | null
+  onSwitch: (account: { alias: string; address: string; index: number }) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const short = `${address.slice(0, 6)}…${address.slice(-4)}`
+
+  useEffect(() => {
+    if (!open) return
+    function onClickOutside(e: MouseEvent) {
+      if (rootRef.current?.contains(e.target as Node)) return
+      setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const copy = () => {
+    navigator.clipboard?.writeText(address).then(
+      () => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1200)
+      },
+      () => {},
+    )
+  }
+
+  return (
+    <div className="relative shrink-0" ref={rootRef}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((o) => !o)
+        }}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={`Aztec account ${address}`}
+        className="flex shrink-0 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-latest-grey-500 transition-colors hover:text-latest-black-100"
+      >
+        <StyledImage src={icon} alt="" className="h-3.5 w-3.5 shrink-0 rounded-full" />
+        <span>{short}</span>
+        <Icon
+          icon="ph:caret-down"
+          width={11}
+          height={11}
+          className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1 w-[224px] rounded-md border border-latest-grey-300 bg-white p-1 shadow-lg"
+        >
+          {accounts.map((acc, i) => {
+            const isCurrent = acc.address === address
+            const isLinked = !!linkedL2 && acc.address.toLowerCase() === linkedL2.toLowerCase()
+            const selectable = isLinked || isCurrent
+            const rowShort = `${acc.address.slice(0, 6)}…${acc.address.slice(-4)}`
+            return (
+              <button
+                key={acc.address}
+                type="button"
+                disabled={!selectable}
+                onClick={() => {
+                  setOpen(false)
+                  if (!isCurrent && selectable) onSwitch(acc)
+                }}
+                title={selectable ? acc.address : 'Not linked to this wallet yet'}
+                className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left ${
+                  selectable
+                    ? 'cursor-pointer hover:bg-[#F5F5F5]'
+                    : 'cursor-not-allowed opacity-40 select-none'
+                }`}
+              >
+                <Icon
+                  icon={isCurrent ? 'ph:check' : 'ph:wallet'}
+                  width={13}
+                  height={13}
+                  className={`shrink-0 ${isCurrent ? 'text-shield' : 'text-latest-grey-500'}`}
+                />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[11px] font-medium text-latest-black-100">
+                    {acc.alias || `Account ${(acc.index ?? i) + 1}`}
+                  </span>
+                  <span className="truncate text-[10px] text-latest-grey-500">
+                    {rowShort}
+                    {isCurrent ? ' · Current' : !isLinked ? ' · Not linked to this wallet yet' : ''}
+                  </span>
+                </span>
+                {isLinked && (
+                  <span
+                    className="ml-auto flex shrink-0 items-center gap-1 text-[10px] font-medium text-shield"
+                    title="Linked to this wallet"
+                  >
+                    <Icon icon="ph:link-simple" width={12} height={12} className="shrink-0" />
+                    Linked
+                  </span>
+                )}
+              </button>
+            )
+          })}
+          <div className="my-1 border-t border-latest-grey-300" />
+          <button
+            type="button"
+            onClick={copy}
+            className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] font-medium text-latest-grey-500 transition-colors hover:bg-[#F5F5F5] hover:text-latest-black-100"
+          >
+            <Icon icon={copied ? 'ph:check-bold' : 'ph:copy'} width={13} height={13} className="shrink-0" />
+            {copied ? 'Copied' : 'Copy address'}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -201,6 +349,46 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   const aztecAddress = useWalletStore((s) => s.aztecAddress)
   const fromAddress = isDeposit ? waapAddress : aztecAddress
   const toAddress = isDeposit ? aztecAddress : waapAddress
+  // Wallet-type icon shown beside each box's address (#428). Mirrors AccountChip's
+  // source of truth: the L1/WaaP box uses the Silk mark when the login is the
+  // embedded WaaP wallet (the founder wants the WaaP brand for WaaP wallets), else
+  // the injected wallet's own icon (fallback Wally). The L2 box always uses the
+  // Aztec wallet mark. Which box is L1 vs L2 flips with direction: From is L1 on a
+  // deposit, L2 on a withdrawal; To is the opposite.
+  const waapWalletIcon = useWalletStore((s) => s.waapWalletIcon)
+  const waapLoginMethod = useWalletStore((s) => s.waapLoginMethod)
+  const availableAccounts = useWalletStore((s) => s.availableAccounts)
+  const switchAztecAccount = useWalletStore((s) => s.switchAztecAccount)
+  // Server-disclosed Aztec account bound to this EVM wallet — the only account
+  // (besides the current one) the Aztec dropdown lets the user switch to.
+  const sessionLinkedL2 = useSessionLinkedL2(waapAddress)
+  const l1WalletIcon =
+    waapLoginMethod === LOGIN_METHODS.WAAP
+      ? '/assets/svg/silk-logo.svg'
+      : waapWalletIcon || '/assets/wallets/wally-dark.svg'
+  const aztecWalletIcon = '/assets/svg/aztec-wallet-logo.svg'
+  const fromIsL1 = isDeposit
+  const toIsL1 = !isDeposit
+  const fromIcon = fromIsL1 ? l1WalletIcon : aztecWalletIcon
+  const toIcon = toIsL1 ? l1WalletIcon : aztecWalletIcon
+  // The Aztec box gets the account dropdown; the L1 box stays a plain chip (we
+  // can't switch WaaP accounts yet). Falls back to a plain chip when there is 0/1
+  // Aztec account (nothing to choose).
+  const renderBoxAddress = (addr: string | null, icon: string, isL1: boolean) => {
+    if (!addr) return null
+    if (!isL1 && availableAccounts.length > 1) {
+      return (
+        <AztecAddressMenu
+          address={addr}
+          icon={icon}
+          accounts={availableAccounts}
+          linkedL2={sessionLinkedL2}
+          onSwitch={switchAztecAccount}
+        />
+      )
+    }
+    return <AddressChip address={addr} icon={icon} />
+  }
   // Fit-to-width: the typed amount owns the free space and scales its font size DOWN so a long
   // number (e.g. "1234.5678", or a full balance) stays fully visible instead of being clipped
   // behind the input's right edge. A prior length-based heuristic (200/length) ignored the real
@@ -352,11 +540,14 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
           toggle, which is absolutely positioned at bottom-[-30px] and straddles the
           From/To boundary. Without it the toggle's top edge overlaps the attestation pill. */}
       <div className="bg-[#F5F5F5] rounded-md p-2.5 pb-5 relative">
-        <div className="flex items-center justify-between gap-2">
+        {/* Header: the address sits directly beside the "From" label (icon + 0x…),
+            not pushed to the far right, so the box self-identifies its wallet (#428). */}
+        <div className="flex items-center gap-2">
           <p className="text-14 font-semibold text-latest-grey-100">From</p>
-          {fromAddress && <AddressChip address={fromAddress} />}
+          {renderBoxAddress(fromAddress, fromIcon, fromIsL1)}
         </div>
-        <div className="flex justify-between">
+        {/* mt-3 opens a clear gap between the header/address and the Network row (#428). */}
+        <div className="flex justify-between mt-3">
           {/* Network selector */}
           <div className="flex flex-col mt-1 gap-0.5">
             <p className="text-12 text-[#747474]">Network</p>
@@ -396,51 +587,50 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
           </div>
         </div>
         <hr className="text-latest-grey-300 my-1" />
-        {/* Amount + balance/limit stack. The typed amount is the focal element (larger,
-            vertically centered against the right column); the balance sits top-right and the
-            per-human limit sits directly under it, right-aligned. */}
-        <div className="flex justify-between items-center gap-3">
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder="0"
-            value={inputAmount}
-            onChange={(e) => setInputAmount(e.target.value)}
-            className="min-w-0 flex-1 placeholder-latest-grey-400 outline-none bg-[transparent] leading-tight font-medium"
-            style={{ fontSize: `${amountFontPx}px` }}
-            autoFocus
-          />
-          <div className="flex flex-col items-end gap-0.5 shrink-0">
-            <div
-              className="flex gap-1 items-center cursor-pointer hover:text-latest-black-100 transition-colors"
-              onClick={() => setInputAmount(direction === BridgeDirection.L1_TO_L2 ? l1BalanceStr : l2BalanceStr)}
-              title="Use full balance"
-            >
-              <p className="text-latest-grey-500 text-14 font-medium">Balance:</p>
-              <p className="text-latest-grey-500 text-14 font-medium break-all">
-                {direction === BridgeDirection.L1_TO_L2 ? l1BalanceStr : l2BalanceStr}
-              </p>
-              <p className="text-latest-grey-500 text-14 font-medium">{bridge.from.token?.title}</p>
-              <p
-                className="text-12 font-medium text-latest-black-200 bg-white px-2 rounded-[32px] leading-5"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setInputAmount(direction === BridgeDirection.L1_TO_L2 ? l1BalanceStr : l2BalanceStr)
-                }}
-              >
-                Max
-              </p>
-            </div>
-            {direction === BridgeDirection.L2_TO_L1 && (
-              <div className="flex gap-1">
-                <p className="text-latest-grey-500 text-12 font-medium break-all">
-                  {feeJuiceLoading ? 'Loading...' : (feeJuiceBalance ?? '--')}
-                </p>
-                <p className="text-latest-grey-500 text-12 font-medium">Fee Juice</p>
-              </div>
-            )}
+        {/* The typed amount OWNS its own full-width row (large, focal). Balance + Max
+            drop to their own row directly below it, and the withdrawal Fee-Juice line
+            below that (#428) — nothing crowds the number on the right anymore. The
+            fit-to-width font (amountFontPx) now has the whole box width to work with. */}
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder="0"
+          value={inputAmount}
+          onChange={(e) => setInputAmount(e.target.value)}
+          className="w-full min-w-0 placeholder-latest-grey-400 outline-none bg-[transparent] leading-tight font-medium"
+          style={{ fontSize: `${amountFontPx}px` }}
+          autoFocus
+        />
+        <div className="mt-1 flex items-center gap-1.5">
+          <div
+            className="flex gap-1 items-center cursor-pointer text-latest-grey-500 hover:text-latest-black-100 transition-colors"
+            onClick={() => setInputAmount(direction === BridgeDirection.L1_TO_L2 ? l1BalanceStr : l2BalanceStr)}
+            title="Use full balance"
+          >
+            <p className="text-12 font-medium">Balance:</p>
+            <p className="text-12 font-medium break-all">
+              {direction === BridgeDirection.L1_TO_L2 ? l1BalanceStr : l2BalanceStr}
+            </p>
+            <p className="text-12 font-medium">{bridge.from.token?.title}</p>
           </div>
+          <p
+            className="text-12 font-medium text-latest-black-200 bg-white px-2 rounded-[32px] leading-5 cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation()
+              setInputAmount(direction === BridgeDirection.L1_TO_L2 ? l1BalanceStr : l2BalanceStr)
+            }}
+          >
+            Max
+          </p>
         </div>
+        {direction === BridgeDirection.L2_TO_L1 && (
+          <div className="mt-0.5 flex gap-1">
+            <p className="text-latest-grey-500 text-12 font-medium break-all">
+              {feeJuiceLoading ? 'Loading...' : (feeJuiceBalance ?? '--')}
+            </p>
+            <p className="text-latest-grey-500 text-12 font-medium">Fee Juice</p>
+          </div>
+        )}
         {/* Deposit limit indicator on its OWN full-width row below the amount, right-aligned, so it
             never competes with the amount input for horizontal space. The wide Clean Hands nudge
             used to sit in the amount row's right column and squeezed the number down to a couple of
@@ -505,11 +695,12 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
       {/* mt-6 opens the inter-card gap so the swap toggle (44px, hanging 30px below the
           From card) has clear space and does not crowd the "To" header below it. */}
       <div className="mt-6 bg-[#F5F5F5] rounded-md p-2.5">
-        <div className="flex items-center justify-between gap-2">
+        {/* Header: address beside the "To" label (icon + 0x…), mirroring From (#428). */}
+        <div className="flex items-center gap-2">
           <p className="text-14 font-semibold text-latest-grey-100">To</p>
-          {toAddress && <AddressChip address={toAddress} />}
+          {renderBoxAddress(toAddress, toIcon, toIsL1)}
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between mt-3">
           {/* Network selector */}
           <div className="flex flex-col mt-1 gap-0.5">
             <p className="text-12 text-[#747474]">Network</p>

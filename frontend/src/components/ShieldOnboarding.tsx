@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useWalletStore } from '@/stores/walletStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
+import { PASSPORT_BUILD_URL } from '@/config'
 
 const ONBOARDED_KEY = 'shield_onboarded'
 const BRAND = '#81133B'
@@ -79,7 +80,7 @@ const SCREENS: Screen[] = [
         </div>
         <div className="ob-tier-ctas">
           <a
-            href="https://app.passport.xyz/"
+            href={PASSPORT_BUILD_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="ob-pill ob-pill-primary"

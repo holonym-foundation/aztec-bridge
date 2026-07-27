@@ -730,14 +730,19 @@ const AccountChip: React.FC<AccountChipProps> = ({
                     isDark ? 'bg-[rgba(250,143,196,0.45)]' : 'bg-[rgba(129,19,59,0.35)]'
                   }`}
                 />
-                {/* "Linked" pill centered on the line at the vertical midpoint
-                    (28px, 36px) — sits in the whitespace between the two rows. */}
+                {/* Single "Linked" node sitting ON the line at the vertical
+                    midpoint (28px, 36px), in the empty band between the two rows'
+                    text. SOLID fill so it cleanly interrupts the line and reads
+                    legibly instead of showing the line/avatar edges through a
+                    translucent chip. This is now the ONLY "Linked" indicator —
+                    the per-row badge on the Aztec WalletRow is dropped so the two
+                    signals can't collide. */}
                 <span
-                  className={`pointer-events-none absolute left-[28px] top-[36px] -translate-x-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap ${
-                    isDark ? 'bg-[rgba(250,143,196,0.16)] text-[#FA8FC4]' : 'bg-[rgba(129,19,59,0.10)] text-[#81133B]'
+                  className={`pointer-events-none absolute left-[28px] top-[36px] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 px-1 py-0.5 rounded-full text-[10px] font-semibold leading-none whitespace-nowrap shadow-sm ${
+                    isDark ? 'bg-[#FA8FC4] text-[#2A0E1C]' : 'bg-[#81133B] text-white'
                   }`}
                 >
-                  <Icon icon="ph:link-simple" width={10} height={10} className="flex-shrink-0" />
+                  <Icon icon="ph:link-simple" width={11} height={11} className="flex-shrink-0" />
                   Linked
                 </span>
               </>
@@ -795,14 +800,9 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 onSwitch={availableAccounts.length > 1 ? () => setAztecSwitchOpen((v) => !v) : undefined}
                 switchTitle="Switch Azguard account"
                 switchActive={aztecSwitchOpen}
-                // #297a: the "Linked" badge belongs on the ACTUAL server-bound
-                // account, never on the current one by default. Show it here only
-                // when the connected Aztec account IS the linked pair.
-                linked={
-                  !!linkedAccountAddress &&
-                  !!aztecAddress &&
-                  aztecAddress.toLowerCase() === linkedAccountAddress.toLowerCase()
-                }
+                // #454: the per-row "Linked" badge is dropped here. The single
+                // "Linked" indicator is now the avatar-column connector node drawn
+                // above (between the EVM and Aztec rows) so the two can't collide.
               />
               {aztecSwitchOpen && availableAccounts.length > 1 && (
                 <div className="px-2 pb-1">
@@ -1097,48 +1097,52 @@ const AccountChip: React.FC<AccountChipProps> = ({
         document.body,
       )}
 
-      {/* #439: every dropdown tooltip must paint ABOVE the portaled z-[60] menu.
-          react-tooltip v5's floating element does NOT reliably pick up a z-index
-          from `className`, so the real stacking order is set via the `style` prop
-          (zIndex: 9999). react-tooltip already portals its floating element to
-          document.body by default (no `container` override here), so it escapes
-          the menu's overflow-y-auto clip. Both are applied to every instance. */}
+      {/* #456: every dropdown tooltip must paint ABOVE the portaled z-[60] menu.
+          zIndex: 9999 alone was NOT enough: react-tooltip v5 renders its floating
+          element inline where <ReactTooltip> sits in the tree, so these instances
+          were trapped inside the Header's low (z-30) stacking context and lost to
+          the menu that portals to <body> at z-[60] — a descendant's z-index can't
+          beat an ancestor stacking context. Fix: portal the tooltips to <body>
+          ourselves so they become siblings of the menu portal; at body level the
+          raw z-index wins (9999 > 60). react-tooltip still finds its anchors by
+          data-tooltip-id globally, so its DOM location doesn't matter. */}
+      {mounted &&
+        createPortal(
+          <>
+            {/* Tooltip explaining the HUMN Points readout. */}
+            <ReactTooltip
+              id="humn-points-tooltip"
+              place="bottom"
+              className="max-w-[220px]"
+              style={{ fontSize: '12px', padding: '4px 8px', zIndex: 9999 }}
+            />
 
-      {/* Tooltip explaining the HUMN Points readout (reuses the app's
-          react-tooltip data-tooltip-id / data-tooltip-content pattern). */}
-      <ReactTooltip
-        id="humn-points-tooltip"
-        place="bottom"
-        className="max-w-[220px]"
-        style={{ fontSize: '12px', padding: '4px 8px', zIndex: 9999 }}
-      />
+            {/* Explainer for the lifetime bridge-in cap in LIMITS & USAGE (#372). */}
+            <ReactTooltip
+              id="limit-info-tooltip"
+              place="top"
+              className="max-w-[240px]"
+              style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
+            />
 
-      {/* Explainer for the lifetime bridge-in cap in LIMITS & USAGE (#372). Same
-          react-tooltip pattern; content is supplied per-anchor via
-          data-tooltip-content so a single instance serves the (i) affordance. */}
-      <ReactTooltip
-        id="limit-info-tooltip"
-        place="top"
-        className="max-w-[240px]"
-        style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
-      />
+            {/* #441: personhood seal state (verified vs not), anchored in the pill. */}
+            <ReactTooltip
+              id="seal-status-tooltip"
+              place="bottom"
+              className="max-w-[220px]"
+              style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
+            />
 
-      {/* #441: personhood seal state (verified vs not) — anchored in the collapsed
-          pill, content supplied per-anchor. High z so it clears the dropdown. */}
-      <ReactTooltip
-        id="seal-status-tooltip"
-        place="bottom"
-        className="max-w-[220px]"
-        style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
-      />
-
-      {/* #440: explainer for the Human Passport SCORE shown on the Passport row. */}
-      <ReactTooltip
-        id="passport-info-tooltip"
-        place="top"
-        className="max-w-[240px]"
-        style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
-      />
+            {/* #440: explainer for the Human Passport SCORE on the Passport row. */}
+            <ReactTooltip
+              id="passport-info-tooltip"
+              place="top"
+              className="max-w-[240px]"
+              style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
+            />
+          </>,
+          document.body,
+        )}
     </div>
   )
 }
@@ -1258,10 +1262,10 @@ const ProofRow: React.FC<{
   infoContent?: string
 }> = ({ isDark, icon, title, caption, status, good, infoId, infoContent }) => (
   <div className="flex items-center gap-2 px-4 py-1.5">
-    <Icon icon={icon} width={16} height={16} className={good ? accentPink(isDark) : mutedIconText(isDark)} />
+    <Icon icon={icon} width={16} height={16} className={`flex-shrink-0 ${good ? accentPink(isDark) : mutedIconText(isDark)}`} />
     <span className="flex flex-col min-w-0 flex-1">
-      <span className={`text-xs font-medium ${navText(isDark)}`}>{title}</span>
-      <span className={`text-[12px] ${subtleText(isDark)}`}>{caption}</span>
+      <span className={`text-xs font-medium truncate ${navText(isDark)}`}>{title}</span>
+      <span className={`text-[12px] truncate ${subtleText(isDark)}`}>{caption}</span>
     </span>
     {infoId && infoContent && (
       <span
@@ -1276,11 +1280,11 @@ const ProofRow: React.FC<{
       </span>
     )}
     <span
-      className={`flex items-center gap-1 flex-shrink-0 text-[12px] font-medium ${
+      className={`flex items-center gap-1 flex-shrink-0 whitespace-nowrap text-[12px] font-medium ${
         good ? accentPink(isDark) : subtleText(isDark)
       }`}
     >
-      {good && <Icon icon="ph:seal-check-fill" width={13} height={13} />}
+      {good && <Icon icon="ph:seal-check-fill" width={13} height={13} className="flex-shrink-0" />}
       {status}
     </span>
   </div>

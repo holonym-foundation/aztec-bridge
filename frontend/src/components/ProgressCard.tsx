@@ -262,6 +262,11 @@ export default function ProgressCard({
   const primaryMode: 'help' | 'fuel' | 'resume' =
     escalated && !fuelErrorDetected ? 'help' : fuelErrorDetected ? 'fuel' : 'resume'
   const resumeInactive = primaryMode === 'resume' && !resumableOp
+  // #458: a "pre-deposit" failure moved no funds and created no resumable op, so
+  // "Resume claim" is meaningless — it renders as a dead greyed button. The whole
+  // transfer was cancelled before anything moved, so the right action is a LIVE
+  // "Try again" that returns to the bridge to start fresh.
+  const startOver = failure.kind === 'pre-deposit'
 
   // Mirrors the Activity page/drawer resume handler (activity/page.tsx isn't importable):
   // decrypt to prove wallet ownership, stash recovery data, then hand off to /progress/resume.
@@ -901,31 +906,35 @@ export default function ProgressCard({
             </button>
             <button
               onClick={
-                resumeInactive
-                  ? undefined
-                  : primaryMode === 'help'
-                    ? openSupport
-                    : primaryMode === 'fuel'
-                      ? () => router.push('/fee-juice?resume=1')
-                      : handleResumeClick
+                startOver
+                  ? () => router.push('/?app=1')
+                  : resumeInactive
+                    ? undefined
+                    : primaryMode === 'help'
+                      ? openSupport
+                      : primaryMode === 'fuel'
+                        ? () => router.push('/fee-juice?resume=1')
+                        : handleResumeClick
               }
-              disabled={resumeInactive || (primaryMode === 'resume' && resuming)}
-              aria-disabled={resumeInactive}
+              disabled={!startOver && (resumeInactive || (primaryMode === 'resume' && resuming))}
+              aria-disabled={!startOver && resumeInactive}
               className={`flex-[8_1_0%] rounded-lg py-[10px] font-semibold text-white transition-opacity ${
-                primaryMode === 'fuel' ? 'bg-[#81133B]' : 'bg-black'
+                primaryMode === 'fuel' && !startOver ? 'bg-[#81133B]' : 'bg-black'
               } ${
-                resumeInactive
+                !startOver && resumeInactive
                   ? 'cursor-not-allowed opacity-40'
                   : 'hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60'
               }`}
             >
-              {primaryMode === 'help'
-                ? 'Get help'
-                : primaryMode === 'fuel'
-                  ? 'Top up Fee Juice'
-                  : resuming
-                    ? 'Resuming…'
-                    : resumeLabel}
+              {startOver
+                ? 'Try again'
+                : primaryMode === 'help'
+                  ? 'Get help'
+                  : primaryMode === 'fuel'
+                    ? 'Top up Fee Juice'
+                    : resuming
+                      ? 'Resuming…'
+                      : resumeLabel}
             </button>
           </div>
 
@@ -969,7 +978,38 @@ export default function ProgressCard({
       {/* Back to Main Screen — completion state, and the error fallback when no
           direction is available to build the resume action above. The already-completed
           state carries its own back button, so it's excluded here. */}
-      {showBackButton && !isAlreadyCompleted && !(hasError && direction) && (
+      {/* Completion CTAs (#459): now that funds are private on Aztec, feature one
+          thing to DO next, plus a back-to-main button carrying the arrow. The featured
+          app/use case is intentionally swappable — Nyx (private payments) is a real
+          ecosystem app; drop in a different one when a launch partner is chosen. */}
+      {showBackButton && !isAlreadyCompleted && !(hasError && direction) && isAllComplete && (
+        <div className="mt-3 mb-4 flex flex-col gap-2.5">
+          <a
+            href="https://www.nyx.money"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 rounded-xl border border-latest-grey-300 px-3 py-2.5 text-left transition-colors hover:border-latest-black-100"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F5F5F5]">
+              <img src="/assets/svg/ecosystem/nyx.svg" alt="" className="h-5 w-5" />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-13 font-semibold text-latest-black-100">Spend privately with Nyx</span>
+              <span className="text-11 text-latest-grey-500">Put your now-private Aztec balance to work.</span>
+            </span>
+            <Icon icon="ph:arrow-up-right" width={15} height={15} className="shrink-0 text-latest-grey-500" />
+          </a>
+          <button
+            onClick={() => router.push('/?app=1')}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-black py-[11px] font-semibold text-white transition-opacity hover:opacity-80"
+          >
+            <Icon icon="ph:arrow-left-bold" width={16} height={16} />
+            Back to Main Screen
+          </button>
+        </div>
+      )}
+      {/* Error fallback (no direction to build a resume action): plain back to main. */}
+      {showBackButton && !isAlreadyCompleted && !(hasError && direction) && !isAllComplete && (
         <div className="flex flex-row items-center justify-center mt-2 mb-4">
           <TextButton className="" onClick={() => router.push('/?app=1')}>
             Back to Main Screen

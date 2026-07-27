@@ -332,6 +332,14 @@ const AccountChip: React.FC<AccountChipProps> = ({
       ? availableAccounts.find((a) => a.address.toLowerCase() === linkedAccountAddress.toLowerCase())
       : undefined
 
+  // #438: the connected Aztec account IS the server-bound pair for the EVM wallet
+  // — the same condition that drives the per-row "Linked" badge. Reused to gate
+  // the avatar-column connector drawn between the two wallet rows.
+  const aztecConnectorLinked =
+    !!linkedAccountAddress &&
+    !!aztecAddress &&
+    aztecAddress.toLowerCase() === linkedAccountAddress.toLowerCase()
+
   // #349: dropdown actions that start a flow (Aztec connect, in-app verification)
   // must transition the user to where the flow lives — the connect UI renders at
   // z-20 while this menu is portaled at z-[60], so a control that only fires the
@@ -669,6 +677,44 @@ const AccountChip: React.FC<AccountChipProps> = ({
             </button>
           </div>
 
+          {/* #438: wrap the two stacked wallet rows (EVM top, linked Aztec bottom)
+              so an ABSOLUTE overlay can position over them. `relative` adds no
+              layout box; the connector below takes no space, so the dropdown's
+              width/height is unchanged. */}
+          <div className="relative">
+            {/* #438: connector tying the EVM wallet to its linked Aztec account.
+                Absolutely positioned → NO added height/width. Aligned to the
+                AVATAR COLUMN: avatars are w-6 (24px) after px-4 (16px) pad, so the
+                avatar horizontal center is 16 + 12 = 28px from each row's left
+                edge; each row is py-1.5(6) + 24 + py-1.5(6) = 36px tall, so the top
+                (EVM) avatar center sits ~18px and the Aztec avatar center ~54px
+                from the top of this block. Shown only when BOTH wallets are
+                connected AND the connected Aztec account is the server-bound pair.
+                Values are px so the row metrics are easy to tweak. Maroon on light,
+                pink accent on dark (matching the existing "Linked" badge). */}
+            {isWaapConnected && isAztecConnected && aztecConnectorLinked && (
+              <>
+                {/* Vertical line: left-[27px] + w-0.5 (2px) centers on the 28px
+                    avatar column; top-[18px] + h-9 (36px) runs center-to-center. */}
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none absolute left-[27px] top-[18px] h-9 w-0.5 rounded-full ${
+                    isDark ? 'bg-[rgba(250,143,196,0.45)]' : 'bg-[rgba(129,19,59,0.35)]'
+                  }`}
+                />
+                {/* "Linked" pill centered on the line at the vertical midpoint
+                    (28px, 36px) — sits in the whitespace between the two rows. */}
+                <span
+                  className={`pointer-events-none absolute left-[28px] top-[36px] -translate-x-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap ${
+                    isDark ? 'bg-[rgba(250,143,196,0.16)] text-[#FA8FC4]' : 'bg-[rgba(129,19,59,0.10)] text-[#81133B]'
+                  }`}
+                >
+                  <Icon icon="ph:link-simple" width={10} height={10} className="flex-shrink-0" />
+                  Linked
+                </span>
+              </>
+            )}
+
           {isWaapConnected && (
             // #333: this is the embedded WaaP (email) wallet. It PRIMARILY shows
             // the address for now; hover reveals the copy control (WalletRow's
@@ -779,6 +825,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
               )}
             </>
           )}
+          </div>
 
           {/* #290: EVM up, Aztec NOT connected → show the Aztec row grayed/muted
               (opacity-40 on the avatar + labels) rather than omitting it, with an

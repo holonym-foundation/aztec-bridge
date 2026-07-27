@@ -462,9 +462,6 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   // tier uses the Human Passport mark, Clean Hands tier uses the Clean Hands mark. The
   // mark is rendered in black via CSS mask so it reads as the real brand logo, not a tint.
   const badgeIconSrc = isPoch ? '/assets/svg/clean-hands.svg' : '/assets/svg/passport.svg'
-  const badgeClass = isPoch
-    ? 'bg-[rgba(15,123,79,0.10)] text-[#0F7B4F]'
-    : 'bg-[rgba(23,35,94,0.08)] text-[#17235E]'
   // Compact cap shown under the balance. Passport is a per-human tier limit; the Clean Hands cap
   // ($25k) is a DAILY cap, so it carries a "/day" suffix. The "per human" framing lives in the tooltip.
   const limitLabel = tierLimitUsd > 0 ? `Limit: ${formatUsd(tierLimitUsd)}${isPoch ? '/day' : ''}` : null
@@ -480,9 +477,6 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
   // pill (e.g. "$740 of $1,000 left"). Falls back to the static cap label when the backend
   // doesn't surface a remaining figure (cap disabled). Deposit-only, like the rest of this slot.
   const remainingKnown = remaining != null && tierLimitUsd > 0
-  const remainingLabel = remainingKnown
-    ? `Limit: ${formatUsd(remaining as number)} of ${formatUsd(tierLimitUsd)} left`
-    : limitLabel
   // Heads-up: the entered amount would spend past what's left of the cap. Distinct from the
   // Clean Hands nudge, which fires only once the amount clears the FULL tier cap; guard on
   // !showCleanHandsNudge so this single slot stays mutually exclusive.
@@ -648,56 +642,80 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
             <p className="text-latest-grey-500 text-12 font-medium">Fee Juice</p>
           </div>
         )}
-        {/* Deposit limit indicator on its OWN full-width row below the amount, right-aligned, so it
-            never competes with the amount input for horizontal space. The wide Clean Hands nudge
-            used to sit in the amount row's right column and squeezed the number down to a couple of
-            visible digits. One slot, mutually exclusive: under the cap the "Limit: $X" pill (tier
-            brand mark + per-human tooltip); once a Passport-tier amount exceeds the cap the linked
-            Clean Hands nudge REPLACES it. Deposit-only: the cap does not apply to withdrawals. */}
+        {/* Compact deposit-limit BAR directly under the balance line (#436). A slim usage meter
+            replaces the old full-width pill row, reclaiming the vertical space it ate. The track
+            fills toward the tier cap as budget is consumed; the full per-human detail lives one
+            hover away (SOP §7) instead of as inline copy. Three mutually-exclusive states share
+            the one slot: normal (tier tint fill + badgeTooltip), over-remaining (warning orange +
+            an "over your limit" sentence), and — once a Passport amount clears the whole cap — the
+            Clean Hands upgrade (orange bar + a reachable link to PoCH). Deposit-only: the cap does
+            not apply to withdrawals, and the whole meter stays a compact single line. */}
         {isDeposit && attestationMethod && (
-          <div className="mt-1 flex justify-start">
+          <div className="mt-1 flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="inline-block h-[12px] w-[12px] shrink-0 bg-[#0A0A0A]"
+              style={{
+                maskImage: `url(${badgeIconSrc})`,
+                WebkitMaskImage: `url(${badgeIconSrc})`,
+                maskRepeat: 'no-repeat',
+                WebkitMaskRepeat: 'no-repeat',
+                maskPosition: 'center',
+                WebkitMaskPosition: 'center',
+                maskSize: 'contain',
+                WebkitMaskSize: 'contain',
+              }}
+            />
+            <div
+              data-tooltip-id="attestation-info"
+              data-tooltip-content={
+                showCleanHandsNudge
+                  ? `Above ${formatUsd(passportLimitUsd)} needs Proof of Clean Hands`
+                  : overRemaining
+                    ? `Over your limit, ${formatUsd(remaining as number)} of ${formatUsd(tierLimitUsd)} left`
+                    : badgeTooltip
+              }
+              className="relative h-1.5 max-w-[140px] flex-1 overflow-hidden rounded-full bg-[rgba(10,10,10,0.10)] cursor-default"
+            >
+              <div
+                className={`absolute inset-y-0 left-0 rounded-full ${
+                  overRemaining || showCleanHandsNudge
+                    ? 'bg-[#B54708]'
+                    : isPoch
+                      ? 'bg-[#0F7B4F]'
+                      : 'bg-[#17235E]'
+                }`}
+                style={{
+                  width: `${
+                    showCleanHandsNudge
+                      ? 100
+                      : remainingKnown
+                        ? Math.min(100, Math.max(0, ((tierLimitUsd - (remaining as number)) / tierLimitUsd) * 100))
+                        : 0
+                  }%`,
+                }}
+              />
+            </div>
             {showCleanHandsNudge ? (
               <a
                 href={POCH_MINT_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708] hover:bg-[rgba(181,71,8,0.18)] transition-colors"
+                data-tooltip-id="attestation-info"
+                data-tooltip-content={`Above ${formatUsd(passportLimitUsd)} needs Proof of Clean Hands`}
+                className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium text-[#B54708] hover:underline"
               >
                 <Icon icon="ph:arrow-up-right-bold" width={11} height={11} className="shrink-0" />
-                Above {formatUsd(passportLimitUsd)} needs Proof of Clean Hands
+                Clean Hands
               </a>
-            ) : overRemaining ? (
-              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-[rgba(181,71,8,0.10)] text-[#B54708]">
-                Over your limit, {formatUsd(remaining as number)} left
-              </span>
             ) : (
-              remainingLabel && (
-                <span
-                  data-tooltip-id="attestation-info"
-                  data-tooltip-content={badgeTooltip}
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold cursor-default ${badgeClass}`}
-                >
-                  <span>{remainingLabel}</span>
-                  <span
-                    aria-hidden
-                    className="inline-block h-[12px] w-[12px] shrink-0 bg-[#0A0A0A]"
-                    style={{
-                      maskImage: `url(${badgeIconSrc})`,
-                      WebkitMaskImage: `url(${badgeIconSrc})`,
-                      maskRepeat: 'no-repeat',
-                      WebkitMaskRepeat: 'no-repeat',
-                      maskPosition: 'center',
-                      WebkitMaskPosition: 'center',
-                      maskSize: 'contain',
-                      WebkitMaskSize: 'contain',
-                    }}
-                  />
-                </span>
-              )
+              <span className={`shrink-0 text-[11px] font-medium ${overRemaining ? 'text-[#B54708]' : 'text-neutral-600'}`}>
+                {remainingKnown ? `${formatUsd(remaining as number)} left` : limitLabel}
+              </span>
             )}
           </div>
         )}
-        {isDeposit && attestationMethod && !showCleanHandsNudge && !overRemaining && remainingLabel && (
+        {isDeposit && attestationMethod && (
           <ReactTooltip
             id="attestation-info"
             place="top"

@@ -10,6 +10,8 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:all": "pnpm test && pnpm test:e2e",
     "lint": "next lint",
     "design-lint": "node ./scripts/design-lint.mjs",
     "db:validate": "prisma validate",

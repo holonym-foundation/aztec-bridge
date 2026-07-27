@@ -699,8 +699,9 @@ export default function ProgressCard({
             <div className="mt-3 flex justify-center">
               <button
                 onClick={() => router.push('/fee-juice?resume=1')}
-                className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"
+                className="inline-flex items-center gap-1 text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"
               >
+                <Icon icon="ph:gas-pump" width={13} height={13} className="shrink-0" />
                 Not enough gas? Top up Fee Juice
               </button>
             </div>
@@ -940,8 +941,9 @@ export default function ProgressCard({
           ) : fuelTopUpSecondary && !escalated ? (
             <button
               onClick={() => router.push('/fee-juice?resume=1')}
-              className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"
+              className="inline-flex items-center gap-1 text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"
             >
+              <Icon icon="ph:gas-pump" width={13} height={13} className="shrink-0" />
               Not enough gas? Top up Fee Juice
             </button>
           ) : failure.kind === 'unknown' && errorMessage ? (

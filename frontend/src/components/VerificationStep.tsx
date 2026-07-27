@@ -3,9 +3,19 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Icon } from '@iconify/react'
+import { useQueryClient } from '@tanstack/react-query'
+import { usePassportScore, LightTheme, PassportScoreWidget } from '@human.tech/passport-embed'
 import TextButton from './TextButton'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
-import { POCH_MINT_URL, PASSPORT_BUILD_URL } from '@/config'
+import { useWalletStore, requestWaapWallet, WAAP_METHOD } from '@/stores/walletStore'
+import {
+  POCH_MINT_URL,
+  PASSPORT_BUILD_URL,
+  L1_CHAIN_ID,
+  PASSPORT_EMBED_ENABLED,
+  PASSPORT_EMBED_API_KEY,
+  PASSPORT_EMBED_SCORER_ID,
+} from '@/config'
 
 interface VerificationStepProps {
   onClose: () => void
@@ -13,6 +23,66 @@ interface VerificationStepProps {
   // asked to bridge more. Success then requires a valid Proof of Clean Hands, not
   // the Passport credential they already hold. `initial` is the first-time flow.
   intent?: 'initial' | 'upgrade'
+}
+
+// In-app Passport score widget (Phase 1 of embedded verification). Rendered in
+// place of the "Build your Human Passport score" out-link when the client-exposed
+// key + scorer are present (PASSPORT_EMBED_ENABLED). Passport-score path only —
+// the upgrade (Clean Hands) flow is untouched.
+const PassportEmbedCard: React.FC = () => {
+  const queryClient = useQueryClient()
+  const { waapAddress, isWaapConnected, waapChainId, switchWaapChain } = useWalletStore()
+
+  // Sign the widget's challenge with Shield's EVM (WaaP) wallet. Passport scores
+  // are read on the app's L1 chain, so make sure the wallet is on L1_CHAIN_ID
+  // (Sepolia on testnet, mainnet on prod) before signing — never hardcode 1.
+  const generateSignature = async (message: string): Promise<string> => {
+    if (!isWaapConnected || !waapAddress) {
+      throw new Error('Connect your wallet to verify your Human Passport score.')
+    }
+    if (waapChainId !== L1_CHAIN_ID) {
+      await switchWaapChain(L1_CHAIN_ID)
+    }
+    const signature = await requestWaapWallet(WAAP_METHOD.personal_sign, [message, waapAddress])
+    return signature as string
+  }
+
+  // Read-only score, used to auto-advance: the instant Passport reports a passing
+  // score, refresh Shield's tier/limits/badges by invalidating the attestation
+  // query — same effect as the manual "re-check" button.
+  const { data: passportScore } = usePassportScore({
+    apiKey: PASSPORT_EMBED_API_KEY,
+    scorerId: PASSPORT_EMBED_SCORER_ID,
+    address: waapAddress ?? undefined,
+  })
+  const passing = passportScore?.passingScore
+
+  useEffect(() => {
+    if (passing) {
+      queryClient.invalidateQueries({ queryKey: ['attestationCheck'] })
+    }
+  }, [passing, queryClient])
+
+  return (
+    <div className="mt-2 w-full max-w-[400px]">
+      <PassportScoreWidget
+        apiKey={PASSPORT_EMBED_API_KEY}
+        scorerId={PASSPORT_EMBED_SCORER_ID}
+        address={waapAddress ?? undefined}
+        generateSignatureCallback={generateSignature}
+        theme={LightTheme}
+      />
+      <a
+        href={PASSPORT_BUILD_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80"
+      >
+        Having trouble? Open Passport
+        <Icon icon="ph:arrow-up-right" width={13} height={13} />
+      </a>
+    </div>
+  )
 }
 
 const VerificationStep: React.FC<VerificationStepProps> = ({ onClose, intent = 'initial' }) => {
@@ -181,15 +251,19 @@ const VerificationStep: React.FC<VerificationStepProps> = ({ onClose, intent = '
                     {data?.passportScore != null ? ` (you have ${data.passportScore})` : ''}. Caps each transaction
                     until you upgrade to Proof of Clean Hands.
                   </p>
-                  <a
-                    href={PASSPORT_BUILD_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80"
-                  >
-                    Build your Human Passport score
-                    <Icon icon="ph:arrow-up-right" width={13} height={13} />
-                  </a>
+                  {PASSPORT_EMBED_ENABLED ? (
+                    <PassportEmbedCard />
+                  ) : (
+                    <a
+                      href={PASSPORT_BUILD_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80"
+                    >
+                      Build your Human Passport score
+                      <Icon icon="ph:arrow-up-right" width={13} height={13} />
+                    </a>
+                  )}
                 </div>
 
                 <p className="mt-3 text-[11px] leading-[16px] text-[#989898]">

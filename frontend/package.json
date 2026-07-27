@@ -40,6 +40,7 @@
     "@aztec/wallet-sdk": "5.0.1",
     "@datadog/browser-logs": "^4.45.0",
     "@human.tech/clean.sdk": "workspace:*",
+    "@human.tech/passport-embed": "^0.3.4",
     "@human.tech/waap-sdk": "^1.0.3",
     "@iconify/react": "^6.0.0",
     "@noble/ciphers": "^2.1.1",

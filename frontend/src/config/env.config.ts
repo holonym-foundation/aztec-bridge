@@ -60,6 +60,16 @@ export const HOLONYM_API_URL = process.env.HOLONYM_API_URL ?? 'https://api.holon
 export const PASSPORT_API_KEY = process.env.PASSPORT_API_KEY ?? ''
 export const PASSPORT_SCORER_ID = process.env.PASSPORT_SCORER_ID ?? ''
 
+// ─── Passport embed (client) ────────────────────────────────────────
+// The in-app Passport score widget runs in the browser, so it needs the
+// read key + scorer id client-side. These mirror the server-only
+// PASSPORT_API_KEY / PASSPORT_SCORER_ID above. The Passport API key is a
+// rate-limited READ key, so exposing it client-side is the accepted posture
+// (same as Covenant). When either is unset the app falls back to the
+// out-link to app.passport.xyz (see PASSPORT_EMBED_ENABLED in ./index).
+export const NEXT_PUBLIC_PASSPORT_API_KEY = process.env.NEXT_PUBLIC_PASSPORT_API_KEY ?? ''
+export const NEXT_PUBLIC_PASSPORT_SCORER_ID = process.env.NEXT_PUBLIC_PASSPORT_SCORER_ID ?? ''
+
 // ─── Sanctions screening (server) ───────────────────────────────────
 
 export const SANCTIONS_IO_API_KEY = process.env.SANCTIONS_IO_API_KEY ?? ''

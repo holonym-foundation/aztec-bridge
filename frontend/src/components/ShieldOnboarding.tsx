@@ -598,7 +598,24 @@ export default function ShieldOnboarding() {
     } catch {
       onboarded = false
     }
-    setMode(returnToApp || hasEnteredAppThisLoad ? 'hidden' : onboarded ? 'splash' : 'flow')
+    // A fresh load that lands on a NON-'/' app route (a refresh on the progress /
+    // fee-juice / activity page, or a deep link) shows that PAGE, not the splash — the
+    // splash belongs to the '/' home. Otherwise a connected user who refreshes mid-flow
+    // gets the splash stacked over their page, and because they navigate via the lifted
+    // nav (never clicking "Enter app") the entered-flag never sets, so every nav click
+    // keeps re-triggering the splash (#443). Refreshing the '/' home still shows the
+    // splash for onboarded users; the Shield brand is still the in-app way back to it.
+    let onAppRoute = false
+    try {
+      onAppRoute = window.location.pathname !== '/'
+    } catch {}
+    setMode(
+      returnToApp || hasEnteredAppThisLoad || (onboarded && onAppRoute)
+        ? 'hidden'
+        : onboarded
+          ? 'splash'
+          : 'flow',
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

@@ -9,6 +9,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { L1_CHAIN_ID, POCH_MINT_URL } from '@/config'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
@@ -196,9 +197,20 @@ function ecosystemPanelSurface(isDark: boolean): string {
  * text-xs font-medium) instead of full-round pills. Each row carries the
  * destination's real brand logo on a neutral tile at the left, its label, and
  * the external-link affordance at the right. The goal is a single coherent
- * dropdown look liftable into a shared Storybook component later. It opens BELOW
- * the trigger (top-full) so it never overlaps the nav row.
+ * dropdown look liftable into a shared Storybook component later.
+ *
+ * The panel is PORTALED to <body> (same reason as AccountChip #296): the desktop
+ * nav that hosts this trigger is `overflow-hidden` (the §384 label-collapse
+ * belt-and-suspenders), which clips any absolutely-positioned child — an
+ * in-flow panel renders but is invisible. Portaled + fixed, it also escapes the
+ * Header's z-30 stacking context. It is anchored just under the trigger's left
+ * edge so it never overlaps the nav row.
  */
+// The anchor math clamps against the panel's own width, so width and clamp must
+// read from one source — a Tailwind w-[…] class would silently drift from it.
+const ECOSYSTEM_PANEL_W = 240
+const ECOSYSTEM_PANEL_GUTTER = 12
+
 const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; showLabel?: boolean }> = ({
   isDark,
   onNavigate,
@@ -206,13 +218,18 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; showLab
 }) => {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [mounted, setMounted] = useState(false)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
+  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
     if (!open) return
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false)
-      }
+      const target = event.target as Node
+      if (containerRef.current?.contains(target)) return
+      if (menuRef.current?.contains(target)) return
+      setOpen(false)
     }
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpen(false)
@@ -224,6 +241,29 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; showLab
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const update = () => {
+      const el = containerRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const maxLeft = window.innerWidth - ECOSYSTEM_PANEL_W - ECOSYSTEM_PANEL_GUTTER
+      setMenuPos({
+        top: r.bottom + 8,
+        left: Math.max(ECOSYSTEM_PANEL_GUTTER, Math.min(r.left, maxLeft)),
+      })
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+    // showLabel: the §384 collapse changes the trigger's width mid-resize, so the
+    // anchor must be re-measured after that render commits, not just on resize.
+  }, [open, showLabel])
 
   return (
     <div ref={containerRef} className="relative">
@@ -252,11 +292,20 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; showLab
           }`}
         />
       </button>
-      {open && (
+      {open && mounted && menuPos && createPortal(
         <div
+          ref={menuRef}
           role="menu"
           aria-label="Ecosystem"
-          className={`absolute top-full left-0 mt-2 z-50 w-[240px] max-w-[calc(100vw-1.5rem)] ${ecosystemPanelSurface(isDark)} ${navText(isDark)} rounded-[16px] shadow-lg py-2 flex flex-col`}
+          data-portal-menu
+          style={{
+            position: 'fixed',
+            top: menuPos.top,
+            left: menuPos.left,
+            width: ECOSYSTEM_PANEL_W,
+            maxWidth: `calc(100vw - ${ECOSYSTEM_PANEL_GUTTER * 2}px)`,
+          }}
+          className={`z-[60] ${ecosystemPanelSurface(isDark)} ${navText(isDark)} rounded-[16px] shadow-lg py-2 flex flex-col`}
         >
           {/* Section label — mirrors the account dropdown's Wallets / Identity
               group headers so the two menus share one structural vocabulary. */}
@@ -301,7 +350,8 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; showLab
               />
             </a>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
@@ -501,7 +551,13 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
   useEffect(() => {
     if (!mobileMenuOpen) return
     function handleClickOutside(event: MouseEvent) {
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node | null
+      // Dropdowns opened from inside this panel (Ecosystem) are portaled to
+      // <body>, so they are not DOM descendants of mobileMenuRef. Without this
+      // exemption a mousedown on one of their rows closes the panel, unmounting
+      // the row before mouseup — the click never lands and the link is dead.
+      if (target instanceof Element && target.closest('[data-portal-menu]')) return
+      if (mobileMenuRef.current && target && !mobileMenuRef.current.contains(target)) {
         setMobileMenuOpen(false)
       }
     }

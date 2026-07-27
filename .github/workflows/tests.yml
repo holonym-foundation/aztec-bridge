@@ -1,0 +1,78 @@
+name: Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+      - testnet
+  push:
+    branches:
+      - main
+      - testnet
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: ./.github/actions/setup-pnpm-and-install
+        with:
+          working-directory: .
+
+      - name: SDK tests
+        working-directory: ./packages/sdk
+        run: pnpm test
+
+      # No DATABASE_URL: the suites mock the Prisma client, but `prisma generate`
+      # (run by the frontend's postinstall) still has to have produced the client
+      # the modules under test import their enums from.
+      - name: Frontend unit tests
+        working-directory: ./frontend
+        run: pnpm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: shield
+          POSTGRES_PASSWORD: shield
+          POSTGRES_DB: shield_e2e
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U shield -d shield_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://shield:shield@localhost:5433/shield_e2e
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: ./.github/actions/setup-pnpm-and-install
+        with:
+          working-directory: .
+
+      # barretenberg downloads its structured reference string on the first
+      # Grumpkin operation. The L2 Schnorr attestation needs it, so cache the
+      # 53 MB rather than re-fetch it on every run.
+      - name: Cache barretenberg CRS
+        uses: actions/cache@v3
+        with:
+          path: ~/.bb-crs
+          key: bb-crs-v1
+
+      - name: Create schema
+        working-directory: ./frontend
+        run: pnpm exec prisma db push --skip-generate
+
+      - name: API e2e tests
+        working-directory: ./frontend
+        run: pnpm test:e2e

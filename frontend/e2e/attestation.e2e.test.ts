@@ -5,7 +5,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { POST as passportRoute } from '@/app/api/attestation/passport/route'
 import { GET as passportCheckRoute } from '@/app/api/attestation/passport/check/route'
 
-import { db, resetDb } from './helpers/db'
+import { db, resetDb, settleDeposit } from './helpers/db'
 import { call } from './helpers/request'
 import { aztecAddress, login, loginWithL2, type Session } from './helpers/session'
 import { installUpstreams, type UpstreamState } from './helpers/upstreams'
@@ -28,31 +28,6 @@ const attest = (session: Session, body: Record<string, unknown> = {}) =>
 
 const check = (session: Session) =>
   call(passportCheckRoute, '/api/attestation/passport/check', { token: session.token })
-
-/** Record a settled L1→L2 deposit, the way the bridge flow does once it confirms. */
-async function settleDeposit(
-  session: Session,
-  usdc: number,
-  extra: { attestationNonce?: string; createdAt?: Date; status?: any } = {},
-) {
-  return db.bridgeActivity.create({
-    data: {
-      fkUserId: session.userId,
-      direction: 'L1_TO_L2',
-      status: extra.status ?? 'deposited',
-      encryptedCiphertext: 'x',
-      encryptedIv: 'x',
-      encryptedTag: 'x',
-      keyDerivationMessage: 'x',
-      keyDerivationDomain: 'x',
-      amountL1: String(BigInt(Math.round(usdc * 1e6))),
-      tokenDecimalsL1: 6,
-      tokenSymbolL1: 'USDC',
-      ...(extra.attestationNonce ? { attestationNonce: extra.attestationNonce } : {}),
-      ...(extra.createdAt ? { createdAt: extra.createdAt } : {}),
-    },
-  })
-}
 
 let upstreams: UpstreamState
 

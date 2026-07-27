@@ -13,3 +13,28 @@ export async function resetDb() {
     'TRUNCATE TABLE bridge_activities, attestation_reservations, address_bindings, auth_nonces, users RESTART IDENTITY CASCADE',
   )
 }
+
+/** Record a settled L1→L2 deposit, the way the bridge flow does once it confirms. */
+export async function settleDeposit(
+  user: { userId: string },
+  usdc: number,
+  extra: { attestationNonce?: string; createdAt?: Date; status?: string } = {},
+) {
+  return db.bridgeActivity.create({
+    data: {
+      fkUserId: user.userId,
+      direction: 'L1_TO_L2',
+      status: (extra.status ?? 'deposited') as any,
+      encryptedCiphertext: 'x',
+      encryptedIv: 'x',
+      encryptedTag: 'x',
+      keyDerivationMessage: 'x',
+      keyDerivationDomain: 'x',
+      amountL1: String(BigInt(Math.round(usdc * 1e6))),
+      tokenDecimalsL1: 6,
+      tokenSymbolL1: 'USDC',
+      ...(extra.attestationNonce ? { attestationNonce: extra.attestationNonce } : {}),
+      ...(extra.createdAt ? { createdAt: extra.createdAt } : {}),
+    },
+  })
+}

@@ -675,7 +675,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                     ? `Over your limit, ${formatUsd(remaining as number)} of ${formatUsd(tierLimitUsd)} left`
                     : badgeTooltip
               }
-              className="relative h-1.5 max-w-[140px] flex-1 overflow-hidden rounded-full bg-[rgba(10,10,10,0.10)] cursor-default"
+              className="relative h-1.5 max-w-[200px] flex-1 overflow-hidden rounded-full bg-[rgba(10,10,10,0.10)] cursor-default"
             >
               <div
                 className={`absolute inset-y-0 left-0 rounded-full ${

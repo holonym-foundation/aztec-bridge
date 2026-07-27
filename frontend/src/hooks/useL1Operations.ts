@@ -36,6 +36,9 @@ const TOAST_ID_L1L2_DO_NOT_RELOAD = 'l1-to-l2-do-not-reload'
 const TOAST_ID_L1L2_BACKUP_AVAILABLE = 'l1-to-l2-backup-available'
 const TOAST_ID_L1L2_DEPOSIT_IN_PROGRESS = 'l1-to-l2-deposit-in-progress'
 const TOAST_ID_L1L2_DEPOSIT_CONFIRMED = 'l1-to-l2-deposit-confirmed'
+// #458: shared key for L1->L2 deposit-failure notices so a new attempt REPLACES the
+// old one, and so we can clear a stale failure the moment a new deposit begins.
+const BRIDGE_ERROR_KEY = 'bridge-deposit-error'
 
 const L1L2_TRANSIENT_TOAST_IDS = [
   TOAST_ID_L1L2_DO_NOT_RELOAD,
@@ -483,6 +486,10 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             ...(resolvedFuelRecipient ? { recipient: resolvedFuelRecipient } : {}),
           }
         : undefined
+
+    // A new deposit is starting — clear any stale "deposit failed" notice from a prior
+    // attempt so it doesn't linger in the ticker/feed once a new transfer is underway (#458).
+    dismissNotificationByKey(BRIDGE_ERROR_KEY)
 
     logInfo('Bridge from L1 to L2 initiated', {
       direction: 'L1_TO_L2',

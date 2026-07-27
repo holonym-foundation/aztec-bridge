@@ -135,6 +135,17 @@ export const POCH_MINT_URL = IS_MAINNET
 // truth — was duplicated as a local const in several components (#70 Phase-0 prep).
 export const PASSPORT_BUILD_URL = 'https://app.passport.xyz'
 
+// ─── Embedded Passport verification (client) ─────────────────────────
+// Feature flag for the in-app Passport score widget. It is ON only when BOTH
+// client-exposed vars are present; otherwise the UI keeps the unchanged
+// out-link to app.passport.xyz. This makes the embed strictly additive and
+// zero-risk when the vars are unset.
+import { NEXT_PUBLIC_PASSPORT_API_KEY, NEXT_PUBLIC_PASSPORT_SCORER_ID } from './env.config'
+
+export const PASSPORT_EMBED_API_KEY = NEXT_PUBLIC_PASSPORT_API_KEY
+export const PASSPORT_EMBED_SCORER_ID = NEXT_PUBLIC_PASSPORT_SCORER_ID
+export const PASSPORT_EMBED_ENABLED = !!NEXT_PUBLIC_PASSPORT_API_KEY && !!NEXT_PUBLIC_PASSPORT_SCORER_ID
+
 export const AZTECSCAN_URLS: Record<number, string> = {
   [L2_CHAIN_ID]: activeEnvConfig.aztecscanUrl,
 }

@@ -1172,7 +1172,7 @@ export default function ShieldOnboarding() {
           .ob-skip { color: #c9adb9; } .ob-skip:hover { color: #f0dbe6; }
           .ob-secured { color: #b89aa6; } .ob-secured strong { color: #e6d0dc; }
           /* #81133B is too close to the dark maroon field to read; use the palette's pink accent. */
-          .ob-dev-cta { color: #f2b7d3; }
+          .ob-dev-cta, .ob-eyebrow { color: #f2b7d3; }
           .ob-tiers { border-color: #3a2530; background: rgba(255,255,255,0.03); }
           .ob-tier-row + .ob-tier-row { border-top-color: #3a2530; }
           .ob-tier-icon { background: rgba(246,236,241,0.08); }

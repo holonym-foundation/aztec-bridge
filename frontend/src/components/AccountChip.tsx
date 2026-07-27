@@ -21,6 +21,7 @@ import { copyToClipboard } from '@/utils'
 if (typeof window !== 'undefined') {
   loadIcons([
     'ph:seal-check-fill',
+    'ph:seal-warning',
     'ph:caret-down',
     'ph:link',
     'ph:link-simple',
@@ -568,15 +569,42 @@ const AccountChip: React.FC<AccountChipProps> = ({
           <span className={`text-xs font-medium truncate ${navText(isDark)}`} title={waapAddress || ''}>
             {label}
           </span>
-          {bothConnected && l1PersonhoodVerified && (
-            <Icon
-              icon="ph:seal-check-fill"
-              width={15}
-              height={15}
-              className={`flex-shrink-0 ${accentPink(isDark)}`}
-              aria-label="Personhood verified"
-            />
-          )}
+          {/* #441: the pill ALWAYS communicates verification status. A pink seal
+              when personhood is verified, a muted outline seal when connected but
+              not yet verified — each with a hover explainer. Same 15px glyph slot
+              either way so the pill layout never shifts. */}
+          {isWaapConnected &&
+            (l1PersonhoodVerified ? (
+              <span
+                data-tooltip-id="seal-status-tooltip"
+                data-tooltip-content={
+                  l1IsPoch ? 'Personhood verified via Proof of Clean Hands' : 'Personhood verified via Human Passport'
+                }
+                className="inline-flex flex-shrink-0"
+              >
+                <Icon
+                  icon="ph:seal-check-fill"
+                  width={15}
+                  height={15}
+                  className={accentPink(isDark)}
+                  aria-label="Personhood verified"
+                />
+              </span>
+            ) : (
+              <span
+                data-tooltip-id="seal-status-tooltip"
+                data-tooltip-content="Not verified. Complete verification to bridge above the limit."
+                className="inline-flex flex-shrink-0"
+              >
+                <Icon
+                  icon="ph:seal-warning"
+                  width={15}
+                  height={15}
+                  className={mutedIconText(isDark)}
+                  aria-label="Not verified"
+                />
+              </span>
+            ))}
           <Icon
             icon="ph:caret-down"
             width={12}
@@ -630,7 +658,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
             >
               <Icon icon="ph:warning-circle" width={15} height={15} className={`mt-[1px] flex-shrink-0 ${accentPink(isDark)}`} />
               <div className="flex flex-col gap-1.5 min-w-0">
-                <p className={`text-[11px] leading-snug ${navText(isDark)}`}>{conflictNotice}</p>
+                <p className={`text-[12px] leading-snug ${navText(isDark)}`}>{conflictNotice}</p>
                 {/* #304: when the bound target is one of the connected Azguard
                     accounts, name it and offer a one-tap switch — never a generic
                     prompt that implies the user has already moved. */}
@@ -642,7 +670,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
                       setAztecSwitchOpen(false)
                     }}
                     title="Switch to your linked Aztec account"
-                    className={`self-start flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border ${
+                    className={`self-start flex items-center gap-1 px-2 py-1 rounded-full text-[12px] font-medium border ${
                       isDark
                         ? 'border-[#FA8FC4]/[0.30] hover:bg-[#FA8FC4]/[0.14]'
                         : 'border-[#81133B]/[0.25] hover:bg-[#FA8FC4]/[0.16]'
@@ -668,7 +696,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
               disabled={actionsLocked}
               title={actionsLocked ? 'Locked during transfer to protect your funds.' : 'Disconnect'}
               onClick={handleDisconnect}
-              className={`flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full text-[11px] font-medium ${
+              className={`flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full text-[12px] font-medium ${
                 actionsLocked ? 'opacity-40 cursor-not-allowed' : `cursor-pointer ${hoverTint(isDark)}`
               } ${isDark ? 'text-[#FF6B6B]' : 'text-red'}`}
             >
@@ -804,14 +832,14 @@ const AccountChip: React.FC<AccountChipProps> = ({
                         />
                         <span className="flex flex-col min-w-0 flex-1">
                           <span className="text-xs truncate">{accountLabel(acc, i)}</span>
-                          <span className={`text-[10px] ${mutedIconText(isDark)}`}>
+                          <span className={`text-[12px] ${mutedIconText(isDark)}`}>
                             {shortAddr(acc.address)}
                             {isCurrent ? ' · Current' : ''}
                           </span>
                         </span>
                         {isLinked && (
                           <span
-                            className={`ml-auto flex items-center gap-1 text-[10px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
+                            className={`ml-auto flex items-center gap-1 text-[12px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
                             title="Linked to your EVM wallet"
                           >
                             <Icon icon="ph:link-simple" width={13} height={13} className="flex-shrink-0" />
@@ -837,7 +865,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 <span className="flex-shrink-0">{AztecAvatar}</span>
                 <span className="flex flex-col min-w-0 flex-1">
                   <span className={`text-xs font-medium truncate ${navText(isDark)}`}>Aztec account</span>
-                  <span className={`text-[10px] ${subtleText(isDark)} truncate`}>Not connected</span>
+                  <span className={`text-[12px] ${subtleText(isDark)} truncate`}>Not connected</span>
                 </span>
               </span>
               <button
@@ -848,7 +876,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 }}
                 disabled={isL2Connecting}
                 title="Connect Aztec wallet"
-                className={`flex items-center gap-1 flex-shrink-0 pl-1.5 pr-2 py-1 rounded-full text-[11px] font-medium border ${
+                className={`flex items-center gap-1 flex-shrink-0 pl-1.5 pr-2 py-1 rounded-full text-[12px] font-medium border ${
                   isL2Connecting
                     ? 'opacity-40 cursor-not-allowed border-transparent'
                     : `cursor-pointer ${
@@ -874,7 +902,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
           >
             <Icon icon="ph:link" width={16} height={16} className={mutedIconText(isDark)} />
             <span className={`text-xs font-medium ${mutedIconText(isDark)}`}>Link a New Wallet</span>
-            <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${trackBg(isDark)} ${subtleText(isDark)}`}>
+            <span className={`ml-auto text-[12px] px-1.5 py-0.5 rounded-full ${trackBg(isDark)} ${subtleText(isDark)}`}>
               Coming soon
             </span>
           </div>
@@ -902,6 +930,10 @@ const AccountChip: React.FC<AccountChipProps> = ({
                     : 'Not verified'
             }
             good={l1ScorePasses || l1IsPoch}
+            infoId="passport-info-tooltip"
+            infoContent={`Your Human Passport score. It measures unique humanity from the stamps you have collected. Bridge unlocks at ${
+              typeof l1Threshold === 'number' ? `a score of ${l1Threshold}+` : 'the threshold'
+            }.`}
           />
           <ProofRow
             isDark={isDark}
@@ -925,10 +957,10 @@ const AccountChip: React.FC<AccountChipProps> = ({
               />
               <span className="flex flex-col min-w-0 flex-1">
                 <span className={`text-xs font-medium ${navText(isDark)}`}>HUMN Points</span>
-                <span className={`text-[10px] ${subtleText(isDark)}`}>Rewards for verified humans</span>
+                <span className={`text-[12px] ${subtleText(isDark)}`}>Rewards for verified humans</span>
               </span>
               <span
-                className={`flex-shrink-0 text-[11px] font-semibold ${
+                className={`flex-shrink-0 text-[12px] font-semibold ${
                   hasPoints ? accentPink(isDark) : subtleText(isDark)
                 }`}
               >
@@ -1065,13 +1097,20 @@ const AccountChip: React.FC<AccountChipProps> = ({
         document.body,
       )}
 
+      {/* #439: every dropdown tooltip must paint ABOVE the portaled z-[60] menu.
+          react-tooltip v5's floating element does NOT reliably pick up a z-index
+          from `className`, so the real stacking order is set via the `style` prop
+          (zIndex: 9999). react-tooltip already portals its floating element to
+          document.body by default (no `container` override here), so it escapes
+          the menu's overflow-y-auto clip. Both are applied to every instance. */}
+
       {/* Tooltip explaining the HUMN Points readout (reuses the app's
           react-tooltip data-tooltip-id / data-tooltip-content pattern). */}
       <ReactTooltip
         id="humn-points-tooltip"
         place="bottom"
-        className="z-[100] max-w-[220px]"
-        style={{ fontSize: '12px', padding: '4px 8px' }}
+        className="max-w-[220px]"
+        style={{ fontSize: '12px', padding: '4px 8px', zIndex: 9999 }}
       />
 
       {/* Explainer for the lifetime bridge-in cap in LIMITS & USAGE (#372). Same
@@ -1080,8 +1119,25 @@ const AccountChip: React.FC<AccountChipProps> = ({
       <ReactTooltip
         id="limit-info-tooltip"
         place="top"
-        className="z-[100] max-w-[240px]"
-        style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35' }}
+        className="max-w-[240px]"
+        style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
+      />
+
+      {/* #441: personhood seal state (verified vs not) — anchored in the collapsed
+          pill, content supplied per-anchor. High z so it clears the dropdown. */}
+      <ReactTooltip
+        id="seal-status-tooltip"
+        place="bottom"
+        className="max-w-[220px]"
+        style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
+      />
+
+      {/* #440: explainer for the Human Passport SCORE shown on the Passport row. */}
+      <ReactTooltip
+        id="passport-info-tooltip"
+        place="top"
+        className="max-w-[240px]"
+        style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
       />
     </div>
   )
@@ -1091,7 +1147,7 @@ const AccountChip: React.FC<AccountChipProps> = ({
 // section / row structure, in Shield's Tailwind + Phosphor stack) ────
 
 const SectionLabel: React.FC<{ isDark: boolean; children: React.ReactNode }> = ({ isDark, children }) => (
-  <div className={`px-4 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${mutedIconText(isDark)}`}>
+  <div className={`px-4 pt-1 pb-1 text-[12px] font-semibold uppercase tracking-wide ${mutedIconText(isDark)}`}>
     {children}
   </div>
 )
@@ -1136,11 +1192,11 @@ const WalletRow: React.FC<{
     </span>
     <span className="flex flex-col min-w-0 flex-1">
       <span className={`text-xs font-medium truncate ${navText(isDark)}`}>{primary}</span>
-      <span className={`text-[10px] ${subtleText(isDark)} truncate`}>{secondary}</span>
+      <span className={`text-[12px] ${subtleText(isDark)} truncate`}>{secondary}</span>
     </span>
     {linked && (
       <span
-        className={`flex items-center gap-1 flex-shrink-0 text-[10px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
+        className={`flex items-center gap-1 flex-shrink-0 text-[12px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
         title="Linked to your EVM wallet"
       >
         <Icon icon="ph:link-simple" width={13} height={13} className="flex-shrink-0" />
@@ -1153,7 +1209,7 @@ const WalletRow: React.FC<{
         onClick={onCopy}
         title="Copy address"
         aria-label="Copy full address"
-        className={`flex items-center gap-1 flex-shrink-0 px-1.5 py-1 rounded-full text-[11px] font-medium opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 transition-opacity duration-150 ${hoverTint(isDark)} ${
+        className={`flex items-center gap-1 flex-shrink-0 px-1.5 py-1 rounded-full text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 transition-opacity duration-150 ${hoverTint(isDark)} ${
           copied ? accentPink(isDark) : subtleText(isDark)
         }`}
       >
@@ -1166,7 +1222,7 @@ const WalletRow: React.FC<{
         type="button"
         onClick={onSwitch}
         title={switchTitle}
-        className={`flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full text-[11px] font-medium ${hoverTint(isDark)} ${
+        className={`flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full text-[12px] font-medium ${hoverTint(isDark)} ${
           switchActive ? accentPink(isDark) : subtleText(isDark)
         }`}
       >
@@ -1181,7 +1237,7 @@ const WalletRow: React.FC<{
         type="button"
         onClick={onOpenWallet}
         title={openWalletTitle}
-        className={`flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full text-[11px] font-medium ${hoverTint(isDark)} ${subtleText(isDark)}`}
+        className={`flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-full text-[12px] font-medium ${hoverTint(isDark)} ${subtleText(isDark)}`}
       >
         <Icon icon="majesticons:open" width={13} height={13} />
         Open
@@ -1197,15 +1253,30 @@ const ProofRow: React.FC<{
   caption: string
   status: string
   good: boolean
-}> = ({ isDark, icon, title, caption, status, good }) => (
+  /** #440: optional (i) hover explainer for the status/value (SOP §7). */
+  infoId?: string
+  infoContent?: string
+}> = ({ isDark, icon, title, caption, status, good, infoId, infoContent }) => (
   <div className="flex items-center gap-2 px-4 py-1.5">
     <Icon icon={icon} width={16} height={16} className={good ? accentPink(isDark) : mutedIconText(isDark)} />
     <span className="flex flex-col min-w-0 flex-1">
       <span className={`text-xs font-medium ${navText(isDark)}`}>{title}</span>
-      <span className={`text-[10px] ${subtleText(isDark)}`}>{caption}</span>
+      <span className={`text-[12px] ${subtleText(isDark)}`}>{caption}</span>
     </span>
+    {infoId && infoContent && (
+      <span
+        data-tooltip-id={infoId}
+        data-tooltip-content={infoContent}
+        tabIndex={0}
+        role="img"
+        aria-label={infoContent}
+        className={`inline-flex flex-shrink-0 cursor-help ${mutedIconText(isDark)}`}
+      >
+        <Icon icon="ph:info" width={13} height={13} />
+      </span>
+    )}
     <span
-      className={`flex items-center gap-1 flex-shrink-0 text-[11px] font-medium ${
+      className={`flex items-center gap-1 flex-shrink-0 text-[12px] font-medium ${
         good ? accentPink(isDark) : subtleText(isDark)
       }`}
     >
@@ -1240,7 +1311,7 @@ const LimitBar: React.FC<{
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1 min-w-0">
-          <span className={`text-[11px] ${subtleText(isDark)} truncate`}>{label}</span>
+          <span className={`text-[12px] ${subtleText(isDark)} truncate`}>{label}</span>
           {info && (
             <span
               data-tooltip-id="limit-info-tooltip"
@@ -1254,7 +1325,7 @@ const LimitBar: React.FC<{
             </span>
           )}
         </span>
-        <span className={`text-[11px] font-medium ${navText(isDark)} flex-shrink-0`}>{valueText}</span>
+        <span className={`text-[12px] font-medium ${navText(isDark)} flex-shrink-0`}>{valueText}</span>
       </div>
       <div className={`w-full h-1.5 rounded-full overflow-hidden ${trackBg(isDark)}`}>
         {typeof pct === 'number' ? (

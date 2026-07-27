@@ -274,7 +274,7 @@ const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; showLab
         aria-expanded={open}
         aria-label="Ecosystem"
         title="Ecosystem"
-        className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+        className={`flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
       >
         <Icon
           icon="ph:globe-hemisphere-west"
@@ -729,7 +729,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
           }}
           aria-label="How it works"
           title="How it works"
-          className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+          className={`flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
         >
           <Icon icon="ph:question" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
           <span className={labelCls}>How it works</span>
@@ -739,7 +739,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
           onClick={() => setMobileMenuOpen(false)}
           aria-label="Docs"
           title="Docs"
-          className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+          className={`flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
         >
           <Icon
             icon="ph:book-open"
@@ -758,7 +758,7 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
           onClick={() => setMobileMenuOpen(false)}
           aria-label="Fee Juice"
           title="Fee Juice"
-          className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+          className={`flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
         >
           <Icon icon="ph:gas-pump" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
           <span className={labelCls}>Fee Juice</span>

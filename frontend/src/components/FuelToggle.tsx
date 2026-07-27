@@ -612,6 +612,34 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
       ? `You need about ${fmtFj(shortfallFj)} more FJ to cover this transaction’s L2 gas.`
       : 'Checking whether your Fee Juice covers this transaction’s L2 gas.'
 
+  // Honest reason for the top-up state (#451). The auto-fund swap couldn't cover the L2 claim.
+  // On a mis-priced testnet pool the honest amount to cover gas can exceed the auto-fill safety
+  // ceiling (MAX_AUTOFILL_FRACTION), so the bridge is (correctly) blocked rather than left to
+  // strand funds at the claim. Two shapes:
+  //  - honest amount still fits inside the bridge → offer a one-tap "reserve the full amount" that
+  //    makes the bridge viable and funds gas as part of the tx (no separate top-up needed).
+  //  - honest amount exceeds the whole bridge → the swap genuinely can't source enough FJ for a
+  //    deposit this size at the current pool rate; the only honest path is a separate top-up.
+  const honestAmountStr = recommendedFuel?.honestAmount ?? null
+  const honestPctStr = recommendedFuel ? recommendedFuel.honestPct.toFixed(0) : '0'
+  const honestNum = honestAmountStr != null ? Number(honestAmountStr) : null
+  const canReserveHonest =
+    needsTopUp &&
+    !!recommendedFuel?.capped &&
+    honestNum != null &&
+    honestNum > 0 &&
+    honestNum < bridgeNum &&
+    fuelNum < honestNum
+  const poolCantCover =
+    needsTopUp && !!recommendedFuel?.capped && honestNum != null && honestNum >= bridgeNum
+  const topUpReason = poolCantCover
+    ? 'The current testnet pool can’t source enough Fee Juice for a bridge this size. Top up gas separately to continue.'
+    : canReserveHonest && honestAmountStr != null
+      ? `Covering L2 gas needs about ${honestAmountStr} ${tokenSymbol} (~${honestPctStr}% of this bridge) at the current pool rate.`
+      : shortfallFj != null
+        ? `You need about ${fmtFj(shortfallFj)} more FJ to cover the L2 claim.`
+        : 'You don’t have enough Fee Juice to cover the L2 claim yet.'
+
   return (
     <div className="bg-[#F5F5F5] rounded-md p-2.5 mt-1.5 overflow-hidden">
       <div className="flex items-center justify-between gap-2">
@@ -629,27 +657,37 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
         </span>
         {/* Toggle purpose: cover this transaction's L2 gas automatically inside the bridge (an
             atomic Fee Juice swap). When the user's balance already covers gas there is nothing
-            to enable, so the switch is hidden — no self-contradicting "enable + top up" prompt. */}
+            to enable, so the switch is hidden — no self-contradicting "enable + top up" prompt.
+            The switch is labelled inline ("Auto-fund gas") so it isn't a mystery control (#451). */}
         {!alreadyCovered && (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={fuelEnabled}
-            aria-label="Cover L2 gas automatically in this bridge"
-            className="relative shrink-0"
-            onClick={() => onToggle(!fuelEnabled)}
-          >
-            <div
-              className="w-9 h-5 rounded-full transition-colors"
-              style={{ backgroundColor: fuelEnabled ? '#81133B' : '#d1d5db' }}
-            />
-            <div
-              className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
-              style={{
-                transform: fuelEnabled ? 'translateX(1rem)' : 'translateX(0)',
-              }}
-            />
-          </button>
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span
+              className="cursor-help text-xs font-medium text-latest-grey-700"
+              data-tooltip-id="fj-auto"
+              data-tooltip-content="Swaps part of your bridge into Fee Juice to pay Aztec (L2) gas, so you don't need to hold any yourself."
+            >
+              Auto-fund gas
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={fuelEnabled}
+              aria-label="Auto-fund L2 gas by swapping part of this bridge into Fee Juice"
+              className="relative shrink-0"
+              onClick={() => onToggle(!fuelEnabled)}
+            >
+              <div
+                className="w-9 h-5 rounded-full transition-colors"
+                style={{ backgroundColor: fuelEnabled ? '#81133B' : '#d1d5db' }}
+              />
+              <div
+                className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
+                style={{
+                  transform: fuelEnabled ? 'translateX(1rem)' : 'translateX(0)',
+                }}
+              />
+            </button>
+          </span>
         )}
       </div>
 
@@ -698,19 +736,37 @@ const FuelToggle: React.FC<FuelToggleProps> = ({
 
       <ReactTooltip id="fj-suff" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
       <ReactTooltip id="fj-about" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
+      <ReactTooltip id="fj-auto" place="top" className="z-[100]" style={{ fontSize: '12px', maxWidth: '240px' }} />
 
       {/* Short: existing FJ doesn't cover gas and the in-bridge swap isn't confirmed sufficient.
-          The heavy top-up flow lives on /fee-juice, reached via a standalone secondary button
-          (navy outline) — never a text link buried in a callout (SOP §8/#386). */}
+          Name WHY honestly (#451) rather than a bare button, then offer the fitting action: a
+          one-tap "reserve the full amount" when the honest amount still fits the bridge (funds gas
+          inside the tx), else route to the standalone top-up flow on /fee-juice (navy outline
+          secondary — never a text link buried in a callout, SOP §8/#386). */}
       {needsTopUp && (
-        <button
-          type="button"
-          onClick={() => router.push('/fee-juice')}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#17235E] bg-transparent px-3 py-1.5 text-[12px] font-semibold text-[#17235E] transition-colors hover:bg-[#17235E]/[0.08]"
-        >
-          <Icon icon="ph:gas-pump-fill" width={14} height={14} />
-          Top Up Gas
-        </button>
+        <div className="mt-2 flex flex-col gap-1.5">
+          <p className="text-[11px] leading-[15px] text-latest-grey-700">{topUpReason}</p>
+          <div className="flex items-center gap-1.5">
+            {canReserveHonest && (
+              <button
+                type="button"
+                onClick={() => honestAmountStr != null && onAmountChange(honestAmountStr)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#81133B] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-[#BF1254]"
+              >
+                <Icon icon="ph:gas-pump-fill" width={14} height={14} />
+                Reserve full amount
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => router.push('/fee-juice')}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#17235E] bg-transparent px-3 py-1.5 text-[12px] font-semibold text-[#17235E] transition-colors hover:bg-[#17235E]/[0.08]"
+            >
+              <Icon icon="ph:gas-pump-fill" width={14} height={14} />
+              Top Up Gas
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -709,7 +709,15 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
                 Clean Hands
               </a>
             ) : (
-              <span className={`shrink-0 text-[11px] font-medium ${overRemaining ? 'text-[#B54708]' : 'text-neutral-600'}`}>
+              <span
+                data-tooltip-id="attestation-info"
+                data-tooltip-content={
+                  overRemaining
+                    ? `Over your limit, ${formatUsd(remaining as number)} of ${formatUsd(tierLimitUsd)} left`
+                    : badgeTooltip
+                }
+                className={`shrink-0 cursor-default text-[11px] font-medium ${overRemaining ? 'text-[#B54708]' : 'text-neutral-600'}`}
+              >
                 {remainingKnown ? `${formatUsd(remaining as number)} left` : limitLabel}
               </span>
             )}
@@ -719,8 +727,7 @@ const BridgeSection: React.FC<BridgeSectionProps> = ({
           <ReactTooltip
             id="attestation-info"
             place="top"
-            className="z-[100]"
-            style={{ fontSize: '12px', maxWidth: '220px' }}
+            style={{ fontSize: '12px', maxWidth: '220px', zIndex: 9999 }}
           />
         )}
         {onSwap && <SwapIcon onClick={onSwap} />}

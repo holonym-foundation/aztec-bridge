@@ -315,7 +315,15 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
       // the content-driven panel scrolls ONLY when it genuinely can't fit (#320b).
       const header = typeof document !== 'undefined' ? document.querySelector('.ob-header-elevate') : null
       const navBottom = header ? header.getBoundingClientRect().bottom : NAV_SAFE_TOP
-      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - navBottom)))
+      // The tab is vertically centered, so a panel that only grew UPWARD from it was
+      // capped at ~half the viewport and crammed the 4 steps (#447). Anchor the panel
+      // to the tab's CENTER and let it grow both up and down, using the full space
+      // between the nav and the viewport bottom. Symmetric half = the smaller of the
+      // room above the center (to the nav) and below it (to the bottom margin).
+      const center = rect.top + rect.height / 2
+      const BOTTOM_MARGIN = 24
+      const half = Math.max(90, Math.min(center - navBottom, window.innerHeight - BOTTOM_MARGIN - center))
+      setMaxPanelHeight(Math.round(half * 2))
     }
     measure()
     window.addEventListener('resize', measure)
@@ -489,8 +497,8 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
             animate={{ width: 260, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
-            style={{ maxWidth: CARD_SAFE_MAX_WIDTH }}
-            className="absolute bottom-0 right-[calc(100%_+_12px)] overflow-hidden"
+            style={{ maxWidth: CARD_SAFE_MAX_WIDTH, top: '50%', transform: 'translateY(-50%)' }}
+            className="absolute right-[calc(100%_+_12px)] overflow-hidden"
           >
             <div
               id={panelId}

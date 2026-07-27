@@ -117,13 +117,7 @@ const SCREENS: Screen[] = [
     body: (
       <>
         <p>
-          Your privacy is enforced by zero knowledge proofs, not promises.
-          <InfoTooltip label="Learn more about the privacy guarantee">
-            A zero knowledge proof confirms a fact is true without revealing the data behind it.
-          </InfoTooltip>
-        </p>
-        <p>
-          <strong>2M+ users</strong> and <strong>44M+ credentials</strong> already run on
+          <strong>2M+ users</strong> and <strong>44M+ credentials</strong> created on
           human.tech&apos;s ZK stack.
         </p>
         <ZkPulse />
@@ -521,9 +515,8 @@ const ZK_NODES: [number, number][] = [
 
 function ZkPulse() {
   const items = [
-    'Private by default. Your identity and activity stay yours.',
-    'Disclosure happens only by rule. Only the exact fact a check requires is shared. Over 18. Not sanctioned.',
-    'Proven with zero knowledge. You share that a fact is true, never the data behind it.',
+    'Your identity and your activity stay yours. No one can see them or link them back to you.',
+    'Rule-bound disclosure, only minimal facts about you are disclosed.',
   ]
   return (
     <ul
@@ -535,7 +528,7 @@ function ZkPulse() {
         textAlign: 'left',
         display: 'flex',
         flexDirection: 'column',
-        gap: 11,
+        gap: 14,
       }}
     >
       {items.map((t) => (
@@ -1002,8 +995,12 @@ export default function ShieldOnboarding() {
         .ob-body strong { color: #1c1116; font-weight: 640; }
         .ob-link { color: ${BRAND}; text-decoration: underline; text-underline-offset: 2px; font-weight: 550; }
         /* verification tiers grid (page 3) */
+        /* overflow:visible (not hidden) so a right-anchored tooltip bubble on the "Above
+           $1,000" tier row is never clipped by the card edge (#444). The rounded corners
+           still read from the container's own border + background; the rows carry no
+           corner-reaching background to spill out. */
         .ob-tiers { width: 100%; max-width: 460px; margin: 18px auto 0; border: 1px solid #f0d3e0;
-          border-radius: 16px; overflow: hidden; background: rgba(255,255,255,0.55); text-align: left; }
+          border-radius: 16px; overflow: visible; background: rgba(255,255,255,0.55); text-align: left; }
         .ob-tier-row { display: flex; align-items: center; gap: 16px; padding: 16px 20px; }
         .ob-tier-row + .ob-tier-row { border-top: 1px solid #f0d3e0; }
         .ob-tier-icon { flex: none; width: 40px; height: 40px; border-radius: 12px; background: rgba(129,19,59,0.08);
@@ -1037,20 +1034,25 @@ export default function ShieldOnboarding() {
         .ob-tooltip-trigger:focus-visible { outline: 2px solid ${BRAND}; outline-offset: 2px; }
         .ob-tooltip-bubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
           width: 240px; max-width: 76vw; padding: 12px 14px; border-radius: 12px; background: #1c1116; color: #fdf0f6;
-          font-size: 13px; line-height: 1.45; text-align: left; box-shadow: 0 12px 30px rgba(0,0,0,0.22); z-index: 5; }
+          font-size: 13px; line-height: 1.45; text-align: left; box-shadow: 0 12px 30px rgba(0,0,0,0.22); z-index: 40; }
         .ob-tooltip-bubble a { color: #f9b9d6; text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }
         .ob-tooltip-bubble a:hover { color: #fff; }
         .ob-tooltip-bubble::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
           border: 6px solid transparent; border-top-color: #1c1116; }
         /* Edge-anchored variant: for triggers near the right edge (e.g. page-3 tiers),
            pin the bubble's right edge to the trigger so it can't overflow the viewport. */
-        .ob-tooltip-bubble-right { left: calc(100% + 12px); right: auto; bottom: auto; top: 50%; transform: translateY(-50%); }
+        .ob-tooltip-bubble-right { left: calc(100% + 12px); right: auto; bottom: auto; top: 50%; transform: translateY(-50%); z-index: 60; }
         .ob-tooltip-bubble-right::after { top: 50%; left: -6px; right: auto; transform: translateY(-50%);
           border-width: 6px 6px 6px 0; border-color: transparent #1c1116 transparent transparent; }
         /* tier CTAs (page 3): map straight onto the two rows above */
         .ob-tier-ctas { display: flex; gap: 12px; width: 100%; max-width: 460px; margin: 16px auto 0; }
-        .ob-pill { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px;
-          border-radius: 999px; font-size: 14px; font-weight: 610; text-decoration: none; white-space: nowrap;
+        /* flex-basis auto (not 0) so each pill is at least as wide as its icon + label +
+           padding — the longer "Proof of Clean Hands" can never be crushed below its
+           content and overflow (#445). grow:1 still lets both expand to fill the row so
+           they stay visually balanced. */
+        .ob-pill { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 8px;
+          height: 44px; padding: 0 22px; border-radius: 999px; font-size: 14px; font-weight: 610;
+          text-decoration: none; white-space: nowrap;
           transition: transform .15s ease, filter .15s ease, background-color .15s ease; }
         .ob-pill-primary { background: ${BRAND}; color: #fff; }
         .ob-pill-primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
@@ -1150,7 +1152,7 @@ export default function ShieldOnboarding() {
           .ob-tier-row { padding: 14px 16px; gap: 12px; }
           .ob-tooltip-bubble { width: 210px; }
           .ob-tier-ctas { max-width: 100%; margin-top: 12px; }
-          .ob-pill { height: 40px; font-size: 13px; }
+          .ob-pill { height: 40px; padding: 0 16px; font-size: 13px; }
           .ob-bp { max-width: 100%; margin-top: 16px; padding: 13px 12px; }
           .ob-bp-chain { font-size: 10px; }
           .ob-bp-amount { font-size: 12.5px; padding: 4px 8px; }

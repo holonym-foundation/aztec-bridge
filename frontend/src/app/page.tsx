@@ -279,7 +279,7 @@ export default function Home() {
     : depositGateActive && !fuelAmountValid
       ? 'Gas top-up must be less than the bridge amount.'
       : depositGateActive && !fuelSufficient
-        ? 'Increase gas top-up to cover the L2 claim.'
+        ? 'Not enough gas for the L2 claim yet. Adjust it in Aztec Fees above.'
         : depositGateActive && !fuelRecipientValid
           ? 'Check the fee juice recipient address.'
           : undefined

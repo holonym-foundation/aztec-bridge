@@ -3,8 +3,6 @@
 import ClientLayout from '@/components/ClientLayout'
 import AppLoadingScreen from '@/components/AppLoadingScreen'
 import { Providers } from '@/providers'
-import type { Metadata } from 'next'
-import Script from 'next/script'
 import { useEffect, useState } from 'react'
 import './globals.css'
 
@@ -17,6 +15,13 @@ export default function RootLayout({
 
   useEffect(() => {
     setMounted(true)
+
+    // Inject Iris chat widget — Script component doesn't work in Client Components
+    const s = document.createElement('script')
+    s.src = 'https://iris-v2-fqgd.onrender.com/widget/iris-widget.js'
+    s.async = true
+    s.setAttribute('data-iris-key', 'shield')
+    document.body.appendChild(s)
   }, [])
 
   // Don't render anything on the server
@@ -44,11 +49,6 @@ export default function RootLayout({
         <Providers>
           <ClientLayout>{children}</ClientLayout>
         </Providers>
-        <Script
-          src="https://iris-v2-fqgd.onrender.com/widget/iris-widget.js"
-          strategy="afterInteractive"
-          data-iris-key="shield"
-        />
       </body>
     </html>
   )

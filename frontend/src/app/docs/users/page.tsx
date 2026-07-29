@@ -12,7 +12,7 @@ export const metadata = {
 const sections: DocsSection[] = [
   {
     id: 'alpha',
-    label: 'Mainnet Alpha',
+    label: 'Network & Risks',
     content: (
       <>
         <P>
@@ -137,7 +137,7 @@ const sections: DocsSection[] = [
     content: (
       <>
         <P>
-          Two limits apply during Mainnet Alpha. See{' '}
+          Two limits apply. See{' '}
           <a href="#verification" className="text-latest-blue-100 underline">Verification</a> for how to qualify.
         </P>
         <Table>

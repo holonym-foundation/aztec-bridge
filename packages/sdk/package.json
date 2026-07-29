@@ -2,6 +2,11 @@
   "name": "@human.tech/clean.sdk",
   "version": "0.2.0",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holonym-foundation/shield.human.tech.git",
+    "directory": "packages/sdk"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

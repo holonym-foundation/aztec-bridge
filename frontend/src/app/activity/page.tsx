@@ -15,6 +15,8 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useToast } from '@/hooks/useToast'
 import { BridgeDirection } from '@/types/bridge'
 import { buildFuelClaimUrl } from '@/utils/fuelClaimLink'
+import { humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 
 export default function ActivityPage() {
   const router = useRouter()
@@ -149,8 +151,12 @@ export default function ActivityPage() {
           router.push('/progress/resume')
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to decrypt'
-        notify('error', msg)
+        console.error('[activity] resume/decrypt failed:', err)
+        logError('Resume decrypt failed', {
+          errorType: 'resume_decrypt_failed',
+          error: err instanceof Error ? err.message : String(err),
+        })
+        notify('error', humanizeError(err))
       } finally {
         setResumingId(null)
       }
@@ -201,8 +207,12 @@ export default function ActivityPage() {
         })
         setShareLink({ link, recipient })
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to build claim link'
-        notify('error', msg)
+        console.error('[activity] build fuel claim link failed:', err)
+        logError('Fuel claim share failed', {
+          errorType: 'fuel_claim_share_failed',
+          error: err instanceof Error ? err.message : String(err),
+        })
+        notify('error', humanizeError(err))
       } finally {
         setSharingId(null)
       }

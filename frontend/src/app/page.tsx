@@ -29,7 +29,7 @@ import {
   useClaimFeeEstimate,
 } from '@/hooks/useL2Operations'
 import { showToast, useToast } from '@/hooks/useToast'
-import { extractErrorMessage, truncateDecimals } from '@/utils'
+import { extractErrorMessage, humanizeError, truncateDecimals } from '@/utils'
 import clsxm from '@/utils/clsxm'
 import NetworkModal from '@/components/model/Network'
 import TokensModal from '@/components/model/TokensModal'
@@ -542,7 +542,12 @@ export default function Home() {
         await mintL1SBT()
       }
     } catch (error) {
-      notify('error', `Error minting SBT: ${extractErrorMessage(error)}`)
+      console.error('[page] SBT mint failed:', error)
+      logError('SBT mint failed', {
+        errorType: 'sbt_mint_failed',
+        error: extractErrorMessage(error),
+      })
+      notify('error', `Couldn't mint your SBT. ${humanizeError(error)}`)
     }
   }
 
@@ -571,7 +576,7 @@ export default function Home() {
         error: extractErrorMessage(error),
       })
 
-      notify('error', `Failed to connect wallet: ${extractErrorMessage(error)}`)
+      notify('error', `Couldn't connect your wallet. ${humanizeError(error)}`)
     }
   }
 

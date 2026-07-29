@@ -7,7 +7,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatUnits, parseUnits } from 'viem'
 import { useToast, useToastMutation } from './useToast'
 import { pushNotification, dismissNotificationByKey } from '@/stores/useNotificationsStore'
-import { exportWithdrawalData, copyToClipboard, decryptStorageEntry, verifyEncryptionDomain } from '@/utils'
+import {
+  exportWithdrawalData,
+  copyToClipboard,
+  decryptStorageEntry,
+  verifyEncryptionDomain,
+  extractErrorMessage,
+  humanizeError,
+} from '@/utils'
 import { useL2ErrorHandler } from '@/utils/l2ErrorHandler'
 import { estimateClaimFeeLimit } from '@/utils/fuelGasEstimate'
 import { requestWaapWallet, WAAP_METHOD, useWalletStore } from '@/stores/walletStore'
@@ -890,8 +897,12 @@ export function useExportWithdrawalData() {
       exportWithdrawalData(w)
       notify('success', 'Withdrawal data exported successfully! Save this file in a safe place.')
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error'
-      notify('error', `Failed to export: ${msg}`)
+      console.error('[export withdrawal data] failed:', e)
+      logError('Export withdrawal data failed', {
+        errorType: 'export_withdrawal_failed',
+        error: extractErrorMessage(e),
+      })
+      notify('error', `Couldn't export your withdrawal backup. ${humanizeError(e)}`)
     }
   }
 
@@ -922,8 +933,12 @@ export function useExportWithdrawalData() {
       else notify('error', 'Failed to copy')
       return ok
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error'
-      notify('error', `Failed to copy nonce: ${msg}`)
+      console.error('[copy nonce] failed:', e)
+      logError('Copy nonce failed', {
+        errorType: 'copy_nonce_failed',
+        error: extractErrorMessage(e),
+      })
+      notify('error', `Couldn't copy the nonce. ${humanizeError(e)}`)
       return false
     }
   }

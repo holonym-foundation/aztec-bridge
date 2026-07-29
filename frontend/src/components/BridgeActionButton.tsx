@@ -3,7 +3,8 @@ import TextButton from './TextButton'
 import StyledImage from './StyledImage'
 import { BridgeDirection } from '@/types/bridge'
 import { useToast } from '@/hooks/useToast'
-import { extractErrorMessage } from '@/utils'
+import { extractErrorMessage, humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 import { parseUnits } from 'viem'
 import CongestionWarningModal from './model/CongestionWarningModal'
 import { useL2PendingTxCount, useNetworkHealth } from '@/hooks/useL2Operations'
@@ -224,14 +225,22 @@ function BridgeActionButton({
       const operationType = getOperationType(direction)
       const errorMsg = extractErrorMessage(error)
 
+      console.error(`[BridgeActionButton] ${operationType} operation failed:`, error)
+      logError('Bridge operation failed', {
+        errorType: 'bridge_operation_failed',
+        operationType,
+        direction,
+        error: errorMsg,
+      })
+
       if (errorMsg.toLowerCase().includes('deposit limit')) {
-        notify('error', errorMsg)
+        notify('error', 'You have reached your deposit limit for now. It frees up as your recent deposits settle.')
       } else if (errorMsg.includes('insufficient')) {
         notify('error', `Insufficient funds for ${operationType} operation`)
       } else if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
         notify('error', `Transaction rejected by user`)
       } else {
-        notify('error', `${operationType.charAt(0).toUpperCase() + operationType.slice(1)} failed: ${errorMsg}`)
+        notify('error', `${operationType.charAt(0).toUpperCase() + operationType.slice(1)} failed. ${humanizeError(error)}`)
       }
     } finally {
       setIsOperationPending(false)

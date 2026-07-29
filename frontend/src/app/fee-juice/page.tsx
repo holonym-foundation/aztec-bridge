@@ -14,6 +14,8 @@ import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
 import { useToast } from '@/hooks/useToast'
 import { isResumable, hasPossibleLockedFunds, isLikelyCompleted } from '@/utils/resumability'
+import { humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 import { BridgeDirection } from '@/types/bridge'
 import type { BridgeOperation, RecoveryClaimData } from '@human.tech/clean.sdk'
 
@@ -120,8 +122,12 @@ function FeeJuicePageInner() {
       setRecovery(operation.id, recoveryData)
       router.push('/progress/resume')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to decrypt'
-      notify('error', msg)
+      console.error('[fee-juice] resume/decrypt failed:', err)
+      logError('Resume decrypt failed', {
+        errorType: 'resume_decrypt_failed',
+        error: err instanceof Error ? err.message : String(err),
+      })
+      notify('error', humanizeError(err))
     } finally {
       setResuming(false)
     }

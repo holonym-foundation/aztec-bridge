@@ -9,7 +9,8 @@ import { getStatusBadge } from '@/components/ActivityCard'
 import { getDeposits, getWithdrawals } from '@human.tech/clean.sdk'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
 import { decryptOperationPayload } from '@/hooks/useBridgeOperations'
-import { parseBackup, importBackup, BackupParseError, copyToClipboard } from '@/utils'
+import { parseBackup, importBackup, BackupParseError, copyToClipboard, humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
@@ -496,6 +497,13 @@ export function LocalRecoveryPanel({ variant = 'page', onClose }: LocalRecoveryP
             notify('success', `Imported ${imported} operation${imported === 1 ? '' : 's'}${skippedNote}.`)
           }
         } catch (err) {
+          if (!(err instanceof BackupParseError)) {
+            console.error('[LocalRecoveryPanel] backup import failed:', err)
+            logError('Backup import failed', {
+              errorType: 'backup_import_failed',
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
           const msg =
             err instanceof BackupParseError
               ? err.message
@@ -627,8 +635,12 @@ export function LocalRecoveryPanel({ variant = 'page', onClose }: LocalRecoveryP
           router.push('/progress/resume')
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to decrypt'
-        notify('error', msg)
+        console.error('[LocalRecoveryPanel] resume/decrypt failed:', err)
+        logError('Resume decrypt failed', {
+          errorType: 'resume_decrypt_failed',
+          error: err instanceof Error ? err.message : String(err),
+        })
+        notify('error', humanizeError(err))
       } finally {
         setResumingId(null)
       }

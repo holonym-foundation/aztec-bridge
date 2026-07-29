@@ -15,6 +15,7 @@ import {
   PASSPORT_EMBED_ENABLED,
   PASSPORT_EMBED_API_KEY,
   PASSPORT_EMBED_SCORER_ID,
+  PASSPORT_EMBED_PROXY_URL,
 } from '@/config'
 
 interface VerificationStepProps {
@@ -26,9 +27,11 @@ interface VerificationStepProps {
 }
 
 // In-app Passport score widget (Phase 1 of embedded verification). Rendered in
-// place of the "Build your Human Passport score" out-link when the client-exposed
-// key + scorer are present (PASSPORT_EMBED_ENABLED). Passport-score path only —
-// the upgrade (Clean Hands) flow is untouched.
+// place of the "Build your Human Passport score" out-link when the keyless flag
+// PASSPORT_EMBED_ENABLED is on. All embed API calls are routed through the
+// same-origin proxy (PASSPORT_EMBED_PROXY_URL), which injects the server-only
+// Passport key — the browser only ever holds a placeholder apiKey. Passport-score
+// path only — the upgrade (Clean Hands) flow is untouched.
 const PassportEmbedCard: React.FC = () => {
   const queryClient = useQueryClient()
   const { waapAddress, isWaapConnected, waapChainId, switchWaapChain } = useWalletStore()
@@ -54,6 +57,7 @@ const PassportEmbedCard: React.FC = () => {
     apiKey: PASSPORT_EMBED_API_KEY,
     scorerId: PASSPORT_EMBED_SCORER_ID,
     address: waapAddress ?? undefined,
+    embedServiceUrl: PASSPORT_EMBED_PROXY_URL,
   })
   const passing = passportScore?.passingScore
 
@@ -69,6 +73,7 @@ const PassportEmbedCard: React.FC = () => {
         apiKey={PASSPORT_EMBED_API_KEY}
         scorerId={PASSPORT_EMBED_SCORER_ID}
         address={waapAddress ?? undefined}
+        overrideEmbedServiceUrl={PASSPORT_EMBED_PROXY_URL}
         generateSignatureCallback={generateSignature}
         theme={LightTheme}
       />

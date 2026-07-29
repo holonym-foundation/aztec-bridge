@@ -136,15 +136,22 @@ export const POCH_MINT_URL = IS_MAINNET
 export const PASSPORT_BUILD_URL = 'https://app.passport.xyz'
 
 // ─── Embedded Passport verification (client) ─────────────────────────
-// Feature flag for the in-app Passport score widget. It is ON only when BOTH
-// client-exposed vars are present; otherwise the UI keeps the unchanged
-// out-link to app.passport.xyz. This makes the embed strictly additive and
-// zero-risk when the vars are unset.
-import { NEXT_PUBLIC_PASSPORT_API_KEY, NEXT_PUBLIC_PASSPORT_SCORER_ID } from './env.config'
+// Feature flag for the in-app Passport score widget. Keyless: the embed is ON
+// when NEXT_PUBLIC_PASSPORT_EMBED_ENABLED === 'true'; otherwise the UI keeps the
+// unchanged out-link to app.passport.xyz. The widget's embed calls are routed
+// through PASSPORT_EMBED_PROXY_URL (same-origin), which injects the server-only
+// PASSPORT_API_KEY — so no Passport key ever reaches the browser bundle. The
+// scorer id is a non-secret identifier used to build the request path.
+import { NEXT_PUBLIC_PASSPORT_EMBED_ENABLED, NEXT_PUBLIC_PASSPORT_SCORER_ID } from './env.config'
 
-export const PASSPORT_EMBED_API_KEY = NEXT_PUBLIC_PASSPORT_API_KEY
+// Same-origin path the widget targets (overrideEmbedServiceUrl). All embed API
+// calls hit /api/passport-embed/embed/... and are proxied server-side.
+export const PASSPORT_EMBED_PROXY_URL = '/api/passport-embed'
+// Non-secret placeholder handed to the widget's required `apiKey` prop. The real
+// key lives only in the proxy route; this value is never sent as a usable secret.
+export const PASSPORT_EMBED_API_KEY = 'proxy'
 export const PASSPORT_EMBED_SCORER_ID = NEXT_PUBLIC_PASSPORT_SCORER_ID
-export const PASSPORT_EMBED_ENABLED = !!NEXT_PUBLIC_PASSPORT_API_KEY && !!NEXT_PUBLIC_PASSPORT_SCORER_ID
+export const PASSPORT_EMBED_ENABLED = NEXT_PUBLIC_PASSPORT_EMBED_ENABLED === 'true'
 
 export const AZTECSCAN_URLS: Record<number, string> = {
   [L2_CHAIN_ID]: activeEnvConfig.aztecscanUrl,

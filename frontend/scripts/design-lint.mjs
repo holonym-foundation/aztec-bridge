@@ -264,6 +264,11 @@ function reportManualChecklist() {
   console.log('      small in-row button (~80/20), never a stacked full-width button (SOP §4)')
   console.log('  [ ] Edge/neighbor spacing (#211/#208): no nav segment, card, or message row')
   console.log('      crowds a border/neighbor; pinned-edge segments get extra inset (SOP §3)')
+  console.log('  [ ] Overlay geometry (#438/#454): connectors/rails/badges take percent insets')
+  console.log('      from a wrapper of exactly the elements they align to — never a hardcoded')
+  console.log('      row height (the type scale has no paired line-heights) (SOP §3)')
+  console.log('  [ ] Motion (#454): checked in a real render — nothing animates where a')
+  console.log('      positioned neighbor paints over it; reduced-motion collapses it (SOP §3)')
   console.log('')
 }
 reportManualChecklist()

@@ -12,7 +12,7 @@ import {
   handleWaapError,
 } from '@/stores/waapWalletHelpers'
 import { AztecLoginMethod, LOGIN_METHODS, WaapLoginMethod, WalletType } from '@/types/wallet'
-import { extractErrorMessage } from '@/utils'
+import { extractErrorMessage, humanizeError } from '@/utils'
 import { logError, logInfo, DatadogUserAction } from '@/utils/datadog'
 import {
   discoverWallets,
@@ -492,7 +492,7 @@ const walletStore = create<WalletState>((set, get) => ({
       const isTimeout = errorMessage.toLowerCase().includes('timeout')
       const userMessage = isTimeout
         ? 'Wallet took too long to respond. Please try connecting again.'
-        : `Failed to connect wallet: ${errorMessage}`
+        : `Couldn't connect your wallet. ${humanizeError(error)}`
       showToast('error', userMessage)
     }
   },
@@ -723,8 +723,8 @@ const walletStore = create<WalletState>((set, get) => ({
         })
         // Provide a more helpful message for known wallet extension errors
         const userMessage = errorMessage.includes('missing account data')
-          ? 'Wallet did not provide account data. This wallet may not be compatible — try a different one.'
-          : `Failed to confirm connection: ${errorMessage}`
+          ? 'Wallet did not provide account data. This wallet may not be compatible. Try a different one.'
+          : `Couldn't confirm your wallet connection. ${humanizeError(error)}`
         showToast('error', userMessage)
       }
     } finally {
@@ -810,11 +810,19 @@ const walletStore = create<WalletState>((set, get) => ({
     } catch (error) {
       const errorMessage = extractErrorMessage(error)
       console.error('[walletStore] selectAccount failed:', errorMessage)
+      logError('Failed to select account', {
+        walletType: WalletType.AZTEC,
+        loginMethod: 'wallet-sdk',
+        address: '',
+        chainId: null,
+        userAction: DatadogUserAction.AZTEC_WALLET_CONNECTION_FAILURE,
+        error: errorMessage,
+      })
       set({
         walletConnectionPhase: 'idle',
         isAztecConnecting: false,
       })
-      showToast('error', `Failed to select account: ${errorMessage}`)
+      showToast('error', `Couldn't select that account. ${humanizeError(error)}`)
     }
   },
 
@@ -872,7 +880,7 @@ const walletStore = create<WalletState>((set, get) => ({
         userAction: DatadogUserAction.AZTEC_WALLET_CONNECTION_FAILURE,
         error: errorMessage,
       })
-      showToast('error', `Failed to connect Aztec wallet: ${errorMessage}`)
+      showToast('error', `Couldn't connect your Aztec wallet. ${humanizeError(error)}`)
       throw error
     }
   },
@@ -954,7 +962,7 @@ const walletStore = create<WalletState>((set, get) => ({
         error,
       })
 
-      showToast('error', `Failed to disconnect Aztec wallet: ${error.message}`)
+      showToast('error', `Couldn't disconnect your Aztec wallet. ${humanizeError(error)}`)
     }
   },
 
@@ -1110,8 +1118,7 @@ const walletStore = create<WalletState>((set, get) => ({
         error: err,
       })
 
-      const errorMessageForToast = err instanceof Error ? err.message : String(err)
-      showToast('error', errorMessageForToast)
+      showToast('error', humanizeError(err))
 
       throw err
     }

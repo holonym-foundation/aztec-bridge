@@ -12,7 +12,8 @@ import TextButton from '@/components/TextButton'
 import type { LoadingStep } from '@/stores/bridgeStore'
 import { STORAGE_KEYS } from '@human.tech/clean.sdk'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
-import { exportClaimData, exportWithdrawalData } from '@/utils'
+import { exportClaimData, exportWithdrawalData, humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
@@ -357,8 +358,12 @@ export default function ProgressCard({
         router.push('/progress/resume')
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to decrypt'
-      notify('error', msg)
+      console.error('[ProgressCard] resume/decrypt failed:', err)
+      logError('Resume decrypt failed', {
+        errorType: 'resume_decrypt_failed',
+        error: err instanceof Error ? err.message : String(err),
+      })
+      notify('error', humanizeError(err))
     } finally {
       setResuming(false)
     }

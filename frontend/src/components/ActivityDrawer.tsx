@@ -13,6 +13,8 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useToast } from '@/hooks/useToast'
 import { canResumeOp } from '@/utils/resumability'
+import { humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 import { formatFjAmount } from '@/utils/fuelPricing'
 import { L1_TOKEN_METADATA, L1_NETWORKS, AZTEC_VERSION } from '@/config'
 import { BridgeDirection } from '@/types/bridge'
@@ -333,8 +335,12 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
       setPinned(false)
       setHovered(false)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to decrypt'
-      notify('error', msg)
+      console.error('[ActivityDrawer] resume/decrypt failed:', err)
+      logError('Resume decrypt failed', {
+        errorType: 'resume_decrypt_failed',
+        error: err instanceof Error ? err.message : String(err),
+      })
+      notify('error', humanizeError(err))
     } finally {
       setResumingId(null)
     }

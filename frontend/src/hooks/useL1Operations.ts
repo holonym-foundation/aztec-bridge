@@ -6,6 +6,7 @@ import {
   decryptStorageEntry,
   verifyEncryptionDomain,
   extractErrorMessage,
+  humanizeError,
 } from '@/utils'
 import { logError, logInfo, DatadogUserAction } from '@/utils/datadog'
 import { captureBridgeInitiated, captureBridgeCompleted } from '@/utils/posthog'
@@ -1167,8 +1168,12 @@ export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void)
     },
     onError: (error) => {
       notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
-      const msg = extractErrorMessage(error) || 'The top-up could not be completed. Your balances are unchanged.'
-      pushNotification({ type: 'error', title: 'Fee Juice top-up failed', message: msg })
+      console.error('[FeeJuice top-up] failed:', error)
+      logError('Fee Juice top-up failed', {
+        errorType: 'fee_juice_topup_failed',
+        error: extractErrorMessage(error),
+      })
+      pushNotification({ type: 'error', title: 'Fee Juice top-up failed', message: humanizeError(error) })
     },
   })
 }
@@ -1203,8 +1208,12 @@ export function useExportClaimData() {
       exportClaimData(claim)
       notify('success', 'Claim data exported successfully! Save this file in a safe place.')
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      notify('error', `Failed to export claim data: ${errorMessage}`)
+      console.error('[export claim data] failed:', error)
+      logError('Export claim data failed', {
+        errorType: 'export_claim_failed',
+        error: extractErrorMessage(error),
+      })
+      notify('error', `Couldn't export your claim backup. ${humanizeError(error)}`)
     }
   }
 
@@ -1239,8 +1248,12 @@ export function useExportClaimData() {
         return false
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      notify('error', `Failed to copy claim secret: ${errorMessage}`)
+      console.error('[copy claim secret] failed:', error)
+      logError('Copy claim secret failed', {
+        errorType: 'copy_claim_secret_failed',
+        error: extractErrorMessage(error),
+      })
+      notify('error', `Couldn't copy the claim secret. ${humanizeError(error)}`)
       return false
     }
   }

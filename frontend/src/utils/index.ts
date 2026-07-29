@@ -63,6 +63,78 @@ export function extractErrorMessage(error: unknown, fallback = 'Unknown error'):
 }
 
 /**
+ * Map any thrown value to a safe, human-readable message fit for a toast/notification.
+ *
+ * User-facing copy must NEVER carry a raw viem / contract-revert / RPC string (design SOP
+ * §10 + "human-readable errors, never raw"). This is the central humanization chokepoint:
+ * known error shapes map to specific, reassuring copy; everything else falls back to a
+ * generic safe message. The RAW error is intentionally dropped here — log it separately
+ * (console + Datadog) at the call site so it still shows up in metrics.
+ *
+ * Ordering matters: a specific shape (an Aztec checkpoint revert, a user rejection) is
+ * matched before the broad "contract reverted" / "viem" catch-all so the precise message wins.
+ */
+export function humanizeError(error: unknown): string {
+  const raw = extractErrorMessage(error, '').toLowerCase()
+
+  // Aztec rollup checkpoint briefly unavailable — a transient revert on reads
+  // (e.g. Rollup__UnavailableTempCheckpointLog from getCheckpoint) while the network catches up.
+  if (
+    raw.includes('unavailabletempcheckpoint') ||
+    raw.includes('getcheckpoint') ||
+    (raw.includes('rollup__') && raw.includes('checkpoint'))
+  ) {
+    return 'The Aztec network is briefly catching up. Try again in a moment.'
+  }
+
+  // Node / RPC unreachable or 5xx.
+  if (
+    raw.includes('failed to fetch') ||
+    raw.includes('fetch failed') ||
+    raw.includes('500 from server') ||
+    raw.includes('network error') ||
+    raw.includes('econnrefused') ||
+    raw.includes('timeout') ||
+    raw.includes('timed out') ||
+    /aztec.*\.(zkv\.xyz|aztec-labs\.com)/i.test(raw)
+  ) {
+    return 'The Aztec network is temporarily unavailable. Please try again shortly.'
+  }
+
+  // User declined the request in their wallet.
+  if (raw.includes('user rejected') || raw.includes('user denied') || raw.includes('rejected the request')) {
+    return 'You declined the request in your wallet.'
+  }
+
+  // Wallet locked.
+  if (raw.includes('locked')) {
+    return 'Your wallet is locked. Please unlock it and try again.'
+  }
+
+  // Not enough funds / gas.
+  if (raw.includes('insufficient funds') || raw.includes('insufficient balance')) {
+    return 'Insufficient funds to complete this transaction.'
+  }
+
+  // Nonce / transaction ordering.
+  if (raw.includes('nonce')) {
+    return 'A transaction ordering issue occurred. Please refresh and try again.'
+  }
+
+  // Generic viem / contract revert.
+  if (
+    raw.includes('reverted') ||
+    raw.includes('execution reverted') ||
+    raw.includes('contract function') ||
+    raw.includes('viem@')
+  ) {
+    return 'Something went wrong talking to the network. Please try again in a moment.'
+  }
+
+  return 'Something went wrong. Please try again in a moment.'
+}
+
+/**
  * Serialize Aztec NodeInfo to a plain JSON-serializable object for storage/export.
  * Converts address-like values (EthAddress, etc.) to string.
  */

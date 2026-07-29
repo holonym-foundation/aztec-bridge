@@ -373,10 +373,36 @@ body {
   }
 }
 
+/* Halo breathing out of the wallet-link node in the account dropdown. It blooms
+   from the node rather than travelling the connector because the wallet-row
+   avatars sit in positioned wrappers and paint over the line, leaving only ~4px
+   of track visible at each end. The translate lives in the keyframes because
+   animating `transform` overrides Tailwind's translate utilities. The rest at
+   the end of each cycle keeps it ambient rather than metronomic. */
+.linked-pulse {
+  animation: linked-pulse 3s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes linked-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.45;
+  }
+  55%,
+  100% {
+    transform: translate(-50%, -50%) scale(2);
+    opacity: 0;
+  }
+}
+
 /* Match the DS: both animations disabled under reduced-motion. */
 @media (prefers-reduced-motion: reduce) {
   .humn-points-spin {
     animation: none !important;
+  }
+  .linked-pulse {
+    animation: none !important;
+    opacity: 0 !important;
   }
   .humanity-glow {
     animation: none !important;

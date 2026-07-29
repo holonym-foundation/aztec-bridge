@@ -708,42 +708,61 @@ const AccountChip: React.FC<AccountChipProps> = ({
           {/* #438: wrap the two stacked wallet rows (EVM top, linked Aztec bottom)
               so an ABSOLUTE overlay can position over them. `relative` adds no
               layout box; the connector below takes no space, so the dropdown's
-              width/height is unchanged. */}
+              width/height is unchanged. This wrapper must hold ONLY the two rows:
+              the connector's vertical geometry is expressed as PERCENTAGES of it,
+              which is what keeps it aligned without hardcoded row metrics (the
+              Azguard account list therefore renders after the wrapper, not in it). */}
           <div className="relative">
             {/* #438: connector tying the EVM wallet to its linked Aztec account.
-                Absolutely positioned → NO added height/width. Aligned to the
-                AVATAR COLUMN: avatars are w-6 (24px) after px-4 (16px) pad, so the
-                avatar horizontal center is 16 + 12 = 28px from each row's left
-                edge; each row is py-1.5(6) + 24 + py-1.5(6) = 36px tall, so the top
-                (EVM) avatar center sits ~18px and the Aztec avatar center ~54px
-                from the top of this block. Shown only when BOTH wallets are
-                connected AND the connected Aztec account is the server-bound pair.
-                Values are px so the row metrics are easy to tweak. Maroon on light,
-                pink accent on dark (matching the existing "Linked" badge). */}
+                Absolutely positioned → NO added height/width. Shown only when BOTH
+                wallets are connected AND the connected Aztec account is the
+                server-bound pair.
+
+                Vertical: the two rows are equal height, so the avatar centers sit
+                at 25% / 75% of this wrapper and their midpoint at 50%. Percentages
+                rather than px because row height is type-driven — this Tailwind
+                config declares no paired line-heights, so two 12px lines make a
+                ~41px row, not the 36px the spacing scale implies.
+                Horizontal: avatars are w-6 (24px) after px-4 (16px) pad, so the
+                avatar center is 16 + 12 = 28px from the row's left edge.
+                Maroon on light, pink accent on dark. */}
             {isWaapConnected && isAztecConnected && aztecConnectorLinked && (
               <>
-                {/* Vertical line: left-[27px] + w-0.5 (2px) centers on the 28px
-                    avatar column; top-[18px] + h-9 (36px) runs center-to-center. */}
+                {/* Vertical line, avatar center to avatar center. */}
                 <span
                   aria-hidden="true"
-                  className={`pointer-events-none absolute left-[27px] top-[18px] h-9 w-0.5 rounded-full ${
+                  className={`pointer-events-none absolute left-[27px] top-1/4 bottom-1/4 w-0.5 rounded-full ${
                     isDark ? 'bg-[rgba(250,143,196,0.45)]' : 'bg-[rgba(129,19,59,0.35)]'
                   }`}
                 />
-                {/* Single "Linked" node sitting ON the line at the vertical
-                    midpoint (28px, 36px), in the empty band between the two rows'
-                    text. SOLID fill so it cleanly interrupts the line and reads
-                    legibly instead of showing the line/avatar edges through a
-                    translucent chip. This is now the ONLY "Linked" indicator —
-                    the per-row badge on the Aztec WalletRow is dropped so the two
-                    signals can't collide. */}
+                {/* Halo breathing out of the node — the ambient "these are live
+                    and paired" signal. Sits before the node so the node paints
+                    over it. */}
                 <span
-                  className={`pointer-events-none absolute left-[28px] top-[36px] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 px-1 py-0.5 rounded-full text-[10px] font-semibold leading-none whitespace-nowrap shadow-sm ${
-                    isDark ? 'bg-[#FA8FC4] text-[#2A0E1C]' : 'bg-[#81133B] text-white'
+                  aria-hidden="true"
+                  className={`linked-pulse pointer-events-none absolute left-[28px] top-1/2 h-[18px] w-[18px] rounded-full ${
+                    isDark ? 'bg-[#FA8FC4]' : 'bg-[#81133B]'
+                  }`}
+                />
+                {/* The ONLY "Linked" indicator: an icon-only node on the line at
+                    its midpoint. The word "Linked" moved into the tooltip — the
+                    pill that carried it was wide enough to overlap the avatars and
+                    the balance text in a 290px menu. Solid fill so it interrupts
+                    the line cleanly, and it keeps pointer events (the track above
+                    is inert) so it can own the tooltip. */}
+                <span
+                  data-tooltip-id="wallet-link-tooltip"
+                  data-tooltip-content="This Aztec account is linked to your EVM wallet."
+                  tabIndex={0}
+                  role="img"
+                  aria-label="Linked to your EVM wallet"
+                  className={`absolute left-[28px] top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-[18px] w-[18px] items-center justify-center rounded-full shadow-sm outline-none focus-visible:ring-2 ${
+                    isDark
+                      ? 'bg-[#FA8FC4] text-[#2A0E1C] focus-visible:ring-[#FA8FC4]'
+                      : 'bg-[#81133B] text-white focus-visible:ring-[#81133B]'
                   }`}
                 >
                   <Icon icon="ph:link-simple" width={11} height={11} className="flex-shrink-0" />
-                  Linked
                 </span>
               </>
             )}
@@ -788,72 +807,75 @@ const AccountChip: React.FC<AccountChipProps> = ({
           )}
 
           {isAztecConnected && (
-            <>
-              <WalletRow
-                isDark={isDark}
-                avatar={AztecAvatar}
-                primary={aztecAlias || (aztecAddress ? shortAddr(aztecAddress) : 'Aztec account')}
-                secondary={aztecAddress ? shortAddr(aztecAddress) : 'Aztec'}
-                fullAddress={aztecAddress || undefined}
-                copied={!!aztecAddress && copiedKey === aztecAddress}
-                onCopy={() => handleCopy(aztecAddress || undefined)}
-                onSwitch={availableAccounts.length > 1 ? () => setAztecSwitchOpen((v) => !v) : undefined}
-                switchTitle="Switch Azguard account"
-                switchActive={aztecSwitchOpen}
-                // #454: the per-row "Linked" badge is dropped here. The single
-                // "Linked" indicator is now the avatar-column connector node drawn
-                // above (between the EVM and Aztec rows) so the two can't collide.
-              />
-              {aztecSwitchOpen && availableAccounts.length > 1 && (
-                <div className="px-2 pb-1">
-                  {availableAccounts.map((acc, i) => {
-                    const isCurrent = acc.address === aztecAddress
-                    // #284: mark the account the server disclosed as bound to the
-                    // connected EVM wallet, so the user can spot and pick it.
-                    const isLinked =
-                      !!linkedAccountAddress && acc.address.toLowerCase() === linkedAccountAddress.toLowerCase()
-                    return (
-                      <button
-                        key={acc.address}
-                        type="button"
-                        onClick={() => {
-                          if (!isCurrent) switchAztecAccount(acc)
-                          setAztecSwitchOpen(false)
-                        }}
-                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors duration-150 ${
-                          isCurrent ? 'cursor-default' : `${menuItemHover(isDark)} cursor-pointer`
-                        }`}
-                      >
-                        <Icon
-                          icon={isCurrent ? 'ph:check' : 'ph:wallet'}
-                          width={15}
-                          height={15}
-                          className={isCurrent ? accentPink(isDark) : subtleText(isDark)}
-                        />
-                        <span className="flex flex-col min-w-0 flex-1">
-                          <span className="text-xs truncate">{accountLabel(acc, i)}</span>
-                          <span className={`text-[12px] ${mutedIconText(isDark)}`}>
-                            {shortAddr(acc.address)}
-                            {isCurrent ? ' · Current' : ''}
-                          </span>
-                        </span>
-                        {isLinked && (
-                          <span
-                            className={`ml-auto flex items-center gap-1 text-[12px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
-                            title="Linked to your EVM wallet"
-                          >
-                            <Icon icon="ph:link-simple" width={13} height={13} className="flex-shrink-0" />
-                            Linked
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </>
+            <WalletRow
+              isDark={isDark}
+              avatar={AztecAvatar}
+              primary={aztecAlias || (aztecAddress ? shortAddr(aztecAddress) : 'Aztec account')}
+              secondary={aztecAddress ? shortAddr(aztecAddress) : 'Aztec'}
+              fullAddress={aztecAddress || undefined}
+              copied={!!aztecAddress && copiedKey === aztecAddress}
+              onCopy={() => handleCopy(aztecAddress || undefined)}
+              onSwitch={availableAccounts.length > 1 ? () => setAztecSwitchOpen((v) => !v) : undefined}
+              switchTitle="Switch Azguard account"
+              switchActive={aztecSwitchOpen}
+              // #454: the per-row "Linked" badge is dropped here. The single
+              // "Linked" indicator is now the avatar-column connector node drawn
+              // above (between the EVM and Aztec rows) so the two can't collide.
+            />
           )}
           </div>
+
+          {/* Sits OUTSIDE the connector wrapper above: that wrapper's height must
+              stay exactly the two wallet rows for the connector's percentage
+              geometry to hold. Visually unchanged — it still renders directly
+              under the Aztec row. */}
+          {isAztecConnected && aztecSwitchOpen && availableAccounts.length > 1 && (
+            <div className="px-2 pb-1">
+              {availableAccounts.map((acc, i) => {
+                const isCurrent = acc.address === aztecAddress
+                // #284: mark the account the server disclosed as bound to the
+                // connected EVM wallet, so the user can spot and pick it.
+                const isLinked =
+                  !!linkedAccountAddress && acc.address.toLowerCase() === linkedAccountAddress.toLowerCase()
+                return (
+                  <button
+                    key={acc.address}
+                    type="button"
+                    onClick={() => {
+                      if (!isCurrent) switchAztecAccount(acc)
+                      setAztecSwitchOpen(false)
+                    }}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors duration-150 ${
+                      isCurrent ? 'cursor-default' : `${menuItemHover(isDark)} cursor-pointer`
+                    }`}
+                  >
+                    <Icon
+                      icon={isCurrent ? 'ph:check' : 'ph:wallet'}
+                      width={15}
+                      height={15}
+                      className={isCurrent ? accentPink(isDark) : subtleText(isDark)}
+                    />
+                    <span className="flex flex-col min-w-0 flex-1">
+                      <span className="text-xs truncate">{accountLabel(acc, i)}</span>
+                      <span className={`text-[12px] ${mutedIconText(isDark)}`}>
+                        {shortAddr(acc.address)}
+                        {isCurrent ? ' · Current' : ''}
+                      </span>
+                    </span>
+                    {isLinked && (
+                      <span
+                        className={`ml-auto flex items-center gap-1 text-[12px] font-medium whitespace-nowrap ${accentPink(isDark)}`}
+                        title="Linked to your EVM wallet"
+                      >
+                        <Icon icon="ph:link-simple" width={13} height={13} className="flex-shrink-0" />
+                        Linked
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {/* #290: EVM up, Aztec NOT connected → show the Aztec row grayed/muted
               (opacity-40 on the avatar + labels) rather than omitting it, with an
@@ -1130,6 +1152,19 @@ const AccountChip: React.FC<AccountChipProps> = ({
               id="seal-status-tooltip"
               place="bottom"
               className="max-w-[220px]"
+              style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
+            />
+
+            {/* The link node between the EVM and Aztec wallet rows: it carries no
+                text, so the tooltip is the only place the word "Linked" appears
+                on that connector. */}
+            <ReactTooltip
+              id="wallet-link-tooltip"
+              // The node sits at the menu's left edge, so `left` opens into the
+              // space outside the menu instead of covering the wallet rows;
+              // floating-ui flips it when a narrow viewport leaves no room.
+              place="left"
+              className="max-w-[200px]"
               style={{ fontSize: '12px', padding: '6px 8px', lineHeight: '1.35', zIndex: 9999 }}
             />
 

@@ -1,11 +1,8 @@
 /**
  * The Alchemy key travels as a URL path segment, so these assert that no error
  * path can carry it into the logs.
- *
- *   npx tsx src/utils/alchemy.utils.test.ts
  */
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import { expect, test } from 'vitest'
 import { AxiosError } from 'axios'
 import { describeAlchemyError } from './alchemy.utils'
 
@@ -24,30 +21,30 @@ test('an upstream rejection reports its status without the key', () => {
     axiosErrorWith({ response: { status: 401, data: { error: 'bad key' } } as AxiosError['response'] }),
     KEY,
   )
-  assert.ok(!out.includes(KEY), out)
-  assert.match(out, /status=401/)
+  expect(out).not.toContain(KEY)
+  expect(out).toMatch(/status=401/)
 })
 
 test('a transport failure reports its code without the key', () => {
   const out = describeAlchemyError(axiosErrorWith({ message: 'timeout of 15000ms exceeded', code: 'ECONNABORTED' }), KEY)
-  assert.ok(!out.includes(KEY), out)
-  assert.match(out, /code=ECONNABORTED/)
+  expect(out).not.toContain(KEY)
+  expect(out).toMatch(/code=ECONNABORTED/)
 })
 
 test('a key echoed inside the message is masked, not passed through', () => {
   const out = describeAlchemyError(new Error(`connect ECONNREFUSED while calling ${URL}`), KEY)
-  assert.ok(!out.includes(KEY), out)
-  assert.match(out, /\*\*\*/)
+  expect(out).not.toContain(KEY)
+  expect(out).toMatch(/\*\*\*/)
 })
 
 test('serialising the whole error — what the old handler did — would have leaked it', () => {
-  assert.ok(JSON.stringify(axiosErrorWith().toJSON()).includes(KEY))
+  expect(JSON.stringify(axiosErrorWith().toJSON())).toContain(KEY)
 })
 
 test('an unset key does not shred the message into characters', () => {
-  assert.equal(describeAlchemyError(new Error('boom'), ''), 'boom')
+  expect(describeAlchemyError(new Error('boom'), '')).toBe('boom')
 })
 
 test('a non-Error rejection is still summarised', () => {
-  assert.equal(describeAlchemyError('plain string', KEY), 'plain string')
+  expect(describeAlchemyError('plain string', KEY)).toBe('plain string')
 })

@@ -35,4 +35,4 @@ jobs:
       - name: Publish
         run: |
           cd packages/sdk
-          npm publish --access public --tag dev --provenance
+          npm publish --access public --provenance

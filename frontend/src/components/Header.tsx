@@ -7,17 +7,20 @@ import { useBridgeStore } from '@/stores/bridgeStore'
 import { useL1TokenBalances } from '@/hooks/useL1Operations'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { L1_CHAIN_ID, POCH_MINT_URL } from '@/config'
-import DeploymentSelector from '@/components/DeploymentSelector'
+import { useAttestationCheck } from '@/hooks/useAttestationCheck'
+import { useHumnPoints } from '@/hooks/useHumnPoints'
 import AccountChip from '@/components/AccountChip'
+import DeploymentSelector from '@/components/DeploymentSelector'
 import { useExplainerStore } from '@/stores/useExplainerStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
-import { useL1Humanity } from '@/hooks/useL1Humanity'
 import {
   useBindingStatus,
+  useSessionLinkedL2,
   describeConflict,
   conflictMessage,
   disclosedLinkedL2,
@@ -27,10 +30,9 @@ import {
 /** Delay before auto-starting Aztec wallet discovery after WaaP connects. */
 const AZTEC_AUTO_CONNECT_DELAY_MS = 2000
 
-// Preload the icons used inside the wallet dropdown, the humanity/points
-// chip and the mobile nav toggle so they're cached in iconify's store before
-// those elements first render. Module-level + window-guard so it runs once
-// per page in the browser only.
+// Preload the icons used inside the wallet dropdown and the mobile nav toggle
+// so they're cached in iconify's store before those elements first render.
+// Module-level + window-guard so it runs once per page in the browser only.
 if (typeof window !== 'undefined') {
   loadIcons([
     'ph:copy',
@@ -44,11 +46,17 @@ if (typeof window !== 'undefined') {
     'ph:x',
     'ph:book-open',
     'ph:gas-pump',
+    'ph:globe-hemisphere-west',
     'ph:link-simple',
     'ph:check',
     'ph:warning-circle',
     'ph:info',
     'ph:hand-soap',
+    'ph:identification-card',
+    'ph:plus-circle',
+    'ph:gauge',
+    'ph:seal-check-fill',
+    'ph:link',
   ])
 }
 
@@ -61,8 +69,7 @@ if (typeof window !== 'undefined') {
  */
 const GLASS_PILL =
   'backdrop-blur-md bg-white/[0.85] border border-[#E5E5E5]/80 shadow-[0_6px_18px_-6px_rgba(15,15,15,0.18),0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200'
-const GLASS_PILL_HOVER =
-  'hover:bg-white hover:shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
+const GLASS_PILL_HOVER = 'hover:bg-white hover:shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
 const GLASS_PILL_ACTIVE = 'bg-white shadow-[0_10px_24px_-8px_rgba(15,15,15,0.24),0_1px_2px_rgba(0,0,0,0.04)]'
 
 /**
@@ -78,13 +85,27 @@ const GLASS_PILL_DARK =
   'backdrop-blur-md bg-white/[0.07] border border-white/[0.14] shadow-[0_6px_18px_-6px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.35)] transition-all duration-200'
 const GLASS_PILL_DARK_HOVER =
   'hover:bg-white/[0.12] hover:border-white/[0.22] hover:shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.35)]'
-const GLASS_PILL_DARK_ACTIVE = 'bg-white/[0.14] border-white/[0.22] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.35)]'
+const GLASS_PILL_DARK_ACTIVE =
+  'bg-white/[0.14] border-white/[0.22] shadow-[0_10px_24px_-8px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.35)]'
 
 /** Merges the base/hover/active glass-pill classes for the given theme in one call. */
 function glassPill(isDark: boolean, active = false): string {
   if (isDark) return `${GLASS_PILL_DARK} ${GLASS_PILL_DARK_HOVER} ${active ? GLASS_PILL_DARK_ACTIVE : ''}`
   return `${GLASS_PILL} ${GLASS_PILL_HOVER} ${active ? GLASS_PILL_ACTIVE : ''}`
 }
+
+/**
+ * One shared fixed height for every chip in the top nav row — the Shield brand
+ * chip, the center pill (Privacy Mode + nav links), and the account chip.
+ * Keeping it a single token is what makes the row read as a clean line of
+ * uniform chips: inner contents scale to fit this height rather than each chip's
+ * content dictating its own height. The version chip lives BELOW the Shield chip
+ * (its own left-column chip), outside this row, so it is deliberately NOT bound
+ * to this height. The skinny account chip owns this same height itself (h-14) as
+ * a single collapsed row, so it lines up with the rest of the row without Header
+ * having to wrap it in a height container.
+ */
+const CHIP_H = 'h-14'
 
 /** Nav/body text — navy on light, near-white on the dark privacy background. */
 function navText(isDark: boolean): string {
@@ -107,19 +128,6 @@ function navText(isDark: boolean): string {
 function mutedIconText(isDark: boolean): string {
   return isDark ? 'text-white/[0.60]' : 'text-gray-400'
 }
-/** Secondary muted tone (was text-gray-500). */
-function subtleText(isDark: boolean): string {
-  return isDark ? 'text-white/[0.65]' : 'text-gray-500'
-}
-/**
- * Shield-pink accent used for the "verified" state. On dark, #81133B sits too
- * close in hue/value to the deep-maroon background to read as an accent, so
- * this swaps to pink-40 (#FA8FC4) — already part of this app's own palette
- * (it's one of the MeshGradient stops in ClientLayout) — for contrast.
- */
-function accentPink(isDark: boolean): string {
-  return isDark ? 'text-[#FA8FC4]' : 'text-[#81133B]'
-}
 /** Row hover tint inside the flat (borderless) wallet-cluster rows. */
 function hoverTint(isDark: boolean): string {
   return isDark ? 'hover:bg-white/[0.10]' : 'hover:bg-black/[0.04]'
@@ -131,297 +139,244 @@ function panelSurface(isDark: boolean): string {
     : 'bg-white/[0.95] backdrop-blur-md border border-[#E5E5E5]/80'
 }
 
-// Humanity Score is wired to the real L1-only proof-of-personhood result via
-// useL1Humanity (POCH first, Passport fallback — see HumanityPointsChip below).
-// TODO: Points still has NO live per-user source in this app (no points API,
-// hook, or store exists today). This stub must be replaced by a real fetch from
-// the points backend (the passport/Covenant HUMN Points service) threaded
-// through the `points` prop. Until then the chip shows this placeholder — never
-// a fabricated per-action breakdown.
-const PLACEHOLDER_POINTS = 1240
+// HUMN Points are sourced live from Human Passport (Season 1) via useHumnPoints
+// (/api/points), keyed on the connected L1 address, and folded into the account
+// chip. AccountChip hides the value when the wallet has none (or none loaded
+// yet) — no placeholder is ever shown.
 
 // Same copy the BridgeHeader guard uses — keep them identical so the warning
 // reads the same whether it fires from the bridge header or the top nav.
 const TRANSFER_LEAVE_CONFIRM =
-  "Leave now? Your in-progress transfer's recovery data could be lost — export a backup first."
+  "Leave now? Your in-progress transfer's recovery data could be lost. Export a backup first."
 
-/**
- * Canonical "verified / proof-of-personhood" glyph, ported from the
- * design-system icon set (human-tech-design-system/src/icons/custom-verified.svg)
- * — used elsewhere for humanity-verification chips. Inlined as raw SVG
- * rather than imported since the design system isn't a dependency here.
- */
-const VerifiedIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 22 22" fill="none" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path
-      d="M16.2323 4.74006L16.7182 3.86604L16.7179 3.86584L16.2323 4.74006ZM18.2802 6.08939L19.0158 5.412L19.0147 5.41079L18.2802 6.08939ZM19.0648 7.42406L18.1152 7.73745L18.1155 7.73842L19.0648 7.42406ZM19.0648 14.5759L18.1154 14.262L18.1152 14.2625L19.0648 14.5759ZM18.2802 15.9106L19.0147 16.5892L19.0158 16.5879L18.2802 15.9106ZM16.2323 17.2599L16.7179 18.1341L16.7182 18.1339L16.2323 17.2599ZM13.8424 18.5872L13.3569 17.713L13.3567 17.7131L13.8424 18.5872ZM11.7388 19.5644L11.9378 20.5444L11.9412 20.5437L11.7388 19.5644ZM10.2612 19.5644L10.0588 20.5437L10.0622 20.5444L10.2612 19.5644ZM8.15761 18.5872L8.64325 17.7131L8.64313 17.713L8.15761 18.5872ZM5.76767 17.2599L5.28178 18.1339L5.28214 18.1341L5.76767 17.2599ZM3.72075 15.9106L4.45603 15.2328L4.45598 15.2327L3.72075 15.9106ZM2.93517 14.5759L3.88465 14.2621L3.88462 14.262L2.93517 14.5759ZM2.93517 7.42406L3.88462 7.73796L3.88465 7.73787L2.93517 7.42406ZM3.72075 6.08939L4.45599 6.76721L4.45603 6.76716L3.72075 6.08939ZM5.76767 4.74006L5.28214 3.86584L5.28178 3.86604L5.76767 4.74006ZM8.15759 3.41273L8.64312 4.28695L8.64323 4.28689L8.15759 3.41273ZM10.2612 2.43556L10.0597 1.45607L10.0588 1.45626L10.2612 2.43556ZM11.7388 2.43556L11.9412 1.45625L11.9403 1.45607L11.7388 2.43556ZM13.8424 3.41273L13.3568 4.28689L13.3569 4.28695L13.8424 3.41273ZM7.92586 10.2929C7.53533 9.90235 6.90217 9.90235 6.51164 10.2929C6.12112 10.6834 6.12112 11.3166 6.51164 11.7071L7.92586 10.2929ZM9.73958 13.5208L9.03248 14.2279C9.423 14.6184 10.0562 14.6184 10.4467 14.2279L9.73958 13.5208ZM15.4884 9.18625C15.8789 8.79573 15.8789 8.16256 15.4884 7.77204C15.0978 7.38151 14.4647 7.38151 14.0741 7.77204L15.4884 9.18625ZM15.7464 5.61408C16.9044 6.25783 17.2796 6.47998 17.5457 6.768L19.0147 5.41079C18.4796 4.83164 17.7566 4.44329 16.7182 3.86604L15.7464 5.61408ZM17.5445 6.76678C17.8017 7.04603 17.9962 7.37697 18.1152 7.73745L20.0145 7.11067C19.8063 6.47982 19.4658 5.90069 19.0158 5.41201L17.5445 6.76678ZM18.1155 7.73842C18.2379 8.10804 18.25 8.54282 18.25 9.86881H20.25C20.25 8.6813 20.2621 7.85842 20.0141 7.1097L18.1155 7.73842ZM18.25 9.86881V12.1311H20.25V9.86881H18.25ZM18.25 12.1311C18.25 13.4559 18.238 13.8912 18.1154 14.262L20.0143 14.8898C20.262 14.1405 20.25 13.3181 20.25 12.1311H18.25ZM18.1152 14.2625C17.9962 14.623 17.8017 14.9539 17.5445 15.2332L19.0158 16.5879C19.4658 16.0993 19.8063 15.5201 20.0145 14.8893L18.1152 14.2625ZM17.5457 15.232C17.2796 15.52 16.9044 15.7421 15.7464 16.3859L16.7182 18.1339C17.7566 17.5567 18.4796 17.1683 19.0147 16.5892L17.5457 15.232ZM13.3567 17.7131C12.2652 18.3195 11.9002 18.5099 11.5364 18.5851L11.9412 20.5437C12.6752 20.392 13.3494 20.0051 14.328 19.4614L13.3567 17.7131ZM11.5398 18.5844C11.1836 18.6567 10.8164 18.6567 10.4602 18.5844L10.0622 20.5444C10.6811 20.6701 11.3189 20.6701 11.9378 20.5444L11.5398 18.5844ZM10.4636 18.5851C10.0998 18.5099 9.73482 18.3195 8.64325 17.7131L7.67196 19.4614C8.6506 20.0051 9.32485 20.392 10.0588 20.5437L10.4636 18.5851ZM6.25356 16.3859C5.09526 15.7419 4.72086 15.5201 4.45603 15.2328L2.98547 16.5883C3.51997 17.1682 4.24374 17.5568 5.28178 18.1339L6.25356 16.3859ZM4.45598 15.2327C4.1986 14.9536 4.00381 14.6226 3.88465 14.2621L1.98568 14.8897C2.19422 15.5207 2.5351 16.0998 2.98552 16.5884L4.45598 15.2327ZM3.88462 14.262C3.76202 13.8911 3.75 13.4568 3.75 12.1311H1.75C1.75 13.319 1.73798 14.1405 1.98571 14.8898L3.88462 14.262ZM3.75 12.1311V9.86881H1.75V12.1311H3.75ZM3.75 9.86881C3.75 8.54405 3.76202 8.1088 3.88462 7.73796L1.98571 7.11016C1.73798 7.85949 1.75 8.6819 1.75 9.86881H3.75ZM3.88465 7.73787C4.00381 7.37733 4.1986 7.04639 4.45599 6.76721L2.98551 5.41158C2.5351 5.90016 2.19422 6.4793 1.98568 7.11025L3.88465 7.73787ZM4.45603 6.76716C4.72086 6.47985 5.09526 6.25801 6.25356 5.61408L5.28178 3.86604C4.24374 4.44311 3.51997 4.83177 2.98547 5.41163L4.45603 6.76716ZM8.64323 4.28689C9.73482 3.68045 10.0998 3.49004 10.4636 3.41487L10.0588 1.45626C9.32484 1.60794 8.65059 1.99488 7.67195 2.53858L8.64323 4.28689ZM10.4627 3.41505C10.8172 3.34212 11.1828 3.34212 11.5373 3.41505L11.9403 1.45607C11.3199 1.32844 10.6801 1.32844 10.0597 1.45607L10.4627 3.41505ZM11.5364 3.41487C11.9002 3.49004 12.2652 3.68045 13.3568 4.28689L14.328 2.53857C13.3494 1.99488 12.6752 1.60793 11.9412 1.45626L11.5364 3.41487ZM6.51164 11.7071L9.03248 14.2279L10.4467 12.8137L7.92586 10.2929L6.51164 11.7071ZM10.4467 14.2279L15.4884 9.18625L14.0741 7.77204L9.03248 12.8137L10.4467 14.2279ZM13.3569 4.28695L15.7468 5.61428L16.7179 3.86584L14.3279 2.53851L13.3569 4.28695ZM15.7468 16.3857L13.3569 17.713L14.3279 19.4615L16.7179 18.1341L15.7468 16.3857ZM8.64313 17.713L6.2532 16.3857L5.28214 18.1341L7.67208 19.4615L8.64313 17.713ZM6.2532 5.61428L8.64312 4.28695L7.67206 2.53851L5.28214 3.86584L6.2532 5.61428Z"
-      fill="currentColor"
-    />
-  </svg>
-)
-
-/**
- * Canonical Human Points glyph, ported from the design-system icon set
- * (human-tech-design-system/src/icons/humanpoints.svg) — the same mark used
- * for the points chip in the SiteTopBar stories. Inlined as raw SVG for the
- * same reason as VerifiedIcon above.
- */
-const HumanPointsIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 100 100" fill="none" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path
-      fillRule="evenodd"
-      clipRule="evenodd"
-      d="M50.5 10C54.0539 10 57.136 11.6347 59.5978 13.9768C62.0389 16.2999 64.0561 19.472 65.6595 23.0796C66.8788 25.8231 67.9004 28.9244 68.7057 32.2892C72.0727 33.0947 75.1753 34.1205 77.9204 35.3405C81.5277 36.9437 84.7001 38.9614 87.0232 41.4022C89.3651 43.8637 90.9997 46.9466 91 50.5C90.9997 54.0537 89.3654 57.1362 87.0232 59.5978C84.7003 62.0387 81.5276 64.0511 77.9204 65.6544C75.1754 66.8744 72.0725 67.8993 68.7057 68.7057C67.9002 72.0724 66.8794 75.1756 65.6595 77.9204C64.0561 81.528 62.0389 84.7001 59.5978 87.0232C57.136 89.3653 54.0539 91 50.5 91C46.946 90.9996 43.8639 89.3657 41.4022 87.0232C38.9612 84.7002 36.9489 81.5278 35.3456 77.9204C34.1254 75.1751 33.0957 72.0731 32.2892 68.7057C28.9242 67.8995 25.8232 66.8738 23.0796 65.6544C19.4724 64.0511 16.2997 62.0387 13.9768 59.5978C11.6346 57.1362 10.0003 54.0537 10 50.5C10.0003 46.9466 11.6349 43.8637 13.9768 41.4022C16.2999 38.9614 19.4723 36.9437 23.0796 35.3405C25.8233 34.1211 28.924 33.0945 32.2892 32.2892C33.0955 28.9237 34.126 25.8236 35.3456 23.0796C36.9489 19.4722 38.9612 16.2998 41.4022 13.9768C43.8639 11.6343 46.946 10.0003 50.5 10ZM59.8876 70.2313C56.8657 70.57 53.7207 70.75 50.5 70.75C47.2775 70.75 44.1307 70.5703 41.1073 70.2313C41.6021 71.8156 42.1484 73.2882 42.7448 74.6301C44.0732 77.619 45.5506 79.7887 46.986 81.1547C48.3999 82.5003 49.5812 82.9037 50.5 82.9041C51.4188 82.9041 52.6 82.4999 54.014 81.1547C55.4494 79.7887 56.9268 77.619 58.2552 74.6301C58.8514 73.2887 59.3925 71.815 59.8876 70.2313ZM50.5 38.3459C46.5082 38.3459 42.7086 38.6605 39.2003 39.2003C38.6615 42.7086 38.351 46.5085 38.351 50.5C38.351 54.4896 38.662 58.2877 39.2003 61.7946C42.7089 62.3335 46.5081 62.649 50.5 62.649C54.49 62.649 58.2874 62.333 61.7946 61.7946C62.334 58.2874 62.6541 54.4902 62.6541 50.5C62.6541 46.5079 62.3345 42.7089 61.7946 39.2003C58.2877 38.661 54.4899 38.3459 50.5 38.3459ZM30.7636 41.1073C29.1812 41.6021 27.7104 42.149 26.3699 42.7448C23.3813 44.073 21.2113 45.5508 19.8453 46.986C18.5006 48.3994 18.0963 49.5814 18.0959 50.5C18.0963 51.4187 18.5002 52.6003 19.8453 54.014C21.2112 55.4493 23.3812 56.9269 26.3699 58.2552C27.7104 58.8509 29.1812 59.3983 30.7636 59.8927C30.4246 56.8695 30.25 53.7222 30.25 50.5C30.25 47.2778 30.4246 44.1305 30.7636 41.1073ZM70.2313 41.1073C70.5697 44.1308 70.75 47.2776 70.75 50.5C70.75 53.7224 70.5697 56.8692 70.2313 59.8927C71.8155 59.3979 73.2883 58.8515 74.6301 58.2552C77.6188 56.9269 79.7888 55.4493 81.1547 54.014C82.4998 52.6003 82.9037 51.4187 82.9041 50.5C82.9037 49.5814 82.4994 48.3994 81.1547 46.986C79.7887 45.5508 77.6186 44.073 74.6301 42.7448C73.2883 42.1484 71.8155 41.6025 70.2313 41.1073ZM50.5 18.0959C49.5812 18.0963 48.3999 18.4997 46.986 19.8453C45.5506 21.2113 44.0732 23.381 42.7448 26.3699C42.149 27.7104 41.6018 29.1811 41.1073 30.7636C44.1306 30.4253 47.2778 30.25 50.5 30.25C53.7204 30.25 56.8659 30.4256 59.8876 30.7636C59.3929 29.1817 58.8508 27.71 58.2552 26.3699C56.9268 23.3809 55.4494 21.2113 54.014 19.8453C52.6 18.5001 51.4188 18.0959 50.5 18.0959Z"
-      fill="currentColor"
-    />
-  </svg>
-)
-
-interface HumanityPointsChipProps {
-  /** L1-only proof-of-personhood result from useL1Humanity — 'poch' | 'passport' | null. */
-  method: 'poch' | 'passport' | null
-  passportScore?: number
-  passportThreshold?: number
-  /** True while the attestation query is in flight (or hasn't resolved yet). */
-  isFetching: boolean
-  points: number
-  /** True when Privacy Mode is on and the page is on the dark background. */
-  isDark?: boolean
-  /**
-   * Copy shown in the expanded panel when NOT verified. Varies by connection
-   * state (see Header): prompt to connect the EVM wallet when nothing is
-   * connected, or the eligibility reason once a wallet is connected.
-   */
-  unverifiedHint?: string
+interface HeaderProps {
+  credentials?: React.ReactNode
 }
 
 /**
- * Compact Humanity Score + Points indicator (#227). The chip itself shows the
- * live values (score stacked above points), right-justified so they sit flush
- * against the wallet-cluster divider. The breakdown (score bar, "what is this?"
- * explanation, Proof of Clean Hands detail, and the HUMN Points readout) is an
- * info readout, so it lives in a HOVER tooltip (react-tooltip, same pattern as
- * the network + humanity-info tooltips) rather than a click-to-open panel. No
- * caret. The tooltip is `clickable`, so tap-to-open also works on touch.
- *
- * Humanity side reflects the L1-only proof-of-personhood result from
- * useL1Humanity (see Header below) — it is independent of the L1↔L2 binding and
- * never shows a binding-conflict message:
- *  - method === 'passport' → the real cumulative numeric passportScore (shown as
- *    a bare number, not a fraction).
- *  - method === 'poch' → Proof of Clean Hands has no numeric score, so this
- *    shows a "Verified" state instead of a fabricated number.
- *  - no data yet / still loading / method === null / wallets not connected →
- *    a dimmed neutral "—", never a fake score.
+ * External ecosystem destinations shown in the "Ecosystem" nav dropdown. Kept
+ * as a plain array so new entries are a one-line add (no JSX edits): drop in
+ * another { label, href, icon } and it renders with the same row treatment. The
+ * `icon` is a LOCAL asset path (the runtime CSP blocks remote images) holding
+ * the destination's real brand logo; omit it and the row falls back to a neutral
+ * glyph rather than a broken image.
  */
-const HumanityPointsChip: React.FC<HumanityPointsChipProps> = ({
-  method,
-  passportScore,
-  passportThreshold,
-  isFetching,
-  points,
-  isDark = false,
-  unverifiedHint = 'Connect your Ethereum wallet to verify personhood.',
-}) => {
-  const isPassport = method === 'passport' && typeof passportScore === 'number'
-  const isPoch = method === 'poch'
-  const isVerified = isPassport || isPoch
-  const scoreLabel = isPassport ? String(passportScore) : isPoch ? 'Verified' : '—'
-  const scorePct = isPassport
-    ? Math.min(100, Math.max(0, (passportScore! / (passportThreshold || passportScore!)) * 100))
-    : isPoch
-      ? 100
-      : 0
+const ECOSYSTEM_LINKS: { label: string; href: string; icon?: string }[] = [
+  { label: 'Azguard', href: 'https://azguardwallet.io', icon: '/assets/svg/ecosystem/azguard.svg' },
+  { label: 'Aztecscan', href: 'https://aztecscan.xyz', icon: '/assets/svg/ecosystem/aztecscan.svg' },
+  { label: 'Nyx', href: 'https://www.nyx.money', icon: '/assets/svg/ecosystem/nyx.svg' },
+]
 
-  const scoreDetail = isPassport
-    ? String(passportScore)
-    : isPoch
-      ? 'Verified'
-      : isFetching
-        ? 'Checking…'
-        : 'Not verified'
+/**
+ * Dropdown surface for the Ecosystem menu — deliberately a byte-for-byte match
+ * of the account dropdown's `panelSurface` (see AccountChip.tsx), so the two
+ * menus read as ONE component we can later lift into a shared Storybook
+ * dropdown. It is intentionally NOT the Header `panelSurface` above: that one is
+ * shared with the mobile nav panel and sits at 0.95 opacity, whereas the account
+ * dropdown (our reference chrome) sits at 0.97. Keeping this local keeps the two
+ * consumers from drifting.
+ */
+function ecosystemPanelSurface(isDark: boolean): string {
+  return isDark
+    ? 'bg-[#2A0E1C]/[0.97] backdrop-blur-md border border-white/[0.12]'
+    : 'bg-white/[0.97] backdrop-blur-md border border-[#E5E5E5]/80'
+}
+
+/**
+ * "Ecosystem" nav item — a click-to-open dropdown of external ecosystem links.
+ * Rendered inside the shared secondaryNav (desktop pill + mobile panel), so it
+ * owns its own open/close state, click-outside, and Escape handling here rather
+ * than in Header (secondaryNav is inline JSX and can't hold hooks). The TRIGGER
+ * reuses the exact nav-link treatment of How it works / Docs / Fee Juice.
+ *
+ * The open PANEL is deliberately aligned to the account dropdown (AccountChip's
+ * portaled menu) — the reference chrome for this app — rather than the mobile
+ * nav panel: same surface (ecosystemPanelSurface == account panelSurface), the
+ * same rounded-[16px] corner + shadow-lg, the same py-2 container with a top
+ * SectionLabel, and menu-item rows (mx-2 px-2 py-1.5 rounded-lg, hoverTint,
+ * text-xs font-medium) instead of full-round pills. Each row carries the
+ * destination's real brand logo on a neutral tile at the left, its label, and
+ * the external-link affordance at the right. The goal is a single coherent
+ * dropdown look liftable into a shared Storybook component later.
+ *
+ * The panel is PORTALED to <body> (same reason as AccountChip #296): the desktop
+ * nav that hosts this trigger is `overflow-hidden` (the §384 label-collapse
+ * belt-and-suspenders), which clips any absolutely-positioned child — an
+ * in-flow panel renders but is invisible. Portaled + fixed, it also escapes the
+ * Header's z-30 stacking context. It is anchored just under the trigger's left
+ * edge so it never overlaps the nav row.
+ */
+// The anchor math clamps against the panel's own width, so width and clamp must
+// read from one source — a Tailwind w-[…] class would silently drift from it.
+const ECOSYSTEM_PANEL_W = 240
+const ECOSYSTEM_PANEL_GUTTER = 12
+
+const EcosystemNav: React.FC<{ isDark: boolean; onNavigate?: () => void; showLabel?: boolean }> = ({
+  isDark,
+  onNavigate,
+  showLabel = true,
+}) => {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [mounted, setMounted] = useState(false)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
+  useEffect(() => setMounted(true), [])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node
+      if (containerRef.current?.contains(target)) return
+      if (menuRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const update = () => {
+      const el = containerRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const maxLeft = window.innerWidth - ECOSYSTEM_PANEL_W - ECOSYSTEM_PANEL_GUTTER
+      setMenuPos({
+        top: r.bottom + 8,
+        left: Math.max(ECOSYSTEM_PANEL_GUTTER, Math.min(r.left, maxLeft)),
+      })
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+    // showLabel: the §384 collapse changes the trigger's width mid-resize, so the
+    // anchor must be re-measured after that render commits, not just on resize.
+  }, [open, showLabel])
 
   return (
-    <div className="relative">
-      {/* Vertical chip (#111/#227): humanity score stacked ABOVE points. The
-          content is right-justified (items-end + a trimmed right inset) so the
-          values sit flush against the wallet-cluster divider to its right,
-          instead of floating with a gap. No caret — this is an info readout, so
-          the breakdown moved into the hover tooltip below (anchored via
-          data-tooltip-id). */}
+    <div ref={containerRef} className="relative">
       <button
         type="button"
-        data-tooltip-id="humanity-points-tooltip"
-        aria-label="Humanity score and HUMN Points. Hover for details"
-        className={`flex items-center justify-end h-14 sm:h-16 pl-2.5 sm:pl-3 pr-1 rounded-[18px] transition-colors duration-200 ${hoverTint(isDark)} cursor-pointer`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Ecosystem"
+        title="Ecosystem"
+        className={`flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
       >
-        <div className="flex flex-col items-end justify-center gap-1.5">
-          {/* Humanity row. The green pulsing glow (ported DS chip--glow) is a
-              halo around this badge — applied ONLY in the verified/green state,
-              mirroring the DS which only glows the green verified chip. The
-              wrapper is a tight rounded container so the box-shadow reads as a
-              circular halo around the bare icon. */}
-          <span className="flex items-center gap-1.5">
-            <span className={`text-xs font-semibold leading-none ${isVerified ? accentPink(isDark) : mutedIconText(isDark)}`}>{scoreLabel}</span>
-            <span className={`inline-flex items-center justify-center rounded-full ${isVerified ? 'humanity-glow' : ''}`}>
-              <VerifiedIcon className={`w-3.5 h-3.5 ${isVerified ? accentPink(isDark) : isDark ? 'text-white/[0.25]' : 'text-gray-300'}`} />
-            </span>
-          </span>
-          {/* Points row — HUMN Points glyph with slow continuous rotation (ported DS chip--spin-icon). Icon trails the value (#248) so both glyphs sit against the wallet divider. */}
-          <span className="flex items-center gap-1.5">
-            <span className={`text-xs font-semibold leading-none ${navText(isDark)}`}>{points.toLocaleString()}</span>
-            <HumanPointsIcon className={`w-3.5 h-3.5 ${navText(isDark)} humn-points-spin`} />
-          </span>
-        </div>
+        <Icon
+          icon="ph:globe-hemisphere-west"
+          width={16}
+          height={16}
+          className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'}
+        />
+        <span className={showLabel ? '' : 'hidden'}>Ecosystem</span>
+        <Icon
+          icon="ph:caret-down"
+          width={12}
+          height={12}
+          className={`${isDark ? 'text-white/[0.50]' : 'text-[#737373]'} transition-transform duration-150 motion-reduce:transition-none ${
+            open ? 'rotate-180' : ''
+          }`}
+        />
       </button>
-
-      {/* Hover tooltip carrying the full breakdown (#227). Same react-tooltip
-          used for the network + humanity-info tooltips. `clickable` keeps the
-          links reachable and doubles as tap-to-open on touch. The interior is a
-          dark bubble (react-tooltip's default surface), so its text is styled
-          light in both themes rather than via the page's theme helpers. */}
-      <ReactTooltip
-        id="humanity-points-tooltip"
-        place="bottom"
-        clickable
-        className="z-[100] max-w-[248px]"
-        style={{ padding: '12px', borderRadius: '16px' }}
-        render={() => (
-          <div className="flex flex-col gap-3 text-left">
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-1.5">
-                <span className="text-xs font-medium text-white/[0.70]">Humanity</span>
-                {/* Cumulative score, NOT a fraction, so no "/threshold" denominator (#112/#113). */}
-                <span className={`text-sm font-semibold ${isVerified ? 'text-[#FA8FC4]' : 'text-white/[0.60]'}`}>
-                  {scoreDetail}
-                </span>
-              </div>
-              <div className="w-full h-1.5 rounded-full bg-white/[0.15] overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-[width] duration-300 ${isVerified ? 'bg-[#FA8FC4]' : 'bg-white/[0.30]'}`}
-                  style={{ width: `${scorePct}%` }}
-                />
-              </div>
-              <p className="text-[11px] leading-snug text-white/[0.75] mt-2">
-                A cumulative proof-of-personhood score. Higher means stronger proof you&apos;re a real, unique human. From{' '}
-                <a
-                  href={POCH_MINT_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 align-middle underline font-medium"
-                >
-                  <Icon icon="ph:hand-soap" width={13} height={13} className="text-[#FA8FC4]" />
-                  Proof of Clean Hands
-                </a>{' '}
-                and{' '}
-                <a
-                  href="https://app.passport.xyz"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 align-middle underline font-medium"
-                >
-                  <Icon icon="ph:identification-card" width={13} height={13} className="text-[#FA8FC4]" />
-                  Human Passport
-                </a>
-                .
-              </p>
-              {isPoch && (
-                <div className="mt-2">
-                  {/* Proof of Clean Hands badge (#127/#128). The L1 humanity
-                      result only tells us POCH is satisfied (method === 'poch');
-                      it carries NO mint date or expiry, so this shows the PoCH
-                      mark + an explanation, never fabricated dates.
-                      TODO(poch-meta): surface actual mint/expiry by fetching the
-                      Clean-Hands SBT / attestation metadata (a new data path,
-                      not exposed by the current eligibility route). */}
-                  <span className="inline-flex items-center gap-1.5">
-                    <Icon icon="ph:hand-soap" width={15} height={15} className="text-[#FA8FC4]" />
-                    <span className="text-[11px] font-medium text-[#FA8FC4]">Proof of Clean Hands</span>
-                  </span>
-                  <p className="text-[11px] leading-snug text-white/[0.75] mt-1">
-                    A privacy-preserving proof you&apos;re a real, sanctions-screened human. No numeric score needed. Mint date and expiry aren&apos;t available in this view yet.{' '}
-                    <a
-                      href={POCH_MINT_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline font-medium"
-                    >
-                      Manage
-                    </a>
-                  </p>
-                </div>
-              )}
-              {!isVerified && (
-                <p className="text-[11px] leading-snug text-white/[0.70] mt-1.5">
-                  {isFetching ? 'Checking eligibility…' : unverifiedHint}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.15]">
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-1.5 text-xs font-medium text-white/[0.70]">
-                  <HumanPointsIcon className="w-3.5 h-3.5" />
-                  HUMN Points
-                </span>
-                <span className="text-sm font-semibold text-white/[0.90]">{points.toLocaleString()}</span>
-              </div>
-              {/* TODO: `points` is still the PLACEHOLDER_POINTS stub. Shield has no
-                  per-user points source yet. The real value must be fetched from the
-                  points backend (the passport/Covenant HUMN Points service) and
-                  threaded through the `points` prop. Do NOT fabricate a per-action
-                  breakdown here, show only the real single balance once it's wired. */}
-              <p className="text-[11px] leading-snug text-white/[0.75]">
-                HUMN Points reward real, verified humans, not bots, across human.tech.
-              </p>
-            </div>
+      {open && mounted && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label="Ecosystem"
+          data-portal-menu
+          style={{
+            position: 'fixed',
+            top: menuPos.top,
+            left: menuPos.left,
+            width: ECOSYSTEM_PANEL_W,
+            maxWidth: `calc(100vw - ${ECOSYSTEM_PANEL_GUTTER * 2}px)`,
+          }}
+          className={`z-[60] ${ecosystemPanelSurface(isDark)} ${navText(isDark)} rounded-[16px] shadow-lg py-2 flex flex-col`}
+        >
+          {/* Section label — mirrors the account dropdown's Wallets / Identity
+              group headers so the two menus share one structural vocabulary. */}
+          <div className={`px-4 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${mutedIconText(isDark)}`}>
+            Ecosystem
           </div>
-        )}
-      />
+          {ECOSYSTEM_LINKS.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                onNavigate?.()
+              }}
+              className={`flex items-center gap-2.5 mx-2 px-2 py-1.5 rounded-lg text-left transition-colors duration-150 motion-reduce:transition-none ${hoverTint(isDark)} cursor-pointer`}
+            >
+              {/* Brand logo on a neutral tile so differently-shaped logos (square
+                  Azguard, transparent Aztecscan, circular Nyx) all align at one
+                  size — the same 24px avatar slot the account dropdown uses for
+                  wallet rows. Falls back to a neutral globe glyph if a logo asset
+                  is missing, never a broken image. */}
+              <span
+                className={`flex w-6 h-6 items-center justify-center rounded-[7px] flex-shrink-0 ${
+                  isDark ? 'bg-white/[0.06]' : 'bg-black/[0.04]'
+                }`}
+              >
+                {link.icon ? (
+                  <Image src={link.icon} alt="" width={16} height={16} className="object-contain" />
+                ) : (
+                  <Icon icon="ph:globe-hemisphere-west" width={14} height={14} className={mutedIconText(isDark)} />
+                )}
+              </span>
+              <span className={`flex-1 min-w-0 truncate text-xs font-medium ${navText(isDark)}`}>{link.label}</span>
+              <Icon
+                icon="majesticons:open"
+                width={14}
+                height={14}
+                className={`flex-shrink-0 ${mutedIconText(isDark)}`}
+              />
+            </a>
+          ))}
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }
 
-interface HeaderProps {
-  credentials?: React.ReactNode
-  /** Live points balance. Defaults to a stubbed placeholder — see PLACEHOLDER_POINTS. */
-  points?: number
-}
-
-const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINTS }) => {
+const Header: React.FC<HeaderProps> = ({ credentials }) => {
   const {
     waapAddress,
     isWaapConnected,
     connectWaapWallet,
+    disconnectWaapWallet,
     aztecAddress,
     isAztecConnected,
+    disconnectAztecWallet,
     connectAztecWallet,
     walletConnectionPhase,
+    waapLoginMethod: loginMethod,
+    waapWalletIcon: walletIcon,
+    aztecAlias,
     availableAccounts,
+    switchAztecAccount,
   } = useWalletStore()
-
-  // Humanity is an L1-ONLY property of the EVM wallet (issue #122) — it has
-  // NOTHING to do with the L1↔L2 binding. Sourced purely from useL1Humanity so
-  // the Humanity chip can never surface a binding-conflict message; binding
-  // problems live only in the wallet-cluster notice/toast below. Self-gates on
-  // `waapAddress`, so it's a no-op until the EVM wallet connects.
-  const { data: l1Humanity, isFetching: isL1HumanityFetching } = useL1Humanity(waapAddress || undefined)
 
   // Authoritative binding for the connected pair (needs both wallets + JWT).
   const { data: bindingStatus } = useBindingStatus()
-
-  const humanitySource = {
-    method: l1Humanity?.method ?? null,
-    passportScore: l1Humanity?.passportScore,
-    passportThreshold: l1Humanity?.passportThreshold,
-    isFetching: isL1HumanityFetching,
-    reason: l1Humanity?.reason,
-  }
-
-  const unverifiedHint = !isWaapConnected
-    ? 'Connect your Ethereum wallet to verify personhood.'
-    : humanitySource.reason
-      ? humanitySource.reason
-      : 'This wallet has not verified its humanity yet.'
 
   // ─── Pairing / binding conflict (issues #98, #97, #100, #120, #124) ──
   // SERVER TRUTH ONLY. On a server-side conflict, describeConflict names the
@@ -436,15 +391,34 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   // the inline conflict notice so it clears the instant the pair matches.
   const serverLinkedL2 = disclosedLinkedL2(conflict)
 
+  // Persistent (session) view of the linked Aztec account for the connected EVM
+  // wallet — remembered from any earlier server disclosure this session (bound
+  // or conflict), so the "Linked" badge on the Switch Account list survives a
+  // dropdown reopen even after the transient conflict response has cleared. In
+  // memory only (never localStorage); null until something has been disclosed.
+  const sessionLinkedL2 = useSessionLinkedL2(waapAddress)
+
+  // Live Season-1 HUMN Points for the connected L1 wallet (Human Passport via
+  // /api/points). Undefined until an address is connected and the lookup
+  // resolves; AccountChip hides the value unless it's a positive number.
+  const { data: humnPoints } = useHumnPoints(waapAddress || undefined)
+
   // Is that server-disclosed linked account one of the Azguard accounts the user
   // already has connected? Used only to tune the inline notice copy.
   const linkedAccountConnected =
     !!serverLinkedL2 && availableAccounts.some((a) => a.address.toLowerCase() === serverLinkedL2.toLowerCase())
 
+  // #304: name the exact target account the user must move to, and never imply
+  // they've already switched. When the linked account is already one of their
+  // connected Azguard accounts we tell them to SWITCH to it; otherwise we tell
+  // them to CONNECT it. Both cases short-address the bound account so the target
+  // is unambiguous. No em-dash.
   const walletNotice = !conflict
     ? null
-    : serverLinkedL2 && !linkedAccountConnected
-      ? `Your EVM wallet is linked to Aztec account ${shortAddr(serverLinkedL2)} — select/connect that account to continue.`
+    : serverLinkedL2
+      ? linkedAccountConnected
+        ? `Your EVM wallet is linked to Aztec account ${shortAddr(serverLinkedL2)}. Switch to that account to continue.`
+        : `Your EVM wallet is linked to Aztec account ${shortAddr(serverLinkedL2)}. Connect that account to continue.`
       : conflictMessage(conflict)
 
   const { isPrivacyModeEnabled, setPrivacyModeEnabled, getProgressSteps } = useBridgeStore()
@@ -479,13 +453,12 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   // The docs pages are a standalone reading view — no wallet, privacy toggle, or
   // deployment badge.
   const pathname = usePathname()
+  const router = useRouter()
   const isDocs = pathname?.startsWith('/docs') ?? false
 
   const { data: l1TokenBalances = [] } = useL1TokenBalances()
 
-  const sepoliaNativeTokens = l1TokenBalances.find(
-    (t) => t.type === 'native' && t.network?.chainId === L1_CHAIN_ID,
-  )
+  const sepoliaNativeTokens = l1TokenBalances.find((t) => t.type === 'native' && t.network?.chainId === L1_CHAIN_ID)
   const l1NativeBalance = sepoliaNativeTokens?.balance_formatted?.toString()
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -495,6 +468,64 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // #399 — measure-based label collapse. Instead of a fixed 1280px (`xl:`)
+  // breakpoint, the centered nav keeps full labels for exactly as long as they
+  // fit and drops to icon-only only when they would overflow. `navRef` is the
+  // available track (flex-1, so its clientWidth is the room the row has,
+  // independent of whether labels are currently shown); `ghostRef` is an inert,
+  // visually-hidden copy of the row rendered ALWAYS with labels, whose width is
+  // the space the labels REQUIRE. Comparing required-vs-available makes the
+  // decision monotonic (the ghost never collapses, so there is nothing to
+  // thrash against), and a small hysteresis buffer keeps a borderline width from
+  // flip-flopping. Default collapsed so the first paint is icon-only (the
+  // narrowest, never-overflowing state); the effect expands to labels only after
+  // it has measured that they fit — so it never flashes overflowing (SSR-safe:
+  // the real tree only renders once `mounted`, and the effect re-runs then).
+  const navRef = useRef<HTMLElement>(null)
+  const ghostRef = useRef<HTMLDivElement>(null)
+  const [labelsCollapsed, setLabelsCollapsed] = useState(true)
+  useEffect(() => {
+    const nav = navRef.current
+    const ghost = ghostRef.current
+    if (!nav || !ghost) return
+
+    // Dead zone (px) between "fits" and "expand" so a width parked right at the
+    // fit boundary doesn't oscillate label<->icon on sub-pixel resizes.
+    const NAV_FIT_BUFFER = 8
+    let raf = 0
+    const measure = () => {
+      raf = 0
+      const available = nav.clientWidth
+      const required = Math.ceil(ghost.scrollWidth)
+      // Below lg the nav is display:none (clientWidth 0) and the hamburger owns
+      // navigation; guard so a 0 width doesn't force a spurious collapse read.
+      if (available === 0 || required === 0) return
+      setLabelsCollapsed((prev) => {
+        if (required > available) return true
+        if (required + NAV_FIT_BUFFER <= available) return false
+        return prev
+      })
+    }
+    const schedule = () => {
+      if (raf) return
+      raf = requestAnimationFrame(measure)
+    }
+
+    schedule()
+    const ro = new ResizeObserver(schedule)
+    ro.observe(nav)
+    ro.observe(ghost)
+    // Web-font swap changes label widths after first paint — re-measure once
+    // fonts settle so the collapse point tracks the final metrics.
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      document.fonts.ready.then(schedule).catch(() => {})
+    }
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      ro.disconnect()
+    }
+  }, [mounted, isDocs])
 
   // No forced auto-switch (reverted #120): selecting a "wrong" Aztec account is
   // allowed and never silently overridden — the app must never change the user's
@@ -520,7 +551,13 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   useEffect(() => {
     if (!mobileMenuOpen) return
     function handleClickOutside(event: MouseEvent) {
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node | null
+      // Dropdowns opened from inside this panel (Ecosystem) are portaled to
+      // <body>, so they are not DOM descendants of mobileMenuRef. Without this
+      // exemption a mousedown on one of their rows closes the panel, unmounting
+      // the row before mouseup — the click never lands and the link is dead.
+      if (target instanceof Element && target.closest('[data-portal-menu]')) return
+      if (mobileMenuRef.current && target && !mobileMenuRef.current.contains(target)) {
         setMobileMenuOpen(false)
       }
     }
@@ -550,6 +587,10 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   }
 
   const handleConnectAztecOnly = async () => {
+    // Clicking the Aztec wallet from the top-right takes the user to the app-shell
+    // home first, where the "Connect Aztec Wallet" step lives, so the connect flow
+    // always runs in context on the bridge rather than over whatever route they were on.
+    if (pathname !== '/') router.push('/?app=1')
     try {
       await connectAztecWallet()
     } catch (error) {
@@ -562,7 +603,8 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
   }
 
   const isL1Connecting = !isWaapConnected && walletConnectionPhase !== 'idle'
-  const isL2Connecting = isWaapConnected && !isAztecConnected && (walletButtonPressed || walletConnectionPhase !== 'idle')
+  const isL2Connecting =
+    isWaapConnected && !isAztecConnected && (walletButtonPressed || walletConnectionPhase !== 'idle')
 
   if (!mounted) {
     return (
@@ -605,7 +647,9 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
       </span>
       <button
         className={`flex w-[36px] h-[22px] sm:w-[40px] sm:h-[24px] py-[3px] px-1 items-center rounded-full transition-all duration-200 border-0 focus:outline-none relative z-10 flex-shrink-0 ${
-          isPrivacyModeEnabled ? 'bg-[#3B3B3B] justify-end pl-[17px] sm:pl-[19px]' : 'bg-[#D4D4D4] justify-start pr-[17px] sm:pr-[19px]'
+          isPrivacyModeEnabled
+            ? 'bg-[#3B3B3B] justify-end pl-[17px] sm:pl-[19px]'
+            : 'bg-[#D4D4D4] justify-start pr-[17px] sm:pr-[19px]'
         }`}
         onClick={() => {
           setPrivacyModeEnabled(!isPrivacyModeEnabled)
@@ -631,206 +675,246 @@ const Header: React.FC<HeaderProps> = ({ credentials, points = PLACEHOLDER_POINT
     </div>
   )
 
-  // Account Chip — the single wallet-only chip + its account dropdown (Wallets ·
-  // Identity & proofs · Limits & usage · Disconnect). It reads the wallet /
-  // attestation stores directly; Header keeps ownership of the combined connect
-  // flow (handleConnectWallet drives the WaaP→Aztec auto-connect useEffect
-  // above), so the connect actions and in-flight flags are passed in as props.
-  // The humanity/points chip stays a SEPARATE element beside it (see below).
-  const walletCluster = (
+  // Skinny variant-A account chip — a single uniform-height nav chip standing at
+  // the right end of the nav (like the Shield brand chip). It encapsulates the
+  // connect / connected states and the Wallets · Identity & proofs · Limits &
+  // usage · Disconnect dropdown, reading wallet-store state itself. Header only
+  // threads the props it can't self-source: the connect actions, the derived
+  // connecting/lock/balance flags, the folded-in HUMN Points balance (#313), and
+  // the authoritative binding data (conflict notice + server-disclosed linked L2
+  // account).
+  const accountChip = (
     <AccountChip
       isDark={isDark}
       onConnectWallet={handleConnectWallet}
-      onConnectAztec={isWaapConnected ? handleConnectAztecOnly : handleConnectWallet}
+      onConnectAztec={handleConnectAztecOnly}
       isL1Connecting={isL1Connecting}
       isL2Connecting={isL2Connecting}
       l1NativeBalance={l1NativeBalance}
       actionsLocked={isTransferInProgress}
+      loginMethod={loginMethod}
+      points={humnPoints?.totalPoints}
+      conflictNotice={walletNotice || undefined}
+      conflictSevere={!!conflict}
+      linkedAccountAddress={sessionLinkedL2 || undefined}
     />
   )
 
-  const secondaryNav = (
-    <>
-      {credentials && (
-        <div
-          className={`text-sm font-medium cursor-pointer transition-colors duration-200 whitespace-nowrap ${navText(isDark)} ${
-            isDark ? 'hover:text-white' : 'hover:text-latest-grey-800'
-          }`}
+  // #384 / #399 — graceful collapse so the nav NEVER overflows. `showLabels`
+  // drives whether each control shows its word or just its `ph:` glyph. In the
+  // desktop pill it is set from the live fit measurement (labelsCollapsed): full
+  // labels while they fit, icon-only the moment they would overflow — no fixed
+  // pixel breakpoint. The `ph:` glyph plus the native `title`/`aria-label` keep
+  // every control reachable and named on hover in icon-only mode (SOP §7, no new
+  // deps). Below lg the whole nav moves to the hamburger panel. In the mobile
+  // panel and the hidden measurement ghost, labels are always shown — neither is
+  // width-constrained.
+  const renderSecondaryNav = (showLabels: boolean) => {
+    const labelCls = showLabels ? '' : 'hidden'
+    return (
+      <>
+        {credentials && (
+          <div
+            className={`text-sm font-medium cursor-pointer transition-colors duration-200 whitespace-nowrap ${navText(isDark)} ${
+              isDark ? 'hover:text-white' : 'hover:text-latest-grey-800'
+            }`}
+          >
+            {credentials}
+          </div>
+        )}
+        <button
+          onClick={() => {
+            openHowItWorks()
+            setMobileMenuOpen(false)
+          }}
+          aria-label="How it works"
+          title="How it works"
+          className={`flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
         >
-          {credentials}
-        </div>
-      )}
-      <button
-        onClick={() => {
-          openHowItWorks()
-          setMobileMenuOpen(false)
-        }}
-        className={`flex items-center gap-1.5 px-2 lg:px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
-      >
-        <Icon icon="ph:question" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
-        How it works
-      </button>
-      <Link
-        href="/docs"
-        onClick={() => setMobileMenuOpen(false)}
-        className={`flex items-center gap-1.5 px-2 lg:px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
-      >
-        <Icon icon="ph:book-open" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
-        Docs
-      </Link>
-      {/* Direct, always-available entry to the Fee Juice screen — previously only
-          reachable by failing a claim (#146). Same pattern/tone as the sibling
-          links; shared by the desktop nav and the mobile panel so the label stays
-          visible in both. whitespace-nowrap keeps it from wrapping the nav row. */}
-      <Link
-        href="/fee-juice"
-        onClick={() => setMobileMenuOpen(false)}
-        className={`flex items-center gap-1.5 px-2 lg:px-3 h-9 text-xs font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
-      >
-        <Icon icon="ph:gas-pump" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
-        Fee Juice
-      </Link>
-    </>
-  )
+          <Icon icon="ph:question" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
+          <span className={labelCls}>How it works</span>
+        </button>
+        <Link
+          href="/docs"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="Docs"
+          title="Docs"
+          className={`flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+        >
+          <Icon
+            icon="ph:book-open"
+            width={16}
+            height={16}
+            className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'}
+          />
+          <span className={labelCls}>Docs</span>
+        </Link>
+        {/* Direct, always-available entry to the Fee Juice screen — previously only
+            reachable by failing a claim (#146). Same pattern/tone as the sibling
+            links; shared by the desktop nav and the mobile panel. whitespace-nowrap
+            keeps it from wrapping the nav row. */}
+        <Link
+          href="/fee-juice"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="Fee Juice"
+          title="Fee Juice"
+          className={`flex items-center gap-1.5 px-3 h-9 text-[13px] font-medium rounded-full ${navText(isDark)} ${hoverTint(isDark)} transition-colors duration-200 whitespace-nowrap`}
+        >
+          <Icon icon="ph:gas-pump" width={16} height={16} className={isDark ? 'text-white/[0.50]' : 'text-[#737373]'} />
+          <span className={labelCls}>Fee Juice</span>
+        </Link>
+        {/* Ecosystem — click-to-open dropdown of external ecosystem links. Shares
+            the sibling links' pill/hover/typography treatment; opens below the
+            trigger so it clears the nav row. Label collapses with the siblings. */}
+        <EcosystemNav isDark={isDark} onNavigate={() => setMobileMenuOpen(false)} showLabel={showLabels} />
+      </>
+    )
+  }
 
   return (
-    <header className="w-full px-3 sm:px-4 pt-3 flex items-stretch gap-2 sm:gap-3 relative" style={{ containerType: 'inline-size' }}>
-      {/* Brand pill — Shield lockup (ported from the SiteTopBar brand-pill slot)
-          with the version + network selector stacked directly UNDER it (#113).
-          One glass pill holds a column: the home-link logo on top, the
-          DeploymentSelector beneath. The logo image keeps its exact 100×27
-          dimensions so the brand mark's size/proportions are unchanged — the
-          pill just gains a thin second line. The selector is a bare control
-          here (no pill material of its own) so it reads as part of the brand
-          pill, not a second stacked pill. No fixed height: `items-stretch` on
-          the header row matches this column to the main pill's content-driven
-          height. */}
-      <div
-        className={`relative z-40 flex-shrink-0 flex flex-col items-center justify-center gap-1.5 min-h-11 sm:min-h-12 px-3 sm:px-5 py-2 rounded-[26px] ${glassPill(isDark)}`}
-      >
-        <Link
-          href="/"
-          onClick={(e) => {
-            // Preserve the state-loss guard: while a transfer is in progress,
-            // returning to the splash tears down the live /progress view, so
-            // confirm first and bail if the user cancels.
-            if (isTransferInProgress && !window.confirm(TRANSFER_LEAVE_CONFIRM)) {
-              e.preventDefault()
-              return
-            }
-            // Not just route home — re-show the onboarding splash (#103).
-            requestShowSplash()
-          }}
-          className="flex items-center justify-center hover:opacity-80 transition-opacity duration-200"
-        >
-          <Image src={isDark ? '/assets/svg/shield-lockup-white.svg' : '/assets/svg/shield-lockup-maroon.svg'} alt="Shield" width={100} height={27} />
-        </Link>
-        <DeploymentSelector />
+    <header
+      className="w-full px-3 sm:px-4 pt-3 flex items-start gap-2 sm:gap-3 relative"
+      style={{ containerType: 'inline-size' }}
+    >
+      {/* Left column — the Shield BRAND chip on top (brand only), and the
+          version/network selector as its OWN separate chip directly beneath it
+          (#113). No chip-in-chip: the version dropdown is no longer stacked
+          inside the brand pill. The brand chip shares the uniform top-row height
+          (CHIP_H); the version chip hangs below it, OUTSIDE that row — so the
+          header uses items-start, letting this column be taller than the row
+          without stretching the other chips. */}
+      <div className="flex flex-col items-stretch gap-2 flex-shrink-0 relative z-40">
+        {/* Shield brand chip — logo + wordmark only. */}
+        <div className={`${CHIP_H} flex items-center justify-center px-3 sm:px-5 rounded-[26px] ${glassPill(isDark)}`}>
+          <Link
+            href="/"
+            onClick={(e) => {
+              // Preserve the state-loss guard: while a transfer is in progress,
+              // returning to the splash tears down the live /progress view, so
+              // confirm first and bail if the user cancels.
+              if (isTransferInProgress && !window.confirm(TRANSFER_LEAVE_CONFIRM)) {
+                e.preventDefault()
+                return
+              }
+              // Not just route home — re-show the onboarding splash (#103).
+              requestShowSplash()
+            }}
+            className="flex items-center justify-center hover:opacity-80 transition-opacity duration-200"
+          >
+            <Image
+              src={isDark ? '/assets/svg/shield-lockup-white.svg' : '/assets/svg/shield-lockup-maroon.svg'}
+              alt="Shield"
+              width={100}
+              height={27}
+            />
+          </Link>
+        </div>
+        {/* Version chip — its own rounded, visually distinct chip. The
+            DeploymentSelector supplies its own tinted pill material, caret, and
+            expandable network/version dropdown; here it simply sits centered
+            directly under the brand chip.
+
+            #413: the selector's own fill is nearly transparent (0.04 light /
+            0.06 dark), so its text used to read straight off the PAGE background
+            — the deep-maroon Privacy-Mode field in particular washed the muted
+            tokens (v · Aztec Testnet, the ALPHA tag) below legibility. Back it
+            with a SOLID theme-aware surface so those tokens always sit on a
+            defined, high-contrast backing instead of the page: opaque white on
+            light, opaque deep-maroon in Privacy Mode. The selector's translucent
+            fill layers over this, so the chip still reads as one unit while the
+            solid surface underneath carries the contrast. Same isDark the
+            selector computes internally, so surface and text tones stay matched.
+            No dropdown/behaviour change — this is purely a legibility backing. */}
+        <div className="flex justify-center">
+          <div
+            className={`inline-flex rounded-full ${
+              isDark
+                ? 'bg-[#2A0E1C]/[0.95] shadow-[0_2px_10px_-3px_rgba(0,0,0,0.55)]'
+                : 'bg-white shadow-[0_2px_10px_-3px_rgba(15,15,15,0.16)]'
+            }`}
+          >
+            <DeploymentSelector />
+          </div>
+        </div>
       </div>
 
-      {/* Main pill — secondary nav (left) + always-on cluster (right), ported
-          from the SiteTopBar main-pill / bar-right structure. Height is
-          content-driven (min-height floor + vertical padding, not a fixed
-          height) so the stacked wallet pills can grow it instead of
-          overflowing it — a fixed height here was clipping/spilling the
-          2-pill stack outside the rounded pill shape. */}
+      {/* Center pill — Privacy Mode pinned left, secondary nav links centered
+          (lg+), and the mobile-nav hamburger at the right (below lg). Uniform
+          top-row height. No nested chips: the account chip (with HUMN Points now
+          folded in, #313) lives in its own standalone chip to the right of this
+          pill. */}
       <div
-        // Asymmetric horizontal inset (#211): Privacy Mode is pinned to the far
-        // left of this pill, and a symmetric px-2/px-3 left it crowding the pill's
-        // left border. The left inset is widened (pl-4 sm:pl-5) so the label sits
-        // clear of the edge; the right inset (pr-2 sm:pr-3) is unchanged so the
-        // wallet cluster's spacing and the no-scroll budget stay as they were.
-        className={`flex-1 min-w-0 flex items-center justify-between gap-2 min-h-11 sm:min-h-12 py-1 sm:py-1.5 pl-4 pr-2 sm:pl-5 sm:pr-3 rounded-full ${glassPill(isDark)}`}
+        className={`${CHIP_H} flex-1 min-w-0 flex items-center justify-between gap-2 pl-4 pr-2 sm:pl-5 sm:pr-3 rounded-full ${glassPill(isDark)}`}
       >
-        {/* Left: Privacy Mode pinned to the far left of the middle section (#159).
-            Flat segment now (#185). A flush hairline on its right edge divides it
-            from the centered nav links once those links are present, mirroring
-            the wallet cluster's border-l hairline instead of stacking a pill.
-            Below that width the border collapses to 0 width so no hairline
-            floats in the empty gap. Threshold matches the nav breakpoint below
-            (#242) rather than `lg`, so the divider and the links it separates
-            appear together. */}
+        {/* Privacy Mode — pinned far left (#159), a flat segment (#185) with a
+            flush hairline on its right edge dividing it from the centered nav
+            links at lg+. Below lg the border collapses so no hairline floats. */}
         <div
-          className="flex items-center flex-shrink-0 min-[900px]:pr-3"
+          className={`flex items-center flex-shrink-0 lg:border-r lg:pr-3 ${
+            isDark ? 'border-white/[0.14]' : 'border-black/[0.10]'
+          }`}
         >
           {privacyToggle}
         </div>
 
-        {/* Center: the remaining nav links, centered in the bar (#159). flex-1
-            fills the gap between the Privacy toggle and the right cluster while
-            justify-center pins the links to the middle. The nav switches on at
-            a custom 900px step instead of waiting for `lg` (1024px). The old
-            `lg` cutoff left a dead gap in the pill with the hamburger already
-            showing despite the room (#242). Tighter gap/padding here than at
-            `lg` buys back the space the earlier switch costs; `lg` still widens
-            back out to the original spacing once there's room to spare. Below
-            900px the links move into the mobile panel instead. */}
-        <nav className="hidden min-[900px]:flex items-center justify-center gap-0.5 lg:gap-1 flex-1 min-w-0" aria-label="Secondary">
-          {secondaryNav}
+        {/* Centered nav links (#159). flex-1 + justify-center pins them to the
+            middle. Hidden below lg, where they move into the mobile panel.
+            overflow-hidden is a §384 belt-and-suspenders: labels are dropped by
+            measurement BEFORE they overflow, so this only ever clips a transient
+            frame between a resize and the next measure, never a resting state. */}
+        <nav
+          ref={navRef}
+          className="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0 overflow-hidden"
+          aria-label="Secondary"
+        >
+          {renderSecondaryNav(!labelsCollapsed)}
         </nav>
 
-        {/* Right: humanity/points chip, then the wallet cluster and mobile
-            toggle (chip sits flush beside the wallet/account stack, #111). The
-            chip collapses first on narrow widths; the wallet cluster never
-            collapses. */}
-        <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0 min-w-0">
-          <div className="hidden sm:block flex-shrink-0">
-            <HumanityPointsChip
-              method={humanitySource.method}
-              passportScore={humanitySource.passportScore}
-              passportThreshold={humanitySource.passportThreshold}
-              isFetching={humanitySource.isFetching}
-              points={points}
-              isDark={isDark}
-              unverifiedHint={unverifiedHint}
-            />
+        {/* Hidden measurement ghost (#399). An inert, visually-hidden copy of the
+            nav rendered ALWAYS with labels; its scrollWidth is the width the full
+            labels REQUIRE, which the effect compares against the real nav's
+            available width to decide the collapse. `inert` keeps its duplicated
+            controls out of the tab order and the a11y tree; the w-0/h-0
+            overflow-hidden wrapper means it contributes nothing to layout or page
+            scroll while the inline-flex inner still sizes to its content. */}
+        <div aria-hidden inert className="absolute top-0 left-0 w-0 h-0 overflow-hidden pointer-events-none">
+          <div ref={ghostRef} className="inline-flex items-center gap-1 whitespace-nowrap">
+            {renderSecondaryNav(true)}
           </div>
-
-          {/* Wallet cluster + an actionable binding notice anchored beneath it.
-              A server conflict (or the device-local pre-warn) is surfaced here
-              inline — naming the exact counterpart account — instead of being
-              buried in the tutorial (issue #98). */}
-          <div className="relative flex-shrink-0">
-            {walletCluster}
-            {walletNotice && (
-              <div
-                role="alert"
-                className={`absolute right-0 top-full mt-2 z-50 w-[240px] rounded-2xl ${panelSurface(isDark)} shadow-lg p-3 flex items-start gap-2 border-l-2 ${
-                  conflict ? 'border-l-[#E3357E]' : 'border-l-[#FA8FC4]'
-                }`}
-              >
-                <Icon
-                  icon="ph:warning-circle"
-                  width={16}
-                  height={16}
-                  className={`mt-[1px] flex-shrink-0 ${accentPink(isDark)}`}
-                />
-                <p className={`text-[11px] leading-snug ${navText(isDark)}`}>{walletNotice}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Secondary-nav toggle — only needed below the nav's 900px
-              breakpoint (see above, #242), where "How it works" / version
-              selector move out of the main row. Privacy Mode and the wallet
-              pills above stay in the main row at every width, so they never
-              end up hidden behind this button. */}
-          <button
-            onClick={toggleMobileMenu}
-            className={`min-[900px]:hidden flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full ${hoverTint(isDark)} transition-colors duration-200`}
-            aria-label="Toggle menu"
-            aria-expanded={mobileMenuOpen}
-          >
-            <Icon icon={mobileMenuOpen ? 'ph:x' : 'ph:list'} width={20} height={20} className={navText(isDark)} />
-          </button>
         </div>
+
+        {/* Mobile-nav toggle — only below lg, where the nav links collapse into
+            the panel. */}
+        <button
+          onClick={toggleMobileMenu}
+          className={`lg:hidden flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full ${hoverTint(isDark)} transition-colors duration-200`}
+          aria-label="Toggle menu"
+          aria-expanded={mobileMenuOpen}
+        >
+          <Icon icon={mobileMenuOpen ? 'ph:x' : 'ph:list'} width={20} height={20} className={navText(isDark)} />
+        </button>
       </div>
 
-      {/* Secondary-nav panel (credentials / How it works / Docs) — the version
-          + network selector lives under the Shield brand pill now (#113), not here. */}
+      {/* Account chip — the skinny variant-A chip, its own standalone glass pill
+          at the uniform top-row height (CHIP_H / h-14 supplied by AccountChip
+          itself), pulled OUT of the center pill so it sits on its own at the
+          right end. A single collapsed row (avatars + Account + verified + HUMN
+          Points + caret) that opens the account dropdown. The separate
+          humanity/points chip has been removed (#313); its points value is now
+          folded into this chip, and the humanity score lives only in the
+          dropdown's Identity section. The binding-conflict notice renders as a
+          static banner inside that dropdown (#282), not a floating overlay. */}
+      <div className="relative z-40 flex-shrink-0">{accountChip}</div>
+
+      {/* Mobile secondary-nav panel (credentials / How it works / Docs / Fee
+          Juice) — the version chip lives under the Shield brand chip now (#113),
+          not here. */}
       {mobileMenuOpen && (
-        <div ref={mobileMenuRef} className={`min-[900px]:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}>
-          {secondaryNav}
+        <div
+          ref={mobileMenuRef}
+          className={`lg:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}
+        >
+          {renderSecondaryNav(true)}
         </div>
       )}
 

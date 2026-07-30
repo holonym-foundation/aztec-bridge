@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useBridgeOperations } from '@/hooks/useBridgeOperations'
-import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
+import { canResumeOp } from '@/utils/resumability'
 
 /**
  * Counts bridge operations that still need the user to act — an incomplete
@@ -17,6 +17,6 @@ export function useResumableCount(): number {
 
   return useMemo(() => {
     if (!operations) return 0
-    return operations.filter((op) => isResumable(op) || hasPossibleLockedFunds(op)).length
+    return operations.filter((op) => canResumeOp(op)).length
   }, [operations])
 }

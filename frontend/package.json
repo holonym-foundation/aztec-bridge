@@ -8,6 +8,10 @@
     "build": "prisma generate && next build --webpack && node ./scripts/check-bb-wasm-trace.mjs",
     "postinstall": "prisma generate",
     "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:all": "pnpm test && pnpm test:e2e",
     "lint": "next lint",
     "design-lint": "node ./scripts/design-lint.mjs",
     "db:validate": "prisma validate",
@@ -36,6 +40,7 @@
     "@aztec/wallet-sdk": "5.0.1",
     "@datadog/browser-logs": "^4.45.0",
     "@human.tech/clean.sdk": "workspace:*",
+    "@human.tech/passport-embed": "^0.3.4",
     "@human.tech/waap-sdk": "^1.0.3",
     "@iconify/react": "^6.0.0",
     "@noble/ciphers": "^2.1.1",
@@ -106,6 +111,7 @@
     "typescript": "^5",
     "url": "^0.11.4",
     "util": "^0.12.5",
+    "vitest": "^4.1.4",
     "webpack": "^5.99.9"
   }
 }

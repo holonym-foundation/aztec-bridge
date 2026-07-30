@@ -1,6 +1,15 @@
 'use client'
 
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
+
+// SSR-safe storage: the store module is evaluated on the server too (client
+// components still render on the server), where localStorage doesn't exist.
+const safeStorage = createJSONStorage(() =>
+  typeof window !== 'undefined'
+    ? window.localStorage
+    : { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+)
 
 // Persistent, in-app feed of the events that used to live only in transient
 // toasts. Toasts stay for momentary confirmations; anything the user may want
@@ -21,8 +30,11 @@ export type NotificationType =
 // An optional inline action carried by a message. Rendered as a small
 // button inside the feed row so an interactive notification (e.g. "Deposit
 // confirmed" offering a recovery-backup export) can be acted on straight from
-// Messages, now that no corner toast exists to click. Held in memory only —
-// the store isn't persisted, so the handler stays a live function.
+// Messages, now that no corner toast exists to click. The onClick is a live
+// function, so it is NOT persisted (partialize strips `action`); a message
+// restored from storage keeps its text but loses its button. Actions that must
+// survive a reload are reconstructed at render time from the message `key`
+// (see NotificationsDrawer's recovery-backup download).
 export interface NotificationAction {
   label: string
   onClick: () => void
@@ -47,6 +59,12 @@ export interface AppNotification {
   mode?: 'public' | 'private'
   timestamp: number
   read: boolean
+  // True only for rows restored from localStorage on load, before any new event
+  // has fired in this session. The mini-bar ticker uses this to stay silent about
+  // a prior session's error/warning on a fresh bridge — the row still lives in the
+  // Messages feed, it just isn't force-surfaced in the ticker. Cleared the moment a
+  // new push refreshes the row (a genuine in-session event), so live alerts show.
+  rehydrated?: boolean
 }
 
 // Signal the drawer uses to fire the "genie into Messages" animation exactly
@@ -84,6 +102,11 @@ interface NotificationsState {
     autoDismissMs?: number
   }) => void
   dismiss: (id: string) => void
+  // Remove every row carrying this stable `key`. Used to retire a transient,
+  // context-bound banner (e.g. a "Do not reload" safety notice) the moment its
+  // window closes, so it never lingers in the feed — or, now that the feed is
+  // persisted, survives a reload — after the operation has moved on.
+  dismissByKey: (key: string) => void
   dismissAll: () => void
   markAllRead: () => void
 }
@@ -92,7 +115,9 @@ const unread = (list: AppNotification[]) => list.filter((n) => !n.read).length
 
 const makeId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
-export const useNotificationsStore = create<NotificationsState>((set, get) => ({
+export const useNotificationsStore = create<NotificationsState>()(
+  persist(
+    (set, get) => ({
   notifications: [],
   unreadCount: 0,
   lastGenie: null,
@@ -119,6 +144,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
             amount,
             mode,
             timestamp: Date.now(),
+            // A fresh event fired on this row, so it is no longer a stale
+            // rehydrated carryover — let the ticker surface it again.
+            rehydrated: false,
           }
           scheduledId = existing.id
           const rest = state.notifications.filter((_, i) => i !== idx)
@@ -167,6 +195,14 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       return { notifications, unreadCount: unread(notifications) }
     }),
 
+  dismissByKey: (key) =>
+    set((state) => {
+      if (!key) return state
+      const notifications = state.notifications.filter((n) => n.key !== key)
+      if (notifications.length === state.notifications.length) return state
+      return { notifications, unreadCount: unread(notifications) }
+    }),
+
   dismissAll: () => set({ notifications: [], unreadCount: 0 }),
 
   markAllRead: () =>
@@ -177,7 +213,33 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
         unreadCount: 0,
       }
     }),
-}))
+    }),
+    {
+      name: 'shield:notifications',
+      storage: safeStorage,
+      version: 1,
+      // Rehydrated explicitly from a client effect (see ClientLayout) so the
+      // server and first client render both start empty — no hydration mismatch
+      // on the unread badge or feed.
+      skipHydration: true,
+      // Tag every restored row as `rehydrated` so the mini-bar ticker can ignore a
+      // prior session's error/warning on load (it would otherwise force-surface
+      // yesterday's alert on a fresh bridge). The rows stay in the Messages feed;
+      // a new in-session push clears the tag (see the keyed upsert) so live alerts
+      // still surface. Persisted value is harmless — it is re-set on each load.
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        state.notifications = state.notifications.map((n) => ({ ...n, rehydrated: true }))
+      },
+      // Persist only serializable fields: drop the live `action` onClick (a
+      // function) and never persist the one-shot genie animation signal.
+      partialize: (state) => ({
+        notifications: state.notifications.map(({ action: _action, ...rest }) => rest),
+        unreadCount: state.unreadCount,
+      }),
+    },
+  ),
+)
 
 // Convenience for non-React call sites (zustand stores, event callbacks) that
 // shouldn't subscribe — mirrors how showToast is used across the app.
@@ -191,3 +253,10 @@ export const pushNotification = (input: {
   mode?: 'public' | 'private'
   autoDismissMs?: number
 }) => useNotificationsStore.getState().pushNotification(input)
+
+// Non-React accessor for retiring a keyed banner from event callbacks (mirrors
+// `pushNotification`). Clearing the feed row here is what makes a transient
+// safety notice actually go away when the flow advances — dismissing the toast
+// alone never touched the persisted feed.
+export const dismissNotificationByKey = (key: string) =>
+  useNotificationsStore.getState().dismissByKey(key)

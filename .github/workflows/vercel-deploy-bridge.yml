@@ -53,6 +53,10 @@ jobs:
       - name: Install Vercel CLI
         run: pnpm add --global vercel@latest
 
+      - name: Design lint (SOP — blocks on contrast/opacity)
+        working-directory: ./frontend
+        run: pnpm design-lint
+
       - name: Build Next App
         working-directory: ./frontend
         run: pnpm build
@@ -96,6 +100,10 @@ jobs:
       - name: Install Vercel CLI
         run: pnpm add --global vercel@latest
 
+      - name: Design lint (SOP — blocks on contrast/opacity)
+        working-directory: ./frontend
+        run: pnpm design-lint
+
       - name: Build Next App
         working-directory: ./frontend
         run: pnpm build
@@ -135,6 +143,10 @@ jobs:
 
       - name: Install Vercel CLI
         run: pnpm add --global vercel@latest
+
+      - name: Design lint (SOP — blocks on contrast/opacity)
+        working-directory: ./frontend
+        run: pnpm design-lint
 
       - name: Build Next App
         working-directory: ./frontend

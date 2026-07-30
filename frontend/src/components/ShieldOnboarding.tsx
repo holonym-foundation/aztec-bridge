@@ -1,12 +1,22 @@
 'use client'
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useWalletStore } from '@/stores/walletStore'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
+import { PASSPORT_BUILD_URL } from '@/config'
 
 const ONBOARDED_KEY = 'shield_onboarded'
+
+// Module-scoped, so it survives client-side navigations (React remounts) but resets on a
+// true document reload/refresh. Once the user has entered the app this page-load, NO
+// route change may re-show the splash — the only ways back to it are a refresh (module
+// re-initialises → false) or the top-left Shield brand (requestShowSplash). This is the
+// root fix for dangling routes that bounced users to the splash (#419/#437), independent
+// of whether any given navigation remembered the ?app=1 marker.
+let hasEnteredAppThisLoad = false
 const BRAND = '#81133B'
 const CLEAN_SDK = 'https://human.tech/clean-sdk'
 const DOCS_CLEAN_HANDS = '/docs/users'
@@ -53,7 +63,7 @@ const SCREENS: Screen[] = [
         <div className="ob-tiers" role="table" aria-label="Verification tiers">
           <div className="ob-tier-row" role="row">
             <div className="ob-tier-icon" role="cell">
-              <TierIcon kind="unique" />
+              <span className="ob-brandlogo ob-logo-passport" aria-hidden="true" />
             </div>
             <div className="ob-tier-copy" role="cell">
               <strong>Up to $1,000</strong>
@@ -62,7 +72,7 @@ const SCREENS: Screen[] = [
           </div>
           <div className="ob-tier-row" role="row">
             <div className="ob-tier-icon" role="cell">
-              <TierIcon kind="clean" />
+              <span className="ob-brandlogo ob-logo-clean" aria-hidden="true" />
             </div>
             <div className="ob-tier-copy" role="cell">
               <strong>Above $1,000</strong>
@@ -78,11 +88,12 @@ const SCREENS: Screen[] = [
         </div>
         <div className="ob-tier-ctas">
           <a
-            href="https://app.passport.xyz/"
+            href={PASSPORT_BUILD_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="ob-pill ob-pill-primary"
           >
+            <span className="ob-brandlogo ob-pill-ico ob-logo-passport" aria-hidden="true" />
             Human Passport
           </a>
           <a
@@ -91,6 +102,7 @@ const SCREENS: Screen[] = [
             rel="noopener noreferrer"
             className="ob-pill ob-pill-outline"
           >
+            <span className="ob-brandlogo ob-pill-ico ob-logo-clean" aria-hidden="true" />
             Proof of Clean Hands
           </a>
         </div>
@@ -101,17 +113,11 @@ const SCREENS: Screen[] = [
   },
   {
     eyebrow: 'Zero knowledge by design',
-    title: 'Private by default, accountable by design',
+    title: 'Private by default, transparent accountability',
     body: (
       <>
         <p>
-          Your privacy is enforced by zero knowledge proofs, not promises.
-          <InfoTooltip label="Learn more about the privacy guarantee">
-            Your proofs are generated locally. Shield checks only what a rule requires and stores nothing else.
-          </InfoTooltip>
-        </p>
-        <p>
-          <strong>2M+ users</strong> and <strong>44M+ credentials</strong> already run on
+          <strong>2M+ users</strong> and <strong>44M+ credentials</strong> created on
           human.tech&apos;s ZK stack.
         </p>
         <ZkPulse />
@@ -394,26 +400,6 @@ function CryptexMark({ reduce, mini = false, shared = false }: { reduce: boolean
   )
 }
 
-/* Simple inline line icons for the verification tiers grid, drawn in the Shield pink.
-   "unique" reads as a fingerprint mark (proof of a unique human), "clean" reads as a
-   shield with a check mark (proof of clean hands). */
-function TierIcon({ kind }: { kind: 'unique' | 'clean' }) {
-  return kind === 'unique' ? (
-    <svg viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 3.5a5 5 0 0 0-5 5v1.8c0 3.7-1 5.9-2.1 7.6" />
-      <path d="M12 3.5a5 5 0 0 1 5 5v1.3" />
-      <path d="M8.3 8.5a3.8 3.8 0 0 1 7.6 0v2.8c0 4.1-1.4 6.7-3 8.4" />
-      <path d="M9.4 17.6c1.1-1.5 1.8-3.3 1.8-5.6V8.5a0.9 0.9 0 1 1 1.8 0v3.8" />
-      <path d="M14 12.3v1.4c0 1.9-.5 3.4-1.4 4.8" />
-    </svg>
-  ) : (
-    <svg viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 3.2l6.5 2.6v4.6c0 4.4-2.7 7.9-6.5 9.4c-3.8-1.5-6.5-5-6.5-9.4V5.8L12 3.2z" />
-      <path d="M8.7 12.3l2.2 2.2l4.4-4.7" />
-    </svg>
-  )
-}
-
 /* Minimal accessible tooltip: a small inline info glyph that reveals a short blurb on
    hover or keyboard focus. No external positioning library, no portal, just a relatively
    positioned bubble anchored to the trigger. The trigger sits inline with the sentence
@@ -529,9 +515,8 @@ const ZK_NODES: [number, number][] = [
 
 function ZkPulse() {
   const items = [
-    'Proofs are generated locally on your device',
-    'Only what a rule requires is ever checked',
-    'Nothing else is seen or stored',
+    'Your identity and your activity stay yours. No one can see them or link them back to you.',
+    'Rule-bound disclosure, only minimal facts about you are disclosed.',
   ]
   return (
     <ul
@@ -543,7 +528,7 @@ function ZkPulse() {
         textAlign: 'left',
         display: 'flex',
         flexDirection: 'column',
-        gap: 11,
+        gap: 14,
       }}
     >
       {items.map((t) => (
@@ -561,8 +546,12 @@ function ZkPulse() {
 
 export default function ShieldOnboarding() {
   const reduce = useReducedMotion() ?? false
+  const router = useRouter()
+  const pathname = usePathname()
   const connectWaapWallet = useWalletStore((s) => s.connectWaapWallet)
   const isWaapConnected = useWalletStore((s) => s.isWaapConnected)
+  const walletConnectionPhase = useWalletStore((s) => s.walletConnectionPhase)
+  const showWalletInstallPrompt = useWalletStore((s) => s.showWalletInstallPrompt)
   const setSplashActive = useOnboardingStore((s) => s.setSplashActive)
   const showSplashNonce = useOnboardingStore((s) => s.showSplashNonce)
   // Start in 'loading': the shader shell renders immediately (covering the bridge from
@@ -602,7 +591,24 @@ export default function ShieldOnboarding() {
     } catch {
       onboarded = false
     }
-    setMode(returnToApp ? 'hidden' : onboarded ? 'splash' : 'flow')
+    // A fresh load that lands on a NON-'/' app route (a refresh on the progress /
+    // fee-juice / activity page, or a deep link) shows that PAGE, not the splash — the
+    // splash belongs to the '/' home. Otherwise a connected user who refreshes mid-flow
+    // gets the splash stacked over their page, and because they navigate via the lifted
+    // nav (never clicking "Enter app") the entered-flag never sets, so every nav click
+    // keeps re-triggering the splash (#443). Refreshing the '/' home still shows the
+    // splash for onboarded users; the Shield brand is still the in-app way back to it.
+    let onAppRoute = false
+    try {
+      onAppRoute = window.location.pathname !== '/'
+    } catch {}
+    setMode(
+      returnToApp || hasEnteredAppThisLoad || (onboarded && onAppRoute)
+        ? 'hidden'
+        : onboarded
+          ? 'splash'
+          : 'flow',
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -627,6 +633,48 @@ export default function ShieldOnboarding() {
     return () => setSplashActive(false)
   }, [mode, setSplashActive])
 
+  // A Shield-brand click that returns the user to the splash is DELIBERATE and must
+  // win over the auto-dismiss below, even when a connect flow was already active at
+  // click-time (a wallet modal open, or the install prompt up). This flag marks the
+  // current splash as brand-initiated; the connect-dismiss effect then only tears it
+  // down for a genuinely NEW connect the user starts from it, never for the stale
+  // phase that was already running when they hit the brand (#414).
+  const brandSplashRef = useRef(false)
+  // Tracks whether a connect flow was active on the previous render so the effect can
+  // detect a rising edge (idle -> connecting) — a fresh connect — versus a phase that
+  // was already active before the splash appeared.
+  const prevConnectActiveRef = useRef(false)
+
+  // Connect from the splash nav (e.g. "Connect Aztec"): the connect modal renders
+  // BENEATH the splash overlay, so hitting connect on the splash would fire but stay
+  // hidden. Drop the splash the moment an ACTIVE connect flow starts (discovering /
+  // selecting, or the install prompt) so the modal is visible (#370). Gate on the
+  // actively-connecting phases ONLY — NOT `!== 'idle'` — because a fully 'connected'
+  // user who deliberately returns to the splash via the Shield brand link must NOT be
+  // bounced straight back to the app (#409).
+  useEffect(() => {
+    const connecting = walletConnectionPhase === 'discovering' || walletConnectionPhase === 'selecting'
+    const active = connecting || showWalletInstallPrompt
+    // Rising edge = a connect flow that just STARTED this render. Compute before the
+    // ref is refreshed, and refresh it unconditionally so the edge stays accurate even
+    // while the splash is hidden (the flow may start, resolve, and restart in the app).
+    const rising = active && !prevConnectActiveRef.current
+    prevConnectActiveRef.current = active
+
+    if (mode !== 'splash' || !active) return
+
+    // A brand-requested splash only yields to a connect the user starts FROM it — a
+    // rising edge after the splash appeared. A connect that was already active when the
+    // brand was clicked (a stale modal / install prompt) is NOT a fresh start, so the
+    // splash holds until the user acts (#414). Non-brand splashes keep the original
+    // level-triggered dismiss so a fresh connect from the splash nav still shows the
+    // modal (#370).
+    if (brandSplashRef.current && !rising) return
+
+    brandSplashRef.current = false
+    setMode('hidden')
+  }, [mode, walletConnectionPhase, showWalletInstallPrompt])
+
   // Clicking the Shield brand returns the user to the splash (#103). The brand
   // link's own in-progress-transfer guard runs first (see Header), so by the
   // time the nonce bumps here it's already confirmed. Skip the initial mount
@@ -637,6 +685,7 @@ export default function ShieldOnboarding() {
       didMountSplashRequest.current = true
       return
     }
+    brandSplashRef.current = true
     setLeaving(false)
     setIndex(0)
     setMode('splash')
@@ -648,9 +697,27 @@ export default function ShieldOnboarding() {
     } catch {}
   }
 
+  // Entering the bridge from the splash/flow must always land on the bridge form (/),
+  // never wherever the splash happened to be overlaying. The splash shows for every
+  // onboarded user on top of the current route, so a returning user sitting on
+  // /activity (the recovery view, reached after a completed/interrupted bridge) would
+  // otherwise be dropped straight back onto it with no visible step to connect Aztec or
+  // start a bridge. The bridge form is the one place the action button surfaces the
+  // "Connect Aztec Wallet" next step, so route there before dismissing.
+  const enterApp = () => {
+    brandSplashRef.current = false
+    // Mark the app as entered for this page-load so no later navigation re-shows the
+    // splash, and ALWAYS land on the app-shell home (#437 + "enter app → home"): the
+    // splash overlays whatever route was underneath, so a user who opened it from
+    // /activity must be taken to the bridge, never dropped back onto that route.
+    hasEnteredAppThisLoad = true
+    if (pathname !== '/') router.push('/')
+    setMode('hidden')
+  }
+
   const finishFlow = () => {
     markOnboarded()
-    setMode('hidden')
+    enterApp()
   }
 
   const skip = () => finishFlow()
@@ -671,9 +738,16 @@ export default function ShieldOnboarding() {
   }
 
   const connectFromSplash = () => {
-    // Already-connected returning users just re-enter the bridge; otherwise open WaaP.
-    if (!isWaapConnected) connectWallet()
-    setMode('hidden')
+    // Already connected in the background: skip straight into the bridge. Not
+    // connected yet: start the same WaaP connect flow the app uses and only enter
+    // once it resolves, so the splash stays put if the user cancels the login.
+    if (isWaapConnected) {
+      enterApp()
+      return
+    }
+    connectWaapWallet()
+      .then(() => enterApp())
+      .catch(() => {})
   }
 
   const back = () => setIndex((i) => Math.max(0, i - 1))
@@ -765,6 +839,9 @@ export default function ShieldOnboarding() {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.5, ease: 'easeInOut' }}
     >
+      {/* The version/network selector is NOT re-rendered here: the real app nav bar is
+          now lifted above this overlay in every splash state (see data-ob-splash), so its
+          own DeploymentSelector is live and a second one here would just duplicate it. */}
       <div className="ob-stage">
         <div className="ob-stage-inner">
           <div className="ob-card-region">
@@ -840,7 +917,7 @@ export default function ShieldOnboarding() {
           onAnimationComplete={() => {
             markOnboarded()
             setLeaving(false)
-            setMode('hidden')
+            enterApp()
           }}
         >
           <motion.div
@@ -858,17 +935,19 @@ export default function ShieldOnboarding() {
         .ob-root { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column;
           overflow: hidden; font-family: 'Suisse Intl', system-ui, sans-serif;
           background: #fff6fa; color: #1c1116; }
-        /* Connected user on the splash: lift the real app nav bar above this overlay so
-           it stays usable. Toggled by data-ob-splash="connected" on <html>. */
-        html[data-ob-splash="connected"] .ob-header-elevate { z-index: 130 !important; }
-        /* The top-nav wallet "Connect" pill(s) live in the Header, not this component, and
-           carry no meaning while the splash gate is up — the splash's own CTA is the way in.
-           Rather than leave a dead button, neutralize them through the same data-ob-splash
-           hook: non-interactive, no hover affordance, visibly dimmed. Cleared the instant the
-           splash dismisses (attribute removed), so the real nav is fully live in-app. */
-        html[data-ob-splash] .ob-header-elevate button[title*="Connect" i] {
-          pointer-events: none; cursor: default; opacity: 0.5;
-        }
+        /* On the splash (connected OR not) the whole real app nav bar is lifted above
+           this overlay so every control stays live — the account chip + its dropdown,
+           the Privacy toggle, Ecosystem / Docs, and the version selector. Toggled by
+           data-ob-splash on <html>; the attribute is removed the instant the splash
+           dismisses, dropping the nav back to its normal in-app stacking. */
+        html[data-ob-splash] .ob-header-elevate { z-index: 130 !important; }
+        /* The account dropdown is PORTALED to <body> (a direct child, at z-[60]) so it
+           escapes the Header's stacking context. On the splash the z-100 overlay would
+           otherwise paint over it and swallow its clicks, so lift the portaled menu above
+           both the overlay and the elevated header while the splash is up. Scoped to a
+           direct body child so it only targets the portaled menu, never the Header's own
+           in-flow Ecosystem menu. */
+        html[data-ob-splash] body > [role="menu"] { z-index: 140 !important; }
         /* Inner content overlay: fades in over the persistent shader shell. */
         .ob-inner { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; }
         .ob-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
@@ -916,13 +995,31 @@ export default function ShieldOnboarding() {
         .ob-body strong { color: #1c1116; font-weight: 640; }
         .ob-link { color: ${BRAND}; text-decoration: underline; text-underline-offset: 2px; font-weight: 550; }
         /* verification tiers grid (page 3) */
+        /* overflow:visible (not hidden) so a right-anchored tooltip bubble on the "Above
+           $1,000" tier row is never clipped by the card edge (#444). The rounded corners
+           still read from the container's own border + background; the rows carry no
+           corner-reaching background to spill out. */
         .ob-tiers { width: 100%; max-width: 460px; margin: 18px auto 0; border: 1px solid #f0d3e0;
-          border-radius: 16px; overflow: hidden; background: rgba(255,255,255,0.55); text-align: left; }
+          border-radius: 16px; overflow: visible; background: rgba(255,255,255,0.55); text-align: left; }
         .ob-tier-row { display: flex; align-items: center; gap: 16px; padding: 16px 20px; }
         .ob-tier-row + .ob-tier-row { border-top: 1px solid #f0d3e0; }
         .ob-tier-icon { flex: none; width: 40px; height: 40px; border-radius: 12px; background: rgba(129,19,59,0.08);
           display: flex; align-items: center; justify-content: center; }
         .ob-tier-icon svg { width: 20px; height: 20px; }
+        /* Real shipped brand marks (passport.svg / clean-hands.svg), tinted via CSS mask
+           the same way the human.tech wordmark is (.ob-htmark) so they inherit the local
+           text colour instead of a baked-in fill. background-color: currentColor means the
+           mark takes the maroon accent on the light tier chip and the pill's own text
+           colour inside the toggle pills below (white on the solid pill, maroon on the
+           outline pill), staying legible on each. */
+        .ob-brandlogo { display: inline-block; flex: none; background-color: currentColor;
+          -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+          -webkit-mask-position: center; mask-position: center;
+          -webkit-mask-size: contain; mask-size: contain; }
+        .ob-logo-passport { -webkit-mask-image: url(/assets/svg/passport.svg); mask-image: url(/assets/svg/passport.svg); }
+        .ob-logo-clean { -webkit-mask-image: url(/assets/svg/clean-hands.svg); mask-image: url(/assets/svg/clean-hands.svg); }
+        .ob-tier-icon .ob-brandlogo { width: 22px; height: 22px; color: ${BRAND}; }
+        .ob-pill-ico { width: 16px; height: 16px; }
         .ob-tier-copy { display: flex; flex-direction: column; gap: 2px; }
         .ob-tier-copy strong { font-size: 15.5px; color: #1c1116; font-weight: 640; }
         .ob-tier-copy span { font-size: 14px; line-height: 1.4; color: #5a4650; }
@@ -937,20 +1034,25 @@ export default function ShieldOnboarding() {
         .ob-tooltip-trigger:focus-visible { outline: 2px solid ${BRAND}; outline-offset: 2px; }
         .ob-tooltip-bubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
           width: 240px; max-width: 76vw; padding: 12px 14px; border-radius: 12px; background: #1c1116; color: #fdf0f6;
-          font-size: 13px; line-height: 1.45; text-align: left; box-shadow: 0 12px 30px rgba(0,0,0,0.22); z-index: 5; }
+          font-size: 13px; line-height: 1.45; text-align: left; box-shadow: 0 12px 30px rgba(0,0,0,0.22); z-index: 40; }
         .ob-tooltip-bubble a { color: #f9b9d6; text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }
         .ob-tooltip-bubble a:hover { color: #fff; }
         .ob-tooltip-bubble::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
           border: 6px solid transparent; border-top-color: #1c1116; }
         /* Edge-anchored variant: for triggers near the right edge (e.g. page-3 tiers),
            pin the bubble's right edge to the trigger so it can't overflow the viewport. */
-        .ob-tooltip-bubble-right { left: calc(100% + 12px); right: auto; bottom: auto; top: 50%; transform: translateY(-50%); }
+        .ob-tooltip-bubble-right { left: calc(100% + 12px); right: auto; bottom: auto; top: 50%; transform: translateY(-50%); z-index: 60; }
         .ob-tooltip-bubble-right::after { top: 50%; left: -6px; right: auto; transform: translateY(-50%);
           border-width: 6px 6px 6px 0; border-color: transparent #1c1116 transparent transparent; }
         /* tier CTAs (page 3): map straight onto the two rows above */
         .ob-tier-ctas { display: flex; gap: 12px; width: 100%; max-width: 460px; margin: 16px auto 0; }
-        .ob-pill { flex: 1; display: flex; align-items: center; justify-content: center; height: 44px;
-          border-radius: 999px; font-size: 14px; font-weight: 610; text-decoration: none; white-space: nowrap;
+        /* flex-basis auto (not 0) so each pill is at least as wide as its icon + label +
+           padding — the longer "Proof of Clean Hands" can never be crushed below its
+           content and overflow (#445). grow:1 still lets both expand to fill the row so
+           they stay visually balanced. */
+        .ob-pill { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 8px;
+          height: 44px; padding: 0 22px; border-radius: 999px; font-size: 14px; font-weight: 610;
+          text-decoration: none; white-space: nowrap;
           transition: transform .15s ease, filter .15s ease, background-color .15s ease; }
         .ob-pill-primary { background: ${BRAND}; color: #fff; }
         .ob-pill-primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
@@ -1050,7 +1152,7 @@ export default function ShieldOnboarding() {
           .ob-tier-row { padding: 14px 16px; gap: 12px; }
           .ob-tooltip-bubble { width: 210px; }
           .ob-tier-ctas { max-width: 100%; margin-top: 12px; }
-          .ob-pill { height: 40px; font-size: 13px; }
+          .ob-pill { height: 40px; padding: 0 16px; font-size: 13px; }
           .ob-bp { max-width: 100%; margin-top: 16px; padding: 13px 12px; }
           .ob-bp-chain { font-size: 10px; }
           .ob-bp-amount { font-size: 12.5px; padding: 4px 8px; }
@@ -1074,6 +1176,7 @@ export default function ShieldOnboarding() {
           .ob-tiers { border-color: #3a2530; background: rgba(255,255,255,0.03); }
           .ob-tier-row + .ob-tier-row { border-top-color: #3a2530; }
           .ob-tier-icon { background: rgba(246,236,241,0.08); }
+          .ob-tier-icon .ob-brandlogo { color: #f2b7d3; }
           .ob-tier-copy strong { color: #f6ecf1; }
           .ob-tier-copy span { color: #cba7b6; }
           .ob-tooltip-bubble { background: #f6ecf1; color: #1c1116; }

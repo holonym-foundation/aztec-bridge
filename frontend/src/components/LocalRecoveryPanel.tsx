@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import BridgeHeader from '@/components/BridgeHeader'
 import TextButton from '@/components/TextButton'
+import { getStatusBadge } from '@/components/ActivityCard'
 import { getDeposits, getWithdrawals } from '@human.tech/clean.sdk'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
 import { decryptOperationPayload } from '@/hooks/useBridgeOperations'
-import { parseBackup, importBackup, BackupParseError, copyToClipboard } from '@/utils'
+import { parseBackup, importBackup, BackupParseError, copyToClipboard, humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
@@ -214,27 +216,12 @@ function toBridgeOperationShape(entry: LocalRecoveryEntry): BridgeOperation {
   } as BridgeOperation
 }
 
-// ─── STATUS_STYLES (shared with ActivityCard) ───────────────────────
+// ─── Status badge (colour from the shared ActivityCard source of truth) ──
 
-const STATUS_STYLES: Record<string, { label: string; className: string }> = {
-  pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' },
-  deposited: { label: 'Deposited', className: 'bg-blue-100 text-blue-800' },
-  claimed: { label: 'Claimed', className: 'bg-purple-100 text-purple-800' },
-  submitted: { label: 'Submitted', className: 'bg-blue-100 text-blue-800' },
-  ready: { label: 'Ready', className: 'bg-indigo-100 text-indigo-800' },
-  pending_finalize: {
-    label: 'Finalizing',
-    className: 'bg-indigo-100 text-indigo-800',
-  },
-  completed: { label: 'Completed', className: 'bg-green-100 text-green-800' },
-  failed: { label: 'Failed', className: 'bg-red-100 text-red-800' },
-}
-
+// Colour comes from getStatusBadge (#394 single source); this component keeps
+// its own size/shape classes so the pill matches the recovery card's scale.
 function StatusBadge({ status }: { status: string }) {
-  const style = STATUS_STYLES[status] ?? {
-    label: status,
-    className: 'bg-gray-100 text-gray-800',
-  }
+  const style = getStatusBadge(status)
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${style.className}`}>{style.label}</span>
 }
 
@@ -326,7 +313,7 @@ function RecoveryEntryCard({ entry, onResume, resuming }: RecoveryEntryCardProps
             href={entry.l1TxUrl ?? entry.serverEntry?.l1TxUrl ?? '#'}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
+            className="inline-flex items-center gap-1 text-xs font-medium text-shield hover:text-pink-70"
           >
             L1 Tx
             <Icon icon="ph:arrow-square-out" width={13} height={13} />
@@ -510,6 +497,13 @@ export function LocalRecoveryPanel({ variant = 'page', onClose }: LocalRecoveryP
             notify('success', `Imported ${imported} operation${imported === 1 ? '' : 's'}${skippedNote}.`)
           }
         } catch (err) {
+          if (!(err instanceof BackupParseError)) {
+            console.error('[LocalRecoveryPanel] backup import failed:', err)
+            logError('Backup import failed', {
+              errorType: 'backup_import_failed',
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
           const msg =
             err instanceof BackupParseError
               ? err.message
@@ -641,8 +635,12 @@ export function LocalRecoveryPanel({ variant = 'page', onClose }: LocalRecoveryP
           router.push('/progress/resume')
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to decrypt'
-        notify('error', msg)
+        console.error('[LocalRecoveryPanel] resume/decrypt failed:', err)
+        logError('Resume decrypt failed', {
+          errorType: 'resume_decrypt_failed',
+          error: err instanceof Error ? err.message : String(err),
+        })
+        notify('error', humanizeError(err))
       } finally {
         setResumingId(null)
       }
@@ -735,7 +733,7 @@ export function LocalRecoveryPanel({ variant = 'page', onClose }: LocalRecoveryP
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
                     aria-label="Previous page"
-                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-30 disabled:hover:text-gray-500 p-1 rounded"
+                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-40 disabled:hover:text-gray-500 p-1 rounded"
                   >
                     <Icon icon="ph:caret-left-bold" width={16} height={16} />
                   </button>
@@ -747,7 +745,7 @@ export function LocalRecoveryPanel({ variant = 'page', onClose }: LocalRecoveryP
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
                     aria-label="Next page"
-                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-30 disabled:hover:text-gray-500 p-1 rounded"
+                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-40 disabled:hover:text-gray-500 p-1 rounded"
                   >
                     <Icon icon="ph:caret-right-bold" width={16} height={16} />
                   </button>
@@ -813,7 +811,7 @@ export function LocalRecoveryPanel({ variant = 'page', onClose }: LocalRecoveryP
         ) : (
           <>
             <TextButton onClick={() => router.push('/activity')}>Back to Activity</TextButton>
-            <TextButton onClick={() => router.push('/')}>Back to Bridge</TextButton>
+            <TextButton onClick={() => router.push('/?app=1')}>Back to Bridge</TextButton>
           </>
         )}
       </div>

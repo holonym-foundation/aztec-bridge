@@ -7,7 +7,7 @@ const BridgeFooter: React.FC = () => (
       src='/assets/svg/logo.svg'
       alt='log'
     />
-    <p className='text-12 font-medium text-latest-grey-600'>
+    <p className='text-12 font-medium text-neutral-600'>
       Secured by human.tech
     </p>
   </div>

@@ -14,7 +14,7 @@ const TextButton = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={clsxm(
-          'bg-black text-white flex gap-2 py-[10px] rounded-lg items-center justify-center w-full font-semibold h-full hover:bg-silk-600',
+          'bg-black text-white flex gap-2 py-[10px] rounded-lg items-center justify-center w-full font-semibold h-full transition-opacity hover:opacity-80',
           buttonDisabled && '!bg-[#9D9D9D] !shadow-none !cursor-not-allowed text-neutral-200',
           className,
         )}

@@ -62,6 +62,16 @@ export const HOLONYM_API_URL = process.env.HOLONYM_API_URL ?? 'https://api.holon
 export const PASSPORT_API_KEY = process.env.PASSPORT_API_KEY ?? ''
 export const PASSPORT_SCORER_ID = process.env.PASSPORT_SCORER_ID ?? ''
 
+// ─── Passport embed (client) ────────────────────────────────────────
+// The in-app Passport score widget runs in the browser but never holds the
+// API key: its embed calls are routed through the same-origin proxy at
+// /api/passport-embed, which injects the server-only PASSPORT_API_KEY. So the
+// only client-side inputs are a keyless on/off flag and the (non-secret)
+// scorer id used to build the request path. When the flag is unset the app
+// falls back to the out-link to app.passport.xyz (see ./index).
+export const NEXT_PUBLIC_PASSPORT_EMBED_ENABLED = process.env.NEXT_PUBLIC_PASSPORT_EMBED_ENABLED ?? ''
+export const NEXT_PUBLIC_PASSPORT_SCORER_ID = process.env.NEXT_PUBLIC_PASSPORT_SCORER_ID ?? ''
+
 // ─── Sanctions screening (server) ───────────────────────────────────
 
 export const SANCTIONS_IO_API_KEY = process.env.SANCTIONS_IO_API_KEY ?? ''

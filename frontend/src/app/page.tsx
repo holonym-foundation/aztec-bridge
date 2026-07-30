@@ -29,7 +29,7 @@ import {
   useClaimFeeEstimate,
 } from '@/hooks/useL2Operations'
 import { showToast, useToast } from '@/hooks/useToast'
-import { extractErrorMessage, truncateDecimals } from '@/utils'
+import { extractErrorMessage, humanizeError, truncateDecimals } from '@/utils'
 import clsxm from '@/utils/clsxm'
 import NetworkModal from '@/components/model/Network'
 import TokensModal from '@/components/model/TokensModal'
@@ -59,8 +59,8 @@ import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModal
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { pushNotification } from '@/stores/useNotificationsStore'
-import { useBindingStatus, describeConflict, shortAddr } from '@/hooks/useBindingStatus'
+import { pushNotification, useNotificationsStore } from '@/stores/useNotificationsStore'
+import { useBindingStatus, describeConflict, shortAddr, conflictMessage } from '@/hooks/useBindingStatus'
 import { useRouter } from 'next/navigation'
 import MaintenanceOverlay from '@/components/MaintenanceOverlay'
 import FuelToggle from '@/components/FuelToggle'
@@ -89,6 +89,19 @@ export default function Home() {
   // Live FJ output for the current fuel amount, surfaced by FuelToggle for the breakdown summary.
   const [fuelFjOutput, setFuelFjOutput] = useState<bigint | null>(null)
   const [showVerification, setShowVerification] = useState(false)
+  // Deep-link into verification: the account dropdown's "Complete verification" nudge routes
+  // here with ?verify=1 (the verify modal is local state, so it can't be opened from the
+  // dropdown directly). Open it once on mount, then strip the param so a refresh doesn't reopen.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('verify') === '1') {
+      setShowVerification(true)
+      params.delete('verify')
+      const qs = params.toString()
+      window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
+    }
+  }, [])
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   // Bottom scroll cue for the card's internal scroll region: the transaction breakdown
@@ -232,6 +245,29 @@ export default function Home() {
         ? `Reconnect your linked EVM wallet ${shortAddr(bindingConflict.counterpart)}`
         : `Switch to your linked wallet pair ${shortAddr(bindingConflict.counterpart)}`
 
+  // #297b: keep the full binding-conflict notice OUT of the button. The button
+  // just disables with a concise reason; the detailed "switch to your linked pair
+  // (0x…)" copy lives as a PERSISTENT, keyed Messages entry (also surfaced in the
+  // header mini-bar chip). Keyed upsert = one row, no spam; dismissed by key the
+  // moment the conflict clears (e.g. the user switches to the linked account).
+  const bindingConflictActive = !!bindingConflict && isWaapConnected && isAztecConnected
+  useEffect(() => {
+    if (bindingConflictActive && bindingConflict) {
+      pushNotification({
+        type: 'warning',
+        key: 'binding-conflict',
+        title: 'Wallet mismatch',
+        message: conflictMessage(bindingConflict),
+      })
+    } else {
+      const existing = useNotificationsStore.getState().notifications.find((n) => n.key === 'binding-conflict')
+      if (existing) useNotificationsStore.getState().dismiss(existing.id)
+    }
+    // Primitive deps: bindingConflict is a fresh object each render, so key off its
+    // stable fields to avoid re-pushing (and re-dismissing) on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bindingConflictActive, bindingConflict?.kind, bindingConflict?.counterpart])
+
   // Specific reason the primary button is blocked by a deposit-side fuel/auth gate (the same
   // condition that drives BridgeActionButton's isDisabled). Surfaced under the button so a
   // disabled state never reads as a silent greyed control. These gates leave the label as the
@@ -243,7 +279,7 @@ export default function Home() {
     : depositGateActive && !fuelAmountValid
       ? 'Gas top-up must be less than the bridge amount.'
       : depositGateActive && !fuelSufficient
-        ? 'Increase gas top-up to cover the L2 claim.'
+        ? 'Not enough gas for the L2 claim yet. Adjust it in Aztec Fees above.'
         : depositGateActive && !fuelRecipientValid
           ? 'Check the fee juice recipient address.'
           : undefined
@@ -359,6 +395,31 @@ export default function Home() {
       setFuelEnabled(true)
     }
   }, [insufficientClaimGas, fuelEnabled, setFuelEnabled])
+
+  // ── Withdraw-direction fuel gate (L2 → L1) ──────────────────────────────
+  // A withdrawal burns on Aztec, paid from the user's standing fuel: the private
+  // BridgedFPC balance in privacy mode (spent via pay_fee), else the public
+  // FeeJuice balance. The BridgedFPC balance is a DIFFERENT quantity from the raw
+  // private Fee Juice a user sees in their wallet, so a user can hold in-wallet FJ
+  // yet have zero here and be genuinely unable to pay the burn. Mirror the panel's
+  // fuel selection and block only on a CONFIRMED shortfall (balance loaded AND
+  // estimate loaded AND short) so we never false-block while either is resolving.
+  const withdrawFuelType: 'public' | 'private' =
+    isPrivacyModeEnabled && !!BRIDGED_FPC_ADDRESS ? 'private' : 'public'
+  const { data: withdrawBurnFeeWei } = useClaimFeeEstimate(withdrawFuelType)
+  const withdrawFuelBalance = withdrawFuelType === 'private' ? privateFeeJuiceBalance : feeJuiceBalance
+  const withdrawFuelInsufficient =
+    bridgeConfig.direction === BridgeDirection.L2_TO_L1 &&
+    isWaapConnected &&
+    isAztecConnected &&
+    withdrawFuelBalance != null &&
+    withdrawBurnFeeWei != null &&
+    Number(withdrawFuelBalance) < Number(withdrawBurnFeeWei) / 1e18
+  const withdrawDisabledReason = withdrawFuelInsufficient
+    ? withdrawFuelType === 'private'
+      ? 'Not enough private fuel to cover the L2 burn. Top up to withdraw.'
+      : 'Not enough Fee Juice to cover the L2 burn. Top up to withdraw.'
+    : undefined
 
   // Bridge success callback (runs after L1→L2 bridge or L2→L1 withdrawal)
   const handleBridgeSuccess = useCallback(
@@ -481,7 +542,12 @@ export default function Home() {
         await mintL1SBT()
       }
     } catch (error) {
-      notify('error', `Error minting SBT: ${extractErrorMessage(error)}`)
+      console.error('[page] SBT mint failed:', error)
+      logError('SBT mint failed', {
+        errorType: 'sbt_mint_failed',
+        error: extractErrorMessage(error),
+      })
+      notify('error', `Couldn't mint your SBT. ${humanizeError(error)}`)
     }
   }
 
@@ -510,7 +576,7 @@ export default function Home() {
         error: extractErrorMessage(error),
       })
 
-      notify('error', `Failed to connect wallet: ${extractErrorMessage(error)}`)
+      notify('error', `Couldn't connect your wallet. ${humanizeError(error)}`)
     }
   }
 
@@ -572,7 +638,7 @@ export default function Home() {
         // No-scroll budget: cap the card so it never grows the RootStyle region past
         // its 90vh floor (min-h-[650px] would otherwise push card+py-10 over 90vh on
         // short laptops). Content beyond the cap scrolls inside the card, never the page.
-        className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden"
+        className="overflow-hidden"
       >
         {/* Maintenance Overlay - blocks all interactions when enabled */}
         {MAINTENANCE_MODE && <MaintenanceOverlay title={MAINTENANCE_TITLE} message={MAINTENANCE_MESSAGE} />}
@@ -607,7 +673,20 @@ export default function Home() {
         )}
         {/* Wallet selection is now handled by WalletDiscoveryModal above */}
 
-        {showVerification && <VerificationStep onClose={() => setShowVerification(false)} />}
+        {/* A user who is ALREADY Passport-verified can only be here to unlock a higher
+            cap, so the verify screen must route them to Proof of Clean Hands (the
+            upgrade), never show the Passport success they already hold (#422). An
+            unverified user gets the first-time cascade. */}
+        {showVerification && (
+          <VerificationStep
+            onClose={() => setShowVerification(false)}
+            intent={
+              attestationData?.eligible && attestationData?.method === 'passport'
+                ? 'upgrade'
+                : 'initial'
+            }
+          />
+        )}
 
         {/* No-scroll budget: a flex column capped at the same 90vh-5rem viewport
             floor as the card. Header + footer are shrink-0; only the middle region
@@ -618,7 +697,7 @@ export default function Home() {
             a `flex-1 min-h-0` child bounds it correctly, so withdraw scrolls INSIDE
             the card and the page never grows. */}
         <div
-          className={`flex flex-col w-full max-h-[calc(90vh-5rem)] overflow-hidden ${
+          className={`flex flex-col w-full h-full overflow-hidden ${
             MAINTENANCE_MODE ? 'pointer-events-none' : ''
           }`}
         >
@@ -655,6 +734,7 @@ export default function Home() {
               attestationMethod={attestationData?.method ?? null}
               passportMaxAmount={attestationData?.passportMaxAmount}
               remainingDepositUsd={attestationData?.remainingDepositUsd}
+              travelRuleRemainingUsd={attestationData?.travelRuleRemainingUsd}
               passportScore={attestationData?.passportScore}
               passportThreshold={attestationData?.passportThreshold}
               reservedDepositUsd={attestationData?.reservedDepositUsd}
@@ -740,7 +820,7 @@ export default function Home() {
                 canScrollDown ? 'opacity-100' : 'opacity-0'
               }`}
             >
-              <Icon icon="ph:caret-down-bold" width={16} height={16} className="text-latest-grey-400" />
+              <Icon icon="ph:caret-down-bold" width={16} height={16} className="text-neutral-600" />
             </div>
           </div>
 
@@ -760,9 +840,10 @@ export default function Home() {
                   (bridgeConfig.direction === BridgeDirection.L1_TO_L2 &&
                     isWaapConnected && isAztecConnected &&
                     (!fuelSufficient || !fuelRecipientValid || !fuelAmountValid)) ||
+                  withdrawFuelInsufficient ||
                   authFailed
                 }
-                disabledReason={bridgeDisabledReason}
+                disabledReason={bridgeDisabledReason ?? withdrawDisabledReason}
                 // Binding conflict guard — disable + name the linked wallet
                 // before bridging into a guaranteed-failing pair.
                 bindingBlocked={!!bindingConflict}
@@ -801,6 +882,7 @@ export default function Home() {
                 // Faucet related
                 isEligibleForFaucet={isEligibleForFaucet || false}
                 needsGas={needsGas || false}
+                needsTokens={needsTokens || false}
                 needsTokensOnly={needsTokensOnly || false}
                 // SBT related
                 hasL1SBT={hasL1SBT}

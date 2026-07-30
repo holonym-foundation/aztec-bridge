@@ -174,9 +174,9 @@ export default function ClaimFuelPage() {
   }
 
   return (
-    <RootStyle className='overflow-y-auto'>
+    <RootStyle className='overflow-hidden'>
       <AztecWalletConnectionModals />
-      <div className='px-5 pt-5 pb-5 flex flex-col h-full max-w-2xl mx-auto'>
+      <div className='px-5 pt-5 pb-5 flex flex-col h-full max-w-2xl mx-auto overflow-y-auto'>
         <div className='flex items-center gap-4'>
           <BridgeHeader />
         </div>
@@ -224,7 +224,7 @@ export default function ClaimFuelPage() {
                   type='button'
                   disabled={isAztecConnecting}
                   onClick={() => connectAztecWallet().catch(() => undefined)}
-                  className='w-full py-2 rounded-md bg-black text-white font-medium disabled:opacity-50'
+                  className='w-full py-2 rounded-md bg-black text-white font-medium disabled:opacity-40'
                 >
                   {isAztecConnecting ? 'Connecting…' : 'Connect Aztec wallet'}
                 </button>
@@ -291,7 +291,7 @@ export default function ClaimFuelPage() {
                       type='button'
                       disabled={status === 'submitting' || !walletAdapter}
                       onClick={handleClaim}
-                      className='w-full py-2 rounded-md bg-black text-white font-medium disabled:opacity-50'
+                      className='w-full py-2 rounded-md bg-black text-white font-medium disabled:opacity-40'
                     >
                       {status === 'submitting' ? 'Claiming…' : 'Claim Fee Juice'}
                     </button>

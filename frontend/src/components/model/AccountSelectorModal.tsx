@@ -62,7 +62,7 @@ export default function AccountSelectorModal({
             </div>
             <div className='mt-4 mx-2.5'>
               {accounts.length === 0 ? (
-                <p className='text-latest-grey-600 text-14 mb-4'>
+                <p className='text-neutral-600 text-14 mb-4'>
                   No accounts available.
                 </p>
               ) : (
@@ -86,7 +86,7 @@ export default function AccountSelectorModal({
                             {displayName}
                           </p>
                           {account.alias && (
-                            <p className='text-12 text-latest-grey-600 truncate'>
+                            <p className='text-12 text-neutral-600 truncate'>
                               {truncateAddress(account.address)}
                             </p>
                           )}
@@ -115,7 +115,7 @@ export default function AccountSelectorModal({
                   alt=''
                   className='h-4 w-[14px]'
                 />
-                <p className='text-12 font-medium text-latest-grey-600'>
+                <p className='text-12 font-medium text-neutral-600'>
                   Secured by human.tech
                 </p>
               </motion.div>

@@ -53,7 +53,7 @@ export default function MaintenanceOverlay({
 
           {/* Message */}
           <div className="mx-2.5 mb-6">
-            <p className="text-latest-grey-600 text-14 text-center leading-relaxed">
+            <p className="text-neutral-600 text-14 text-center leading-relaxed">
               {message}
             </p>
           </div>
@@ -74,7 +74,7 @@ export default function MaintenanceOverlay({
               alt=""
               className="h-4 w-[14px]"
             />
-            <p className="text-12 font-medium text-latest-grey-600">
+            <p className="text-12 font-medium text-neutral-600">
               Secured by human.tech
             </p>
           </div>

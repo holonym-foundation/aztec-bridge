@@ -244,17 +244,17 @@ export const handleWaapError = (err: unknown, message: string, set: any) => {
   if (err instanceof Error) {
     errorMessage = `${message}: ${err.message}`
   } else if (err && typeof err === 'object') {
-    // Handle error objects with code and message properties
+    // Handle error objects with code and message properties. Never fall back to
+    // JSON.stringify — a raw object dump reads as "[object Object]"-style noise
+    // to a user. When there's no readable message, keep the plain base message.
     const errorObj = err as any
-    if (errorObj.code && errorObj.message) {
-      errorMessage = `${message}: ${errorObj.message} (Code: ${errorObj.code})`
+    if (errorObj.reason) {
+      errorMessage = `${message}: ${errorObj.reason}`
     } else if (errorObj.message) {
       errorMessage = `${message}: ${errorObj.message}`
-    } else {
-      errorMessage = `${message}: ${JSON.stringify(err)}`
     }
-  } else {
-    errorMessage = `${message}: ${String(err)}`
+  } else if (typeof err === 'string' && err.length > 0) {
+    errorMessage = `${message}: ${err}`
   }
   
   const error = new Error(errorMessage)

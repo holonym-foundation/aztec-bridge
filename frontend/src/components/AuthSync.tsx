@@ -6,6 +6,7 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useBridge } from '@/hooks/useBridge'
 import { showToast } from '@/hooks/useToast'
+import { pushNotification } from '@/stores/useNotificationsStore'
 import { requestWaapWallet, WAAP_METHOD } from '@/stores/walletStore'
 import { L1_CHAIN_ID } from '@/config'
 
@@ -49,8 +50,8 @@ export default function AuthSync() {
       if (!status.valid && (status.reason === 'user_not_found' || status.reason === 'token_expired')) {
         clearAuth()
         showToast('error', {
-          heading: 'Session Expired',
-          message: 'Please sign again to continue.',
+          heading: 'Session expired',
+          message: 'Please sign in again to continue.',
         })
       }
     })
@@ -102,20 +103,28 @@ export default function AuthSync() {
           uri: window.location.origin,
           chainId: L1_CHAIN_ID,
           signMessage: async (msg: string) => {
-            // Surface a clear "this is auth, not a bridge tx" toast right
+            // Surface a clear "this is a sign-in, not a bridge tx" message right
             // before the wallet popup so the user knows what they're signing.
-            // Dismissed on any outcome (success, rejection, network error).
             showToast(
               'info',
               {
-                heading: 'Authenticating',
+                heading: 'Confirm it is you',
                 message:
-                  'Sign the message in your wallet to confirm ownership of your accounts. This does NOT authorize a bridge transaction.',
+                  'Sign the message in your wallet to confirm you own these accounts. This does not authorize any transfer.',
               },
               { toastId: AUTH_PENDING_TOAST_ID, autoClose: false },
             )
             try {
               const sig = await requestWaapWallet(WAAP_METHOD.personal_sign, [msg, waapAddress])
+              // Signature captured — clear the "action required" prompt the
+              // instant the user signs so it never lingers in Messages. The
+              // keyed upsert replaces that row in place with a neutral status.
+              pushNotification({
+                type: 'info',
+                title: 'Verifying your accounts',
+                message: 'Almost done.',
+                key: AUTH_PENDING_TOAST_ID,
+              })
               return sig as string
             } finally {
               showToast.dismiss(AUTH_PENDING_TOAST_ID)
@@ -130,6 +139,14 @@ export default function AuthSync() {
         if (cancelled || !result.token || !result.user) return
         setAuth(result.token, result.user)
         prevKeyRef.current = currentKey
+        // Resolve the sign-in row promptly so it reads as done, not "action
+        // required". Keyed upsert replaces the pending/verifying row in place.
+        pushNotification({
+          type: 'success',
+          title: 'Signed in',
+          message: 'Your accounts are verified.',
+          key: AUTH_PENDING_TOAST_ID,
+        })
 
         // Drain any failed PATCHes from previous sessions
         bridge.retryFailedPatches().catch((err: unknown) => {
@@ -153,15 +170,21 @@ export default function AuthSync() {
 
         // Auto-retry on nonce errors (up to MAX_AUTH_RETRIES)
         if (isNonceError && retryCount < MAX_AUTH_RETRIES) {
-          showToast('info', 'Session expired — please sign again')
+          showToast('info', 'Sign-in request expired. Please sign again.')
           authenticate(retryCount + 1)
           return
         }
 
         setAuthFailed(true)
-        showToast('error', {
-          message: `Authentication failed: ${errorMsg}`,
-          heading: 'Auth Error',
+        // Keep the technical detail in the console; show the user plain copy.
+        // Reuse the sign-in row's key so the error REPLACES the pending prompt
+        // instead of leaving an "action required" row sitting behind the error.
+        console.error('[AuthSync] authentication failed:', errorMsg, err)
+        pushNotification({
+          type: 'error',
+          title: 'Sign in failed',
+          message: 'We could not verify your wallet. Please try again.',
+          key: AUTH_PENDING_TOAST_ID,
         })
       }
     }

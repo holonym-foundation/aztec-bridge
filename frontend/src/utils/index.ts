@@ -8,6 +8,7 @@ import {
   getWithdrawalById,
   STORAGE_KEYS,
 } from '@human.tech/clean.sdk'
+import { formatUnits } from 'viem'
 import { getAllowedAppOrigins, isAllowedAppOrigin, normalizeAppOrigin } from '@/lib/domainAllowlist'
 
 // Frontend-only anti-phishing guard: only prompt for encryption signatures on our domain.
@@ -59,6 +60,78 @@ export function extractErrorMessage(error: unknown, fallback = 'Unknown error'):
   }
   if (typeof error === 'string') return error
   return fallback
+}
+
+/**
+ * Map any thrown value to a safe, human-readable message fit for a toast/notification.
+ *
+ * User-facing copy must NEVER carry a raw viem / contract-revert / RPC string (design SOP
+ * §10 + "human-readable errors, never raw"). This is the central humanization chokepoint:
+ * known error shapes map to specific, reassuring copy; everything else falls back to a
+ * generic safe message. The RAW error is intentionally dropped here — log it separately
+ * (console + Datadog) at the call site so it still shows up in metrics.
+ *
+ * Ordering matters: a specific shape (an Aztec checkpoint revert, a user rejection) is
+ * matched before the broad "contract reverted" / "viem" catch-all so the precise message wins.
+ */
+export function humanizeError(error: unknown): string {
+  const raw = extractErrorMessage(error, '').toLowerCase()
+
+  // Aztec rollup checkpoint briefly unavailable — a transient revert on reads
+  // (e.g. Rollup__UnavailableTempCheckpointLog from getCheckpoint) while the network catches up.
+  if (
+    raw.includes('unavailabletempcheckpoint') ||
+    raw.includes('getcheckpoint') ||
+    (raw.includes('rollup__') && raw.includes('checkpoint'))
+  ) {
+    return 'The Aztec network is briefly catching up. Try again in a moment.'
+  }
+
+  // Node / RPC unreachable or 5xx.
+  if (
+    raw.includes('failed to fetch') ||
+    raw.includes('fetch failed') ||
+    raw.includes('500 from server') ||
+    raw.includes('network error') ||
+    raw.includes('econnrefused') ||
+    raw.includes('timeout') ||
+    raw.includes('timed out') ||
+    /aztec.*\.(zkv\.xyz|aztec-labs\.com)/i.test(raw)
+  ) {
+    return 'The Aztec network is temporarily unavailable. Please try again shortly.'
+  }
+
+  // User declined the request in their wallet.
+  if (raw.includes('user rejected') || raw.includes('user denied') || raw.includes('rejected the request')) {
+    return 'You declined the request in your wallet.'
+  }
+
+  // Wallet locked.
+  if (raw.includes('locked')) {
+    return 'Your wallet is locked. Please unlock it and try again.'
+  }
+
+  // Not enough funds / gas.
+  if (raw.includes('insufficient funds') || raw.includes('insufficient balance')) {
+    return 'Insufficient funds to complete this transaction.'
+  }
+
+  // Nonce / transaction ordering.
+  if (raw.includes('nonce')) {
+    return 'A transaction ordering issue occurred. Please refresh and try again.'
+  }
+
+  // Generic viem / contract revert.
+  if (
+    raw.includes('reverted') ||
+    raw.includes('execution reverted') ||
+    raw.includes('contract function') ||
+    raw.includes('viem@')
+  ) {
+    return 'Something went wrong talking to the network. Please try again in a moment.'
+  }
+
+  return 'Something went wrong. Please try again in a moment.'
 }
 
 /**
@@ -187,16 +260,95 @@ export async function decryptStorageEntry(
   return { value, entry }
 }
 
+// ─── Descriptive recovery-backup filenames (#247) ────────────────────────────
+//
+// Old names were `shield-human-tech-<dir>-<id>-<epoch>.json`, only an id + epoch,
+// so a folder of backups was indistinguishable. These helpers fold the amount,
+// privacy mode, and a readable local timestamp into the name so a user can tell
+// which transaction each file belongs to at a glance. Direction is fixed by the
+// caller (claim = L1→L2, withdrawal = L2→L1), so it is passed in, not sniffed.
+//
+// Every token is best-effort: if a source field is genuinely missing it is
+// dropped (never guessed) and the rest of the name still forms. Nothing here
+// throws; a filename must always come back.
+
+const pad2 = (n: number): string => String(n).padStart(2, '0')
+
+/** Readable local timestamp `YYYY-MM-DD-HHmm` (not a raw epoch). */
+function formatFilenameTimestamp(d: Date): string {
+  return (
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` +
+    `-${pad2(d.getHours())}${pad2(d.getMinutes())}`
+  )
+}
+
+/**
+ * Human-readable "amount + symbol" token for the filename, using the same
+ * amount/symbol/decimals convention ActivityCard reads off an operation:
+ * prefer a pre-formatted display string, else format the raw bigint with the
+ * L1 token decimals. Returns '' if no amount is available. Sanitized so a
+ * fractional amount reads as `100_5USDC` (dot → underscore) with nothing else
+ * that could muddle the name.
+ */
+function amountToken(op: any): string {
+  let display: string | null = null
+  try {
+    const decimals = op?.tokenDecimalsL1 ?? op?.tokenDecimalsL2 ?? null
+    if (op?.amountDisplayL1 != null) display = String(op.amountDisplayL1)
+    else if (op?.amount != null) display = String(op.amount)
+    else if (op?.amountDisplayL2 != null) display = String(op.amountDisplayL2)
+    else if (op?.amountL1 != null && decimals != null) display = formatUnits(BigInt(op.amountL1), decimals)
+    else if (op?.claimAmount != null && decimals != null) display = formatUnits(BigInt(op.claimAmount), decimals)
+    else if (op?.amountL2 != null && decimals != null) display = formatUnits(BigInt(op.amountL2), decimals)
+  } catch {
+    display = null
+  }
+  if (display == null) return ''
+
+  const amount = display.replace(/\./g, '_').replace(/[^0-9_]/g, '')
+  if (!amount) return ''
+  const symbol = (op?.tokenSymbol ?? op?.tokenSymbolL1 ?? op?.tokenSymbolL2 ?? '')
+    .toString()
+    .replace(/[^A-Za-z0-9]+/g, '')
+  return `${amount}${symbol}`
+}
+
+/**
+ * Build a filesystem-safe, human-readable recovery-backup filename, e.g.
+ * `shield-L1-to-L2-100USDC-public-2026-07-22-1230-a1b2c3d4.json`.
+ */
+function buildRecoveryFilename(op: any, direction: 'L1-to-L2' | 'L2-to-L1'): string {
+  const tokens: string[] = ['shield', direction]
+
+  const amt = amountToken(op)
+  if (amt) tokens.push(amt)
+
+  // Only emit a mode token when the privacy flag is explicitly known.
+  if (op?.isPrivacyModeEnabled === true) tokens.push('private')
+  else if (op?.isPrivacyModeEnabled === false) tokens.push('public')
+
+  // Per-op timestamp when valid, otherwise now.
+  const created = op?.createdAt != null ? new Date(op.createdAt) : null
+  const when = created != null && !Number.isNaN(created.getTime()) ? created : new Date()
+  tokens.push(formatFilenameTimestamp(when))
+
+  // Short id slice so two otherwise-identical txs never collide.
+  const id = op?.id != null ? String(op.id).replace(/[^A-Za-z0-9]+/g, '') : ''
+  if (id) tokens.push(id.slice(0, 8))
+
+  return `${tokens.join('-')}.json`
+}
+
 /** Trigger a browser download of the L1→L2 claim recovery JSON. */
 export const exportClaimData = (claimData: any) => {
   const payload = buildDepositExport(claimData)
-  exportToJsonFile(payload, `shield-human-tech-claim-${claimData.id}-${Date.now()}.json`)
+  exportToJsonFile(payload, buildRecoveryFilename(claimData, 'L1-to-L2'))
 }
 
 /** Trigger a browser download of the L2→L1 withdrawal recovery JSON. */
 export const exportWithdrawalData = (withdrawalData: any) => {
   const payload = buildWithdrawalExport(withdrawalData)
-  exportToJsonFile(payload, `shield-human-tech-withdrawal-${withdrawalData.id}-${Date.now()}.json`)
+  exportToJsonFile(payload, buildRecoveryFilename(withdrawalData, 'L2-to-L1'))
 }
 
 // ─── Backup import (inverse of exportClaimData / exportWithdrawalData) ────────

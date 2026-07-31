@@ -7,7 +7,6 @@ import { Icon } from '@iconify/react'
 import RootStyle from '@/components/RootStyle'
 import BridgeHeader from '@/components/BridgeHeader'
 import ActivityCard from '@/components/ActivityCard'
-import TextButton from '@/components/TextButton'
 import FuelClaimLinkModal from '@/components/FuelClaimLinkModal'
 import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
@@ -16,6 +15,8 @@ import { useWalletStore } from '@/stores/walletStore'
 import { useToast } from '@/hooks/useToast'
 import { BridgeDirection } from '@/types/bridge'
 import { buildFuelClaimUrl } from '@/utils/fuelClaimLink'
+import { humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 
 export default function ActivityPage() {
   const router = useRouter()
@@ -39,13 +40,15 @@ export default function ActivityPage() {
   const { data: operations, isLoading, isError, error } = useBridgeOperations()
 
   // Fixed batch of cards per page keeps the card body inside the shell's height
-  // budget (card is capped at calc(90vh-5rem) ≈ 568px at innerHeight 720) with no
-  // internal scrollbar. The fixed chrome (BridgeHeader + "Bridge Activity" + the
-  // pagination row + footer) eats ~260px, leaving ~300px for the batch. A compact
-  // card runs ~96px (completed) to ~130px (failed: single-line error + Resume +
-  // tx links), so two per page fit 720/800/900; three of the taller cards would
-  // spill past 720 and reintroduce the scrollbar. Measured, not guessed.
-  const PAGE_SIZE = 2
+  // budget (card is capped at calc(90vh-5rem) ≈ 568px at innerHeight 720). The
+  // fixed chrome (BridgeHeader + "Bridge Activity" + the pagination row + footer)
+  // shrank once the footer collapsed from two stacked full-width buttons to a
+  // single 20/80 back+CTA row (~48px reclaimed), leaving ~348px for the batch. A
+  // compact card runs ~96px (completed) to ~130px (failed: single-line error +
+  // Resume + tx links), so three compact cards fit 720/800/900. The list lives in
+  // a capped overflow-y-auto region, so a rare all-tall-failed page scrolls INSIDE
+  // that region without ever page-scrolling the shell. Measured, not guessed.
+  const PAGE_SIZE = 3
   const ops = useMemo(() => operations ?? [], [operations])
   const totalPages = Math.max(1, Math.ceil(ops.length / PAGE_SIZE))
   useEffect(() => {
@@ -148,8 +151,12 @@ export default function ActivityPage() {
           router.push('/progress/resume')
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to decrypt'
-        notify('error', msg)
+        console.error('[activity] resume/decrypt failed:', err)
+        logError('Resume decrypt failed', {
+          errorType: 'resume_decrypt_failed',
+          error: err instanceof Error ? err.message : String(err),
+        })
+        notify('error', humanizeError(err))
       } finally {
         setResumingId(null)
       }
@@ -169,7 +176,7 @@ export default function ActivityPage() {
         !operation.fuelAmount ||
         !operation.l1TxHash
       ) {
-        notify('error', 'Missing fuel data for this bridge — cannot rebuild the claim link.')
+        notify('error', 'Missing fuel data for this bridge. Cannot rebuild the claim link.')
         return
       }
       setSharingId(operation.id)
@@ -181,13 +188,13 @@ export default function ActivityPage() {
           )
         }
         if (!decrypted.fuelSecret) {
-          throw new Error('No fuel secret in this bridge — was it a public-fuel deposit?')
+          throw new Error('No fuel secret in this bridge. Was it a public fuel deposit?')
         }
         // The override field is only set in the blob when the bridger sent fuel to a third party.
         // Self-fuel bridges never write it, so a missing field here means there's nothing to share.
         const recipient = decrypted.fuelRecipient
         if (!recipient || recipient === decrypted.l2Address) {
-          notify('info', 'This bridge sent fuel to your own L2 account — no claim link is needed; the fuel is yours.')
+          notify('info', 'Fee Juice added to your Aztec account. It is ready to use, no claim needed.')
           return
         }
         const link = buildFuelClaimUrl(window.location.origin, {
@@ -200,8 +207,12 @@ export default function ActivityPage() {
         })
         setShareLink({ link, recipient })
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to build claim link'
-        notify('error', msg)
+        console.error('[activity] build fuel claim link failed:', err)
+        logError('Fuel claim share failed', {
+          errorType: 'fuel_claim_share_failed',
+          error: err instanceof Error ? err.message : String(err),
+        })
+        notify('error', humanizeError(err))
       } finally {
         setSharingId(null)
       }
@@ -210,8 +221,8 @@ export default function ActivityPage() {
   )
 
   return (
-    <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
-      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden px-5 pt-4 pb-4">
+    <RootStyle className="min-h-0 overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden px-5 pt-4 pb-4">
         <div className="flex items-center gap-4">
           <BridgeHeader />
         </div>
@@ -264,7 +275,7 @@ export default function ActivityPage() {
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
                     aria-label="Previous page"
-                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-30 disabled:hover:text-gray-500 p-1 rounded"
+                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-40 disabled:hover:text-gray-500 p-1 rounded"
                   >
                     <Icon icon="ph:caret-left-bold" width={16} height={16} />
                   </button>
@@ -276,7 +287,7 @@ export default function ActivityPage() {
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
                     aria-label="Next page"
-                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-30 disabled:hover:text-gray-500 p-1 rounded"
+                    className="text-gray-500 hover:text-[#81133B] disabled:opacity-40 disabled:hover:text-gray-500 p-1 rounded"
                   >
                     <Icon icon="ph:caret-right-bold" width={16} height={16} />
                   </button>
@@ -286,14 +297,27 @@ export default function ActivityPage() {
           )}
         </div>
 
-        <div className="mt-3 flex shrink-0 flex-col gap-2">
-          <TextButton onClick={() => router.push('/')}>Back to Bridge</TextButton>
-          <TextButton
+        {/* Footer: a single 20/80 row (SOP §4 / #194) instead of two stacked
+            same-weight buttons. The compact icon-only back button (~20%) shares
+            the row with the brand-filled primary CTA (~80%), mirroring the
+            back+primary split used across the ProgressCard recovery states. */}
+        <div className="mt-3 flex w-full shrink-0 items-stretch gap-2">
+          <button
+            type="button"
+            onClick={() => router.push('/?app=1')}
+            title="Back to Bridge"
+            aria-label="Back to Bridge"
+            className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"
+          >
+            <Icon icon="ph:arrow-left-bold" width={18} height={18} />
+          </button>
+          <button
+            type="button"
             onClick={() => router.push('/activity/local-recovery')}
-            className="!bg-transparent !text-gray-600 hover:!text-gray-900 !font-medium"
+            className="flex-[8_1_0%] rounded-lg bg-black py-[10px] font-semibold text-white transition-opacity hover:opacity-80"
           >
             Recover from local data
-          </TextButton>
+          </button>
         </div>
       </div>
       <FuelClaimLinkModal

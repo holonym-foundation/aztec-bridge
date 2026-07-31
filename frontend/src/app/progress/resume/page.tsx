@@ -12,13 +12,20 @@ import { useL2TokenBalance, useL2FeeJuiceBalance } from '@/hooks/useL2Operations
 import { useL1TokenBalances } from '@/hooks/useL1Operations'
 import { useResumeL1BridgeToL2 } from '@/hooks/useResumeL1BridgeToL2'
 import { useResumeL2WithdrawToL1 } from '@/hooks/useResumeL2WithdrawToL1'
+import { useResumeAttemptsStore } from '@/stores/useResumeAttemptsStore'
+import { pushStuckEscalation, dismissStuckEscalation } from '@/utils/support'
 import { L1_TOKEN_METADATA, L2_TOKEN_METADATA, L1_NETWORKS, L2_NETWORKS } from '@/config'
-import { useToast } from '@/hooks/useToast'
+
+// After this many consecutive failed resumes on the same op (same error), stop
+// re-offering the naive resume and escalate to support via the Messages feed.
+const STUCK_ATTEMPT_THRESHOLD = 3
 
 export default function ResumePage() {
   const router = useRouter()
-  const notify = useToast()
   const operationStarted = useRef(false)
+  // Guards the once-per-mount attempt record — a single page mount runs one resume, so
+  // its failure should count exactly once even as the error effect re-renders.
+  const failureRecorded = useRef(false)
 
   const {
     getProgressSteps,
@@ -40,6 +47,9 @@ export default function ResumePage() {
   // off the recovery payload the operation was created with.
   const operationIsPrivate = recoveryClaimData?.isPrivacyModeEnabled ?? recoveryWithdrawalData?.isPrivacyModeEnabled
 
+  // The operation id keys both the attempt counter and the stuck-transfer feed message.
+  const opId = recoveryClaimData?.operationId ?? recoveryWithdrawalData?.operationId ?? null
+
   // Refetch balances on success
   const { aztecAddress } = useWalletStore()
   const { refetch: refetchL1Balance } = useL1TokenBalances()
@@ -47,6 +57,11 @@ export default function ResumePage() {
   const { refetch: refetchFeeJuiceBalance } = useL2FeeJuiceBalance()
 
   const handleResumeSuccess = useCallback(() => {
+    // This op finished — clear its failed-attempt streak and any stuck escalation in the feed.
+    if (opId) {
+      useResumeAttemptsStore.getState().reset(opId)
+      dismissStuckEscalation(opId)
+    }
     // The L2 balance queries require a connected Aztec wallet. On an L2→L1 resume the L2 wallet
     // is often absent (resume runs from persisted data + an L1 client), and refetch() bypasses
     // the queries' `enabled` guard — so only refresh L2 balances when the address is present.
@@ -54,12 +69,10 @@ export default function ResumePage() {
     if (aztecAddress) {
       refetches.push(refetchL2Balance(), refetchFeeJuiceBalance())
     }
-    notify.promise(Promise.allSettled(refetches), {
-      pending: 'Refreshing balances...',
-      success: 'Balances updated',
-      error: 'Failed to refresh balances',
-    })
-  }, [notify, aztecAddress, refetchL1Balance, refetchL2Balance, refetchFeeJuiceBalance])
+    // BridgeHeader now surfaces the live "Refreshing balances" status from the
+    // shared balance-query fetching flags, so no corner toast is raised here.
+    void Promise.allSettled(refetches)
+  }, [aztecAddress, opId, refetchL1Balance, refetchL2Balance, refetchFeeJuiceBalance])
 
   const {
     mutate: resumeL1ToL2,
@@ -153,6 +166,19 @@ export default function ResumePage() {
     (resumeL1ToL2Err instanceof Error ? resumeL1ToL2Err.message : null) ??
     (resumeL2ToL1Err instanceof Error ? resumeL2ToL1Err.message : null)
 
+  // This resume landed back in the failed state. Count it once for this op and, once the
+  // same error has looped past the threshold, escalate into the Messages feed (not the
+  // ProgressCard) with a Contact support action. Keyed by op so it updates in place.
+  useEffect(() => {
+    if (!hasError || !opId || failureRecorded.current) return
+    failureRecorded.current = true
+    const errText = (errorMessage ?? '').trim()
+    const count = useResumeAttemptsStore.getState().recordFailure(opId, errText)
+    if (count >= STUCK_ATTEMPT_THRESHOLD) {
+      pushStuckEscalation(opId, errText)
+    }
+  }, [hasError, opId, errorMessage])
+
   // Compute amount display
   const recoveryAmount = recoveryClaimData?.amount ?? recoveryWithdrawalData?.amount ?? '0'
   const decimals = isL2ToL1Recovery ? L2_TOKEN_METADATA.decimals : L1_TOKEN_METADATA.decimals
@@ -167,8 +193,8 @@ export default function ResumePage() {
   return (
     // Same no-scroll shell as /progress: cap the card to the 90vh budget and let the card body
     // scroll inside itself if it ever can't fit, so the page never scrolls and nothing clips.
-    <RootStyle className="min-h-0 max-h-[calc(90vh-5rem)] overflow-hidden">
-      <div className="flex h-full max-h-[calc(90vh-5rem)] flex-col overflow-hidden">
+    <RootStyle className="min-h-0 overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden">
         <div className="px-5 pt-5">
           <div className="flex items-center gap-4">
             <BridgeHeader />

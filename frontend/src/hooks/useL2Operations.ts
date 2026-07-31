@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { L1_TOKENS, L1_CHAIN_ID, L2_CHAIN_ID, BRIDGED_FPC_ADDRESS, getAztecscanUrl, getEtherscanUrl } from '@/config'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { logInfo, logError, DatadogUserAction } from '@/utils/datadog'
@@ -6,8 +7,15 @@ import { AztecAddress } from '@aztec/stdlib/aztec-address'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatUnits, parseUnits } from 'viem'
 import { useToast, useToastMutation } from './useToast'
-import { pushNotification } from '@/stores/useNotificationsStore'
-import { exportWithdrawalData, copyToClipboard, decryptStorageEntry, verifyEncryptionDomain } from '@/utils'
+import { pushNotification, dismissNotificationByKey } from '@/stores/useNotificationsStore'
+import {
+  exportWithdrawalData,
+  copyToClipboard,
+  decryptStorageEntry,
+  verifyEncryptionDomain,
+  extractErrorMessage,
+  humanizeError,
+} from '@/utils'
 import { useL2ErrorHandler } from '@/utils/l2ErrorHandler'
 import { estimateClaimFeeLimit } from '@/utils/fuelGasEstimate'
 import { requestWaapWallet, WAAP_METHOD, useWalletStore } from '@/stores/walletStore'
@@ -288,7 +296,7 @@ export function useNetworkHealth() {
 // -----------------------------------
 
 export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
-  const { waapAddress: l1Address } = useWalletStore()
+  const { waapAddress: l1Address, signWaapMessage } = useWalletStore()
   const { aztecAddress, aztecLoginMethod } = useWalletStore()
   const queryClient = useQueryClient()
   const notify = useToast()
@@ -299,12 +307,19 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
     bridgeConfig,
     l2TxUrl: currentL2TxUrl,
     setCurrentOperationId,
+    markOperationLive,
+    clearOperationLive,
   } = useBridgeStore()
 
   const { waapLoginMethod: loginMethod, waapWalletProvider: walletProvider, waapChainId: chainId } = useWalletStore()
   const walletAdapter = useWalletAdapter()
   const selectedToken = bridgeConfig.from.token ?? undefined
   const bridge = useBridge()
+
+  // Operations this hook is driving right now. Marked live so Activity shows them as
+  // running instead of offering Resume on a withdrawal that is still in flight, and
+  // cleared in onSettled so a finished or failed run never leaves a stale marker.
+  const drivenOperationIds = useRef<string[]>([])
 
   const mutationFn = async (params: {
     amountL1: string
@@ -344,7 +359,14 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       walletAdapter: walletAdapter as any,
       signMessage: async (msg: string) => {
         verifyEncryptionDomain()
-        return (await requestWaapWallet(WAAP_METHOD.personal_sign, [msg, l1Address])) as string
+        // Route through the CACHED signer (not a raw personal_sign) so a
+        // same-session deposit + withdrawal signs the identical, deterministic
+        // "Unlock My Secrets" message ONCE. The message is byte-identical to the
+        // deposit path (useL1Operations), so the cache key (address+message)
+        // matches and the withdrawal never re-prompts (#408 / P1).
+        const sig = await signWaapMessage(msg)
+        if (!sig) throw new Error('Failed to sign message')
+        return sig
       },
       onStep: (step: number, status: StepStatus) => {
         setProgressStep(step, status)
@@ -381,6 +403,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             })
             console.log('[L2→L1] Operation created:', event.operationId)
             setCurrentOperationId(event.operationId)
+            drivenOperationIds.current.push(String(event.operationId))
+            markOperationLive(event.operationId)
             break
           case BridgeEventType.BURN_SENT:
             logInfo('L2 burn tx sent', {
@@ -392,6 +416,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             })
             // Burn is on L2 — the "Do Not Reload" prep banner is now stale.
             notify.dismiss('l2-to-l1-do-not-reload')
+            // The toast was suppressed into the persistent feed, so also drop the
+            // feed row — otherwise the stale "Do not reload" warning outlives the
+            // window and keeps surfacing in the header ticker (and across reloads).
+            dismissNotificationByKey('l2-to-l1-do-not-reload')
             // Feed-only: the ProgressCard banner carries the live "keep this
             // page open" safety text, so the message stays concise here.
             pushNotification({
@@ -412,6 +440,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             setTransactionUrls(null, event.l2TxUrl)
             // Burn landed on L2 — the "Do Not Reload" prep banner is now stale.
             notify.dismiss('l2-to-l1-do-not-reload')
+            // The toast was suppressed into the persistent feed, so also drop the
+            // feed row — otherwise the stale "Do not reload" warning outlives the
+            // window and keeps surfacing in the header ticker (and across reloads).
+            dismissNotificationByKey('l2-to-l1-do-not-reload')
             // Feed-only, with the recovery-backup export carried as an inline
             // action so the user can still export from Messages now that no
             // corner toast exists to click.
@@ -502,6 +534,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               title: 'Withdrawal complete',
               message: 'Tokens withdrawn to Ethereum.',
             })
+            // The op just reached its terminal 'completed' status on the backend.
+            // Refetch operations so Activity re-derives it as done (no Resume, no
+            // "N to finish") instead of serving the stale resumable status from the
+            // 30s cache.
+            queryClient.invalidateQueries({ queryKey: ['bridgeOperations', l1Address] })
             break
           }
           case BridgeEventType.ATTESTATION_FETCH:
@@ -593,10 +630,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             if (event.fundsAtRisk) {
               pushNotification({
                 type: 'error',
-                title: isBlockNotProvenHint ? 'Withdrawal blocked, try later' : "L1 withdraw didn't finish",
+                title: isBlockNotProvenHint ? 'Withdrawal not ready yet' : 'Withdrawal did not finish',
                 message: isBlockNotProvenHint
-                  ? 'The network needs more time. Try again later.'
-                  : 'Your funds are safe on L2. Resume from Activity.',
+                  ? 'The network needs a little more time. Please try again later.'
+                  : 'Your funds are safe on Aztec. You can resume this withdrawal from Activity.',
               })
               break
             }
@@ -609,14 +646,14 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             if (isArtifact) {
               pushNotification({
                 type: 'error',
-                title: 'Contract artifact not found',
-                message: 'Upload it to testnet.aztec-registry.xyz so the wallet can load it.',
+                title: 'Bridge is temporarily unavailable',
+                message: 'We could not complete your withdrawal right now. No funds moved. Please try again soon.',
               })
             } else {
               pushNotification({
                 type: 'error',
                 title: 'Withdrawal failed',
-                message: 'No funds moved. You can retry.',
+                message: 'No funds moved. You can try again.',
               })
             }
             break
@@ -699,6 +736,12 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
         )
       }
     },
+    onSettled: () => {
+      // Nothing is driving these any more. Whatever the backend status says, Activity
+      // is now the right place to resume them from.
+      drivenOperationIds.current.forEach(clearOperationLive)
+      drivenOperationIds.current = []
+    },
   })
 }
 
@@ -710,6 +753,7 @@ export function useL2RecoverWithdrawal() {
   const { setProgressStep, setTransactionUrls, l2TxUrl: currentL2TxUrl } = useBridgeStore()
   const bridge = useBridge()
   const notify = useToast()
+  const queryClient = useQueryClient()
 
   const mutationFn = async ({ l2TxHash, l1Address: paramL1Address }: { l2TxHash: string; l1Address: string }) => {
     const resolvedL1Address = paramL1Address || l1Address
@@ -790,6 +834,9 @@ export function useL2RecoverWithdrawal() {
               const l1Url = `${getEtherscanUrl(L1_CHAIN_ID)}/tx/${event.l1TxHash}`
               setTransactionUrls(l1Url, null)
             }
+            // Terminal 'completed' on the backend — refetch operations so Activity
+            // stops offering Resume for this now-finished withdrawal.
+            queryClient.invalidateQueries({ queryKey: ['bridgeOperations', l1Address] })
             break
           case BridgeEventType.PATCH_FAILED:
             logError(`Resume PATCH failed: ${event.label}`, {
@@ -866,8 +913,12 @@ export function useExportWithdrawalData() {
       exportWithdrawalData(w)
       notify('success', 'Withdrawal data exported successfully! Save this file in a safe place.')
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error'
-      notify('error', `Failed to export: ${msg}`)
+      console.error('[export withdrawal data] failed:', e)
+      logError('Export withdrawal data failed', {
+        errorType: 'export_withdrawal_failed',
+        error: extractErrorMessage(e),
+      })
+      notify('error', `Couldn't export your withdrawal backup. ${humanizeError(e)}`)
     }
   }
 
@@ -898,8 +949,12 @@ export function useExportWithdrawalData() {
       else notify('error', 'Failed to copy')
       return ok
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error'
-      notify('error', `Failed to copy nonce: ${msg}`)
+      console.error('[copy nonce] failed:', e)
+      logError('Copy nonce failed', {
+        errorType: 'copy_nonce_failed',
+        error: extractErrorMessage(e),
+      })
+      notify('error', `Couldn't copy the nonce. ${humanizeError(e)}`)
       return false
     }
   }

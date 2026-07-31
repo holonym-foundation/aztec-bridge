@@ -8,15 +8,19 @@ import { useRouter } from 'next/navigation'
 import { formatUnits } from 'viem'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
 import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
-import { useResumableCount } from '@/hooks/useResumableCount'
+import { useIsOperationLive, useResumableCount } from '@/hooks/useResumableCount'
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useToast } from '@/hooks/useToast'
-import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
+import { canResumeOp } from '@/utils/resumability'
+import { humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
+import { formatFjAmount } from '@/utils/fuelPricing'
 import { L1_TOKEN_METADATA, L1_NETWORKS, AZTEC_VERSION } from '@/config'
 import { BridgeDirection } from '@/types/bridge'
 import { LocalRecoveryPanel } from '@/components/LocalRecoveryPanel'
 import StyledImage from '@/components/StyledImage'
+import { getStatusBadge } from '@/components/ActivityCard'
 
 // Motion values mirrored from the human-tech design system (docs/tokens.css):
 // --dur-enter / --ease-slide for the panel that slides out from the tab.
@@ -28,20 +32,35 @@ const DS_EASE_SLIDE: [number, number, number, number] = [0.32, 0.72, 0, 1]
 const PEEK_EVENT = 'shield:peek'
 type PeekSignal = { id: string; open: boolean }
 
-type StatusMeta = { label: string; className: string }
+// Enough rows to fill the taller mid-length panel (below) and scroll the rest
+// inside it, so the peek shows several recent ops at once rather than a couple.
+const MAX_VISIBLE_OPS = 12
 
-const STATUS_META: Record<string, StatusMeta> = {
-  pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' },
-  deposited: { label: 'Deposited', className: 'bg-blue-100 text-blue-800' },
-  claimed: { label: 'Claimed', className: 'bg-purple-100 text-purple-800' },
-  submitted: { label: 'Submitted', className: 'bg-blue-100 text-blue-800' },
-  ready: { label: 'Ready', className: 'bg-indigo-100 text-indigo-800' },
-  pending_finalize: { label: 'Finalizing', className: 'bg-indigo-100 text-indigo-800' },
-  completed: { label: 'Completed', className: 'bg-green-100 text-green-800' },
-  failed: { label: 'Failed', className: 'bg-red-100 text-red-800' },
-}
+// The top nav row (banners + Header) sits at the viewport top. The upward-growing
+// panel must stop BELOW it, so reserve this much space from the viewport top; the
+// panel's top edge lands here and never crosses into the nav (#318). Mirrors the
+// same NAV_SAFE_TOP reservation BridgeStepsRail uses for its rail panel (#316).
+const NAV_SAFE_TOP = 72
 
-const MAX_VISIBLE_OPS = 5
+// The panel is given a DEFINITE height so the list region fills a substantial
+// mid-length panel (the founder's "as long as Messages") instead of collapsing
+// to the height of the few short rows it happens to have. This target mirrors the
+// intrinsic height NotificationsDrawer's Messages panel settles at (its taller,
+// padded rows). It is always clamped by the measured available space
+// (maxPanelHeight, which reserves NAV_SAFE_TOP and caps to the viewport), so it
+// never overflows the viewport or grows into the nav — it only makes the panel
+// taller when there is room. The flex-1 list then scrolls internally (#406).
+const PANEL_TARGET_HEIGHT = 560
+
+// SOP §5: an open rail panel must keep a >=12px breathing gap from the centered
+// 360px app-shell card and never clip its edge (#378). The card is
+// viewport-centered so its right edge sits at 50vw+180px; the panel is right-
+// anchored ~ (tab 42px + 12px gap) from the viewport edge and grows leftward. Cap
+// the panel width to 50vw-246px [42 tab + 12 gap-to-tab + 180 card-half + 12 gap-
+// to-card] so its left edge stays >=12px clear of the card. On roomy viewports the
+// natural width is smaller than the cap (no effect); on tighter md+ widths the
+// panel shrinks from the left and sits in the right gutter rather than colliding.
+const CARD_SAFE_MAX_WIDTH = 'calc(50vw - 246px)'
 
 // Network/deployment this app instance runs against. The operation record does
 // not persist a per-op network or Aztec version, so we surface the current active
@@ -61,20 +80,55 @@ function DirectionLogos({ direction }: { direction: BridgeOperation['direction']
   const first = isDeposit ? eth : aztec
   const second = isDeposit ? aztec : eth
   const label = isDeposit ? 'L1 to L2' : 'L2 to L1'
+  // The Aztec mark is a bare light-green diamond that washes out on the light card
+  // surface, so sit it inside a dark circular chip (the Ethereum glyph is already a
+  // self-contained dark circle and needs none). Matches ActivityCard's DirectionLogos.
+  const renderMark = (src: string) =>
+    src === aztec ? (
+      <span className="inline-flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]">
+        <StyledImage src={src} alt="" className="h-[11px] w-[11px]" />
+      </span>
+    ) : (
+      <StyledImage src={src} alt="" className="h-[15px] w-[15px] shrink-0" />
+    )
   return (
     <span role="img" aria-label={label} title={label} className="inline-flex items-center gap-1">
-      <StyledImage src={first} alt="" className="h-[15px] w-[15px] shrink-0" />
+      {renderMark(first)}
       <Icon icon="ph:arrow-right" width={11} height={11} className="text-[#989898]" aria-hidden="true" />
-      <StyledImage src={second} alt="" className="h-[15px] w-[15px] shrink-0" />
+      {renderMark(second)}
     </span>
   )
+}
+
+// TODO(#331): "Fee Juice used" (L2 gas consumption) cannot be surfaced from this
+// data source. useBridgeOperations() -> bridge.getOperations() -> GET
+// /api/bridge/operations returns only BridgeOperation rows (L1->L2 deposits and
+// L2->L1 withdrawals). Fuel appears ONLY as the top-up leg of a deposit
+// (op.fuelAmount / fuelMessageHash), surfaced on the row below. Nothing in this
+// source, or any client store, records FeeJuice spent paying for L2 transactions,
+// so usage needs backend/indexer support emitting fuel-consumption events first.
+//
+// Human-readable Fee Juice top-up for a deposit that carved part of the bridged
+// token into FeeJuice. op.fuelAmount is the FeeJuice received (18-dec) — the same
+// value the claim flow and FuelClaimLinkPanel treat as the claim amount.
+// Withdrawals never carry a fuel leg, so this is L1->L2 only.
+function fuelTopUpFj(op: BridgeOperation): string | null {
+  if (op.direction !== 'L1_TO_L2' || !op.fuelAmount) return null
+  try {
+    return formatFjAmount(BigInt(op.fuelAmount))
+  } catch {
+    return null
+  }
 }
 
 // Recent-bridge-operations peek, mirroring BridgeStepsRail's drawer pattern but
 // on the card's right edge. Reuses useBridgeOperations for data and duplicates
 // only the resume/decrypt flow from /activity — everything else (share fuel
 // claim links, full history) stays on the full Activity page we link out to.
-const ActivityDrawer: React.FC = () => {
+type ActivityDrawerProps = { variant?: 'rail' | 'dock' }
+
+const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => {
+  const isDock = variant === 'dock'
   const router = useRouter()
   const notify = useToast()
   const panelId = useId()
@@ -93,8 +147,9 @@ const ActivityDrawer: React.FC = () => {
   const [recoverOpen, setRecoverOpen] = useState(false)
   // The panel is anchored to the tab's bottom and grows UPWARD (#229), so it
   // never spills below the tab into the floating chat widget. Cap its height to
-  // the room actually above the tab's bottom edge so the header and the "View
-  // full activity" footer always stay on-screen no matter where the dock sits.
+  // the room between the nav bar (NAV_SAFE_TOP) and the tab's bottom edge so the
+  // header and the "View full activity" footer always stay on-screen and the top
+  // edge never rises over the nav no matter where the dock sits (#318).
   const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined)
   const open = hovered || pinned
   const drawerRef = useRef<HTMLDivElement>(null)
@@ -149,14 +204,20 @@ const ActivityDrawer: React.FC = () => {
   }, [pinned])
 
   // Measure the space above the tab's bottom edge and cap the panel to it, so the
-  // upward-growing panel is never clipped by the viewport top (or, on short
-  // screens, forced to overlap the chat widget below). Re-measures on resize.
+  // upward-growing panel is never clipped by the viewport top and never crosses
+  // into the top nav bar (#318). The top boundary is the LIVE bottom of the nav
+  // (banners + Header), which grows when a banner shows — a static reservation
+  // lands the panel's top edge behind a taller nav (z-50), hiding the header row
+  // and top op. Measure the same `.ob-header-elevate` wrapper BridgeStepsRail and
+  // NotificationsDrawer read; fall back to NAV_SAFE_TOP. Re-measures on resize.
   useEffect(() => {
     if (!open) return
     const measure = () => {
       const rect = handleRef.current?.getBoundingClientRect()
       if (!rect) return
-      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - 12)))
+      const header = typeof document !== 'undefined' ? document.querySelector('.ob-header-elevate') : null
+      const navBottom = header ? header.getBoundingClientRect().bottom : NAV_SAFE_TOP
+      setMaxPanelHeight(Math.max(160, Math.round(rect.bottom - navBottom)))
     }
     measure()
     window.addEventListener('resize', measure)
@@ -183,6 +244,7 @@ const ActivityDrawer: React.FC = () => {
   // Count across ALL operations (not just the visible 5), so the tab flags
   // resumable work even when it has scrolled out of the recent peek.
   const resumableCount = useResumableCount()
+  const isLive = useIsOperationLive()
 
   const handleResume = async (operation: BridgeOperation) => {
     if (!l1Address) {
@@ -274,8 +336,12 @@ const ActivityDrawer: React.FC = () => {
       setPinned(false)
       setHovered(false)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to decrypt'
-      notify('error', msg)
+      console.error('[ActivityDrawer] resume/decrypt failed:', err)
+      logError('Resume decrypt failed', {
+        errorType: 'resume_decrypt_failed',
+        error: err instanceof Error ? err.message : String(err),
+      })
+      notify('error', humanizeError(err))
     } finally {
       setResumingId(null)
     }
@@ -290,8 +356,14 @@ const ActivityDrawer: React.FC = () => {
       undefined,
       { hour: 'numeric', minute: '2-digit' },
     )}`
-    const meta = STATUS_META[op.status] ?? { label: op.status, className: 'bg-gray-100 text-gray-800' }
-    const showResume = isResumable(op) || hasPossibleLockedFunds(op)
+    const meta = getStatusBadge(op.status)
+    // A transfer this tab is still driving is NOT resumable — it is running. Showing
+    // Resume beside a screen that says "Buying Fee Juice…" made the row contradict the
+    // app (SOP §8), and starting a second run of the same operation is exactly what the
+    // Resume button would have done.
+    const live = isLive(op.id)
+    const showResume = !live && canResumeOp(op)
+    const fuelTopUp = fuelTopUpFj(op)
 
     return (
       <li key={op.id} className="border-b border-[#F0F0F0] py-2.5 last:border-b-0 last:pb-0">
@@ -324,11 +396,23 @@ const ActivityDrawer: React.FC = () => {
         {DEPLOYMENT_LABEL && (
           <p className="mt-0.5 truncate text-[10px] text-[#989898]">{DEPLOYMENT_LABEL}</p>
         )}
+        {fuelTopUp && (
+          <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-medium text-amber-700">
+            <Icon icon="ph:gas-pump" width={10} height={10} className="flex-shrink-0" />
+            Fee Juice top up · {fuelTopUp} FJ
+          </p>
+        )}
+        {live && (
+          <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-[#81133B]">
+            <Icon icon="ph:spinner-gap-bold" width={11} height={11} className="shrink-0 animate-spin" />
+            In progress
+          </p>
+        )}
         {showResume && (
           <button
             onClick={() => handleResume(op)}
             disabled={resumingId === op.id}
-            className="mt-1.5 rounded-md bg-[#17235E] px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-[#17235E]/90 disabled:opacity-50"
+            className="mt-1.5 rounded-md bg-black px-2.5 py-1 text-[11px] font-semibold text-white hover:opacity-80 disabled:opacity-60"
           >
             {resumingId === op.id ? 'Decrypting…' : 'Resume'}
           </button>
@@ -405,11 +489,18 @@ const ActivityDrawer: React.FC = () => {
         {recentOps.length > 0 && <ul className="flex flex-col">{recentOps.map(renderOp)}</ul>}
       </div>
       <div className="mt-3 shrink-0 border-t border-[#F0F0F0] pt-3">
+        {/* #416: the "see more" affordance was a small, left-aligned, muted-grey
+            row that was easy to miss. Make it the clear centered call-to-action
+            it should be: full-width and centered, a step larger, semibold, in
+            brand maroon (text-shield, #81133B) with the activity glyph — high
+            contrast on the white panel and unmistakable as the way to the full
+            history. Soft maroon hover wash + focus ring mirror the recover
+            button above so the two footer affordances read as one family. */}
         <button
           onClick={() => router.push('/activity')}
-          className="flex items-center gap-1.5 text-[12px] font-medium text-[#737373] transition-colors hover:text-[#0A0A0A]"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[13px] font-semibold text-[#81133B] transition-colors hover:bg-[#FDE7F3] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#81133B]/40"
         >
-          <Icon icon="ph:clock-counter-clockwise" width={15} height={15} />
+          <Icon icon="ph:clock-counter-clockwise" width={16} height={16} />
           View full activity
         </button>
       </div>
@@ -425,6 +516,66 @@ const ActivityDrawer: React.FC = () => {
   // it never adds page scroll and persists across every app screen.
   return (
     <>
+    {isDock ? (
+      // Narrow-viewport dock (#243): a compact round icon button in the
+      // bottom-left mobile dock. Keeps the clock-counter-clockwise identity + the
+      // "transfers to finish" count badge and opens the same activity panel as a
+      // bottom-anchored sheet that stays on-screen on phones.
+      <div
+        ref={drawerRef}
+        className="pointer-events-auto relative"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key="panel"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+              className="fixed bottom-[76px] left-4 z-40 w-[300px] max-w-[calc(100vw-2rem)]"
+            >
+              <div
+                id={panelId}
+                className="flex max-h-[70dvh] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
+              >
+                {panelBody(closeDesktop)}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          ref={handleRef}
+          type="button"
+          aria-expanded={open}
+          aria-label={
+            resumableCount > 0
+              ? `Bridge activity, ${resumableCount} ${resumableCount === 1 ? 'transfer' : 'transfers'} to finish`
+              : 'Bridge activity'
+          }
+          aria-controls={panelId}
+          onClick={() => setPinned((p) => !p)}
+          className={`relative flex h-11 w-11 items-center justify-center rounded-full border bg-white shadow-[0px_6px_16px_0px_rgba(0,0,0,0.12)] transition-colors ${
+            open ? 'border-[#17235E]/40' : 'border-[#D4D4D4]'
+          }`}
+        >
+          <Icon icon="ph:clock-counter-clockwise" width={18} height={18} className="text-[#737373]" aria-hidden="true" />
+          {resumableCount > 0 ? (
+            <span
+              aria-hidden="true"
+              className="absolute -right-1 -top-1 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#81133B] px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white"
+            >
+              {resumableCount > 9 ? '9+' : resumableCount}
+            </span>
+          ) : (
+            <span aria-hidden="true" className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#17235E] ring-2 ring-white" />
+          )}
+        </button>
+      </div>
+    ) : (
     <div
       ref={drawerRef}
       className="pointer-events-auto relative flex items-center justify-end"
@@ -439,11 +590,16 @@ const ActivityDrawer: React.FC = () => {
             animate={{ width: 280, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: prefersReducedMotion ? 0 : DS_DUR_ENTER, ease: DS_EASE_SLIDE }}
+            style={{ maxWidth: CARD_SAFE_MAX_WIDTH }}
             className="absolute bottom-0 right-[calc(100%_+_12px)] overflow-hidden"
           >
             <div
               id={panelId}
-              style={{ maxHeight: maxPanelHeight }}
+              style={{
+                height: maxPanelHeight != null ? Math.min(maxPanelHeight, PANEL_TARGET_HEIGHT) : undefined,
+                maxHeight: maxPanelHeight,
+                maxWidth: CARD_SAFE_MAX_WIDTH,
+              }}
               className="flex max-h-[calc(100dvh-1.5rem)] w-[280px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
             >
               {panelBody(closeDesktop)}
@@ -463,7 +619,7 @@ const ActivityDrawer: React.FC = () => {
         }
         aria-controls={panelId}
         onClick={() => setPinned((p) => !p)}
-        className={`flex h-[120px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-[width,border-color] duration-200 ease-out ${
+        className={`flex h-[144px] px-1.5 py-3.5 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-l-[12px] border border-r-0 bg-white transition-[width,border-color] duration-200 ease-out ${
           open ? 'border-[#17235E]/40' : 'border-[#D4D4D4] hover:border-[#17235E]/30'
         } ${open && !prefersReducedMotion ? 'w-[42px]' : 'w-9'}`}
       >
@@ -483,13 +639,14 @@ const ActivityDrawer: React.FC = () => {
         )}
         <Icon icon="ph:clock-counter-clockwise" width={15} height={15} className="text-[#737373]" aria-hidden="true" />
         <span
-          className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
+          className="px-0.5 py-1 text-[10px] font-semibold uppercase tracking-[1.5px] text-[#737373]"
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
         >
           Activity
         </span>
       </button>
     </div>
+    )}
 
     {/* Recover-from-local-backup overlay (#195): opens OVER the current view
         instead of navigating to a full page. */}

@@ -288,3 +288,35 @@ export async function fetchPassportScore(address: string): Promise<{
 
   return { score, passing: score >= threshold }
 }
+
+export interface PassportPointsData {
+  totalPoints: number
+  multiplier: number
+  breakdown: Record<string, number>
+}
+
+// points_data.total_points is pre-multiplier; the effective balance is
+// total × multiplier (1 or 2) — same math the Covenant HUMN Points service uses.
+export async function fetchPassportPoints(address: string): Promise<PassportPointsData> {
+  const apiKey = PASSPORT_API_KEY
+  const scorerId = PASSPORT_SCORER_ID
+  if (!apiKey || !scorerId) {
+    throw new Error('Missing PASSPORT_API_KEY or PASSPORT_SCORER_ID')
+  }
+
+  const resp = await fetch(`https://api.passport.xyz/v2/stamps/${scorerId}/score/${address}`, {
+    headers: { 'X-API-KEY': apiKey },
+  })
+  if (!resp.ok) {
+    throw new Error(`Passport API error: ${resp.status} ${resp.statusText}`)
+  }
+
+  const data = await resp.json()
+  const points = data.points_data
+  const multiplier = Number(points?.multiplier) || 1
+  return {
+    totalPoints: (Number(points?.total_points) || 0) * multiplier,
+    multiplier,
+    breakdown: points?.breakdown ?? {},
+  }
+}

@@ -1,8 +1,9 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import type { RecoveryWithdrawalData } from '@human.tech/clean.sdk'
 import { useWalletStore, requestWaapWallet, WAAP_METHOD } from '@/stores/walletStore'
 import { useToast } from './useToast'
+import { dismissNotificationByKey } from '@/stores/useNotificationsStore'
 import { useBridge } from '@/hooks/useBridge'
 import type { BridgeEvent } from '@human.tech/clean.sdk'
 import { BridgeEventType } from '@human.tech/clean.sdk'
@@ -11,12 +12,19 @@ import { getEtherscanUrl, L1_CHAIN_ID } from '@/config'
 import { logInfo, logError, DatadogUserAction } from '@/utils/datadog'
 
 export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
-  const { setProgressStep, setTransactionUrls, clearRecovery } = useBridgeStore()
-  const { waapAddress: l1Address } = useWalletStore()
+  const { setProgressStep, setTransactionUrls, clearRecovery, markOperationLive, clearOperationLive } =
+    useBridgeStore()
+  const { waapAddress: l1Address, signWaapMessage } = useWalletStore()
   const notify = useToast()
   const bridge = useBridge()
+  const queryClient = useQueryClient()
 
   const mutationFn = async (data: RecoveryWithdrawalData): Promise<string | undefined> => {
+    // Stable, per-operation key so the resume-error feed row can be retired by
+    // key the moment THIS op genuinely completes (see OPERATION_COMPLETED). Keyed
+    // by operationId so completing one stuck withdrawal never clears another's
+    // still-valid resume error.
+    const resumeErrorKey = `l2-to-l1-resume-error-${data.operationId}`
     // Require explicit recipientL1Address — falling back to connected wallet
     // could withdraw funds to the wrong L1 address if the user switched wallets.
     const withdrawRecipient = data.recipientL1Address || l1Address
@@ -33,6 +41,10 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
     // Show L2 tx URL if available
     if (data.l2TxUrl) setTransactionUrls(null, data.l2TxUrl)
 
+    // This resume IS the thing driving the operation now, so Activity must stop
+    // offering a second Resume for it while this one runs (cleared in onSettled).
+    markOperationLive(data.operationId)
+
     const result = await bridge.resume(data.operationId, {
       l1Address: withdrawRecipient,
       l2Address: data.l2Address,
@@ -41,7 +53,12 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
       },
       signMessage: async (msg: string) => {
         verifyEncryptionDomain()
-        return (await requestWaapWallet(WAAP_METHOD.personal_sign, [msg, withdrawRecipient])) as string
+        // Cached signer (not raw personal_sign): a same-session withdrawal resume
+        // reuses the deterministic "Unlock My Secrets" signature instead of
+        // re-prompting. Byte-identical message → matching cache key (#408 / P1).
+        const sig = await signWaapMessage(msg)
+        if (!sig) throw new Error('Failed to sign message')
+        return sig
       },
       onStep: (step, status) => setProgressStep(step, status),
       onEvent: (event: BridgeEvent) => {
@@ -148,6 +165,14 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
               const l1Url = `${getEtherscanUrl(L1_CHAIN_ID)}/tx/${event.l1TxHash}`
               setTransactionUrls(l1Url, data.l2TxUrl ?? null)
             }
+            // The op just reached its terminal 'completed' status on the backend.
+            // Refetch operations so Activity re-derives it as done (no Resume, no
+            // "N to finish") instead of serving the stale resumable status.
+            queryClient.invalidateQueries({ queryKey: ['bridgeOperations', l1Address] })
+            // Retire any lingering "Resume Error — Funds Safe" feed row for this
+            // op — the withdrawal finished, so the resume affordance it pointed to
+            // is gone. Mirrors round-16's dismiss of the do-not-reload banner.
+            dismissNotificationByKey(resumeErrorKey)
             break
           }
           case BridgeEventType.ERROR:
@@ -169,7 +194,9 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
                   heading: 'Resume Error — Funds Safe',
                   message: 'Your withdrawal proof is saved. Go to Activity to try again.',
                 },
-                { autoClose: false },
+                // Keyed so this feed row is dismissed by key on genuine completion
+                // of the same op (see OPERATION_COMPLETED).
+                { autoClose: false, toastId: resumeErrorKey },
               )
             }
             break
@@ -185,6 +212,9 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
     mutationFn,
     onSuccess: (txHash) => {
       if (onSuccess) onSuccess(txHash)
+    },
+    onSettled: (_data, _error, withdrawalData) => {
+      clearOperationLive(withdrawalData?.operationId)
     },
   })
 }

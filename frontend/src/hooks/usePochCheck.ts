@@ -22,9 +22,12 @@ export function usePochCheck() {
       try {
         return await bridge.checkPochEligibility()
       } catch (err: any) {
+        // Prefer the server's human-readable reason; never surface a raw error
+        // body/message (can be technical or a full HTML error page).
         const parsed = err?.parsedBody as { reason?: string; error?: string } | null | undefined
         const reason =
-          parsed?.reason ?? parsed?.error ?? err?.body ?? err?.message ?? 'Failed to check POCH eligibility'
+          parsed?.reason ?? parsed?.error ?? 'We could not check your Proof of Clean Hands. Please try again.'
+        console.warn('[pochCheck] eligibility check failed:', err?.message ?? err)
         return { eligible: false, reason } as { eligible: boolean; reason?: string }
       }
     },

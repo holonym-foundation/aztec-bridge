@@ -107,30 +107,44 @@ export function sanitizeString(value: unknown, maxLength: number = MAX_STRING_LE
   return trimmed.slice(0, maxLength)
 }
 
+/**
+ * Trim a fixed-format field, rejecting anything longer than the format allows.
+ *
+ * Truncating first would let an over-long input be cut down to something the
+ * regex below then accepts: `<valid address>deadbeef` would come back as a
+ * valid-looking address the caller never received.
+ */
+function sanitizeFixedWidth(value: unknown, maxLength: number): string | undefined {
+  if (value == null || typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed.length || trimmed.length > maxLength) return undefined
+  return trimmed
+}
+
 /** Sanitize and validate an Ethereum address (0x + 40 hex). Returns lowercase or undefined. */
 export function sanitizeEthAddress(value: unknown): string | undefined {
-  const s = sanitizeString(value, 42)
+  const s = sanitizeFixedWidth(value, 42)
   if (!s || !ETH_ADDRESS_REGEX.test(s)) return undefined
   return s.toLowerCase()
 }
 
 /** Sanitize and validate a hex string (0x-prefixed). Returns lowercase or undefined. */
 export function sanitizeHexString(value: unknown, maxLength: number = MAX_STRING_LENGTH): string | undefined {
-  const s = sanitizeString(value, maxLength)
+  const s = sanitizeFixedWidth(value, maxLength)
   if (!s || !HEX_STRING_REGEX.test(s)) return undefined
   return s.toLowerCase()
 }
 
 /** Sanitize and validate an Ethereum tx hash (0x + 64 hex). Returns lowercase or undefined. */
 export function sanitizeTxHash(value: unknown): string | undefined {
-  const s = sanitizeString(value, 66)
+  const s = sanitizeFixedWidth(value, 66)
   if (!s || !TX_HASH_REGEX.test(s)) return undefined
   return s.toLowerCase()
 }
 
 /** Sanitize and validate a numeric string (integer). Returns the string or undefined. */
 export function sanitizeNumericString(value: unknown): string | undefined {
-  const s = sanitizeString(value, 78) // max 78 digits covers uint256
+  const s = sanitizeFixedWidth(value, 78) // max 78 digits covers uint256
   if (!s || !NUMERIC_STRING_REGEX.test(s)) return undefined
   return s
 }

@@ -1,31 +1,23 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import TextButton from './TextButton'
 import StyledImage from './StyledImage'
-import { Oval } from 'react-loader-spinner'
 import { BridgeDirection } from '@/types/bridge'
 import { useToast } from '@/hooks/useToast'
-import { extractErrorMessage } from '@/utils'
+import { extractErrorMessage, humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 import { parseUnits } from 'viem'
 import CongestionWarningModal from './model/CongestionWarningModal'
 import { useL2PendingTxCount, useNetworkHealth } from '@/hooks/useL2Operations'
 import { POCH_MINT_URL } from '@/config'
+import { PASSPORT_MAX_AMOUNT } from '@/config/env.config'
+import { pushNotification, dismissNotificationByKey } from '@/stores/useNotificationsStore'
 
+// Single-loader policy (#298): progress lives in the top mini progress bar
+// (BridgeHeader's LoadingBar), so the button no longer renders its own spinner.
+// It just shows a clean text state ("Bridging Tokens…", "Verifying…") that
+// tracks the same phase without a second, competing spinner.
 function LoadingContent({ label }: { label: string }) {
-  return (
-    <div className="flex justify-center gap-2">
-      <Oval
-        height="20"
-        width="20"
-        color="#ccc"
-        visible={true}
-        ariaLabel="oval-loading"
-        secondaryColor="#ccc"
-        strokeWidth={6}
-        strokeWidthSecondary={6}
-      />
-      <span>{label}</span>
-    </div>
-  )
+  return <span>{label}</span>
 }
 
 interface BridgeActionButtonProps {
@@ -37,9 +29,12 @@ interface BridgeActionButtonProps {
 
   // Binding guard: the connected (L1, L2) pair is a CONFLICT (the EVM wallet is
   // bound to a different Aztec account, or vice-versa). Bridging would deposit
-  // into a guaranteed-failing pair, so block up-front and name the linked wallet
-  // in the label rather than letting the user start it (issues #98/#130).
+  // into a guaranteed-failing pair, so block up-front (issues #98/#130). The
+  // button just disables with a concise reason; the full switch-your-wallet
+  // notice is pushed into the Messages feed by the parent (#297b).
   bindingBlocked?: boolean
+  // Retained for compatibility; the detailed switch-wallet copy now lives in the
+  // Messages feed rather than the button label, so the button no longer reads it.
   bindingBlockedLabel?: string
 
   // Connection states
@@ -79,6 +74,7 @@ interface BridgeActionButtonProps {
   // Faucet related
   isEligibleForFaucet: boolean
   needsGas?: boolean
+  needsTokens?: boolean
   needsTokensOnly?: boolean
 
   // SBT related
@@ -106,9 +102,11 @@ interface BridgeActionButtonProps {
   // Travel Rule: USD budget left before the threshold (undefined = disabled).
   travelRuleRemainingUsd?: number
   // USD held by an outstanding attestation reservation (already netted out of the remaining
-  // budgets above). When a block is charged to this, it's temporary — clears when the pending
-  // deposit confirms or the reservation expires (<= 30 min) — so we disable with a hold label
-  // rather than routing the user to Clean Hands verification.
+  // budgets above). A block charged to this is a temporary hold, not a permanent cap: it frees
+  // once the pending deposit settles (or the reservation is released), so we disable with a hold
+  // label rather than routing the user to Clean Hands verification. The hold can persist for
+  // other reasons too (e.g. a deposit stuck for lack of Fee Juice), so we never promise a fixed
+  // time for it to clear.
   reservedDepositUsd?: number
 
   // Operation completion state
@@ -122,7 +120,6 @@ function BridgeActionButton({
   isDisabled = false,
   disabledReason,
   bindingBlocked = false,
-  bindingBlockedLabel,
   isWaapConnected,
   connectWaapWallet,
   getWalletProvider,
@@ -149,6 +146,7 @@ function BridgeActionButton({
   withdrawTokensToL1Pending = false,
   isEligibleForFaucet,
   needsGas = false,
+  needsTokens = false,
   needsTokensOnly = false,
   hasL1SBT,
   hasL2SBT,
@@ -173,7 +171,23 @@ function BridgeActionButton({
 }: BridgeActionButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isOperationPending, setIsOperationPending] = useState(false)
+  // Transient amount-validation error, rendered inline under the button only. It is
+  // NEVER pushed into the persistent Messages feed (that made it feel un-dismissable,
+  // #332/#333) and it auto-clears the moment the amount becomes valid or is cleared.
+  const [amountError, setAmountError] = useState<string | null>(null)
   const notify = useToast()
+
+  useEffect(() => {
+    if (!inputAmount || parseFloat(inputAmount) > 0) setAmountError(null)
+  }, [inputAmount])
+
+  // Flag an empty/zero amount: inline field error (primary) plus a momentary, non-persisted
+  // toast. Focus returns to the amount input so the fix is one keystroke away.
+  const flagInvalidAmount = () => {
+    setAmountError('Please enter a valid amount')
+    notify.transient('error', 'Please enter a valid amount')
+    inputRef.current?.focus()
+  }
   const [showCongestionWarning, setShowCongestionWarning] = useState(false)
   const { data: pendingTxCount } = useL2PendingTxCount()
   const isCongested = pendingTxCount && pendingTxCount > 40
@@ -195,8 +209,7 @@ function BridgeActionButton({
   // Process operations for bridging or withdrawing
   const processBridgeOperation = async () => {
     if (!inputAmount || parseFloat(inputAmount) <= 0) {
-      notify('error', 'Please enter a valid amount')
-      inputRef.current?.focus()
+      flagInvalidAmount()
       return
     }
 
@@ -212,14 +225,22 @@ function BridgeActionButton({
       const operationType = getOperationType(direction)
       const errorMsg = extractErrorMessage(error)
 
+      console.error(`[BridgeActionButton] ${operationType} operation failed:`, error)
+      logError('Bridge operation failed', {
+        errorType: 'bridge_operation_failed',
+        operationType,
+        direction,
+        error: errorMsg,
+      })
+
       if (errorMsg.toLowerCase().includes('deposit limit')) {
-        notify('error', errorMsg)
+        notify('error', 'You have reached your deposit limit for now. It frees up as your recent deposits settle.')
       } else if (errorMsg.includes('insufficient')) {
         notify('error', `Insufficient funds for ${operationType} operation`)
       } else if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
         notify('error', `Transaction rejected by user`)
       } else {
-        notify('error', `${operationType.charAt(0).toUpperCase() + operationType.slice(1)} failed: ${errorMsg}`)
+        notify('error', `${operationType.charAt(0).toUpperCase() + operationType.slice(1)} failed. ${humanizeError(error)}`)
       }
     } finally {
       setIsOperationPending(false)
@@ -334,26 +355,46 @@ function BridgeActionButton({
         const decimals = 6 // USDC decimals
         const inputBigInt = BigInt(Math.floor(parseFloat(inputAmount || '0') * 10 ** decimals))
         if (inputBigInt > passportMaxAmount) {
-          const maxFormatted = (Number(passportMaxAmount) / 10 ** decimals).toFixed(2)
-          notify('error', {
-            heading: 'Amount Exceeds Human Passport Limit',
-            message: React.createElement(
-              'span',
-              null,
-              `Human Passport allows up to ${maxFormatted} USDC per transaction. `,
-              React.createElement(
-                'a',
-                {
-                  href: POCH_MINT_URL,
-                  target: '_blank',
-                  rel: 'noopener noreferrer',
-                  style: { color: '#BF1254', textDecoration: 'underline' },
+          // Two different blocks share this gate: the fixed per-transaction ceiling
+          // ($1,000) and a smaller leftover slice of the rolling daily limit. Name
+          // whichever one actually binds so the figure the user reads is truthful —
+          // showing the tiny daily remainder as a "per transaction" max is nonsense.
+          const perTxMaxUsd = Number(PASSPORT_MAX_AMOUNT) / 10 ** decimals
+          const dailyBinds = remainingDepositUsd != null && remainingDepositUsd < perTxMaxUsd
+          const verifyLink = React.createElement(
+            'a',
+            {
+              href: POCH_MINT_URL,
+              target: '_blank',
+              rel: 'noopener noreferrer',
+              style: { color: '#BF1254', textDecoration: 'underline' },
+            },
+            'Proof of Clean Hands',
+          )
+          notify(
+            'error',
+            dailyBinds
+              ? {
+                  heading: 'Amount Exceeds Your Daily Limit',
+                  message: React.createElement(
+                    'span',
+                    null,
+                    `You have $${remainingDepositUsd!.toFixed(2)} left of your daily limit. Verify `,
+                    verifyLink,
+                    ' to raise it.',
+                  ) as unknown as string,
+                }
+              : {
+                  heading: 'Amount Exceeds Human Passport Limit',
+                  message: React.createElement(
+                    'span',
+                    null,
+                    `Human Passport allows up to $${perTxMaxUsd.toLocaleString('en-US')} per transaction. Verify `,
+                    verifyLink,
+                    ' to raise your limit.',
+                  ) as unknown as string,
                 },
-                'get a Proof of Clean Hands',
-              ),
-              ' to remove this limit.',
-            ) as unknown as string,
-          })
+          )
           return
         }
       } catch {
@@ -361,8 +402,7 @@ function BridgeActionButton({
       }
     }
     if (!inputAmount || parseFloat(inputAmount) <= 0) {
-      notify('error', 'Please enter a valid amount')
-      inputRef.current?.focus()
+      flagInvalidAmount()
       return
     }
 
@@ -410,6 +450,45 @@ function BridgeActionButton({
   const travelRuleHeldOut =
     holdUsd > 0 && !travelRuleBlocked && travelRuleRemainingUsd != null && travelRuleRemainingUsd <= 0
   const pendingHoldBlocked = depositHeldOut || travelRuleHeldOut
+
+  // Full explanation for the temporary hold, delivered as a Messages entry (below) and carried
+  // on the disabled CTA's aria-label/title (SOP §6). Stays GENERAL: a hold can clear on its own
+  // when the pending deposit settles, but it can also linger for other reasons (a deposit stuck
+  // for lack of Fee Juice), so we never promise a fixed time. Names the reserved amount when the
+  // reservation figure is known.
+  const pendingHoldReason = pendingHoldBlocked
+    ? holdUsd > 0
+      ? `$${holdUsd.toFixed(2)} of your limit is held by a pending deposit. It frees up once that deposit settles.`
+      : 'Part of your limit is held by a pending deposit. It frees up once that deposit settles.'
+    : undefined
+
+  // Full explanation for a plain limit block (the entered amount exceeds what's left of the cap,
+  // or the cap is spent). Also delivered as a Messages entry and carried on the aria-label/title,
+  // so the button itself stays a short critical label instead of a wrapped paragraph (#415b).
+  const depositLimitReason =
+    depositLimitBlocked && !pendingHoldBlocked
+      ? remainingDepositUsd != null && remainingDepositUsd > 0
+        ? `That amount is over your remaining limit. You can bridge up to $${remainingDepositUsd.toFixed(2)} more right now.`
+        : 'You have reached your deposit limit for now. It frees up as your recent deposits settle.'
+      : undefined
+
+  // One reason string for the disabled CTA (pending hold wins, matching the label priority below).
+  const limitBlockReason = pendingHoldReason ?? depositLimitReason
+
+  // #415b: keep the full sentence OUT of the button. The button is a clean grayed control with a
+  // short critical label ("Limit held" / "Over your limit"); the full explanation lands here as a
+  // persistent, keyed Messages entry so paragraphs never wrap inside the button. Keyed upsert =
+  // one row, no spam; dismissed by key the moment the block clears.
+  useEffect(() => {
+    const key = 'bridge-deposit-limit'
+    if (pendingHoldReason) {
+      pushNotification({ type: 'warning', key, title: 'Deposit limit on hold', message: pendingHoldReason })
+    } else if (depositLimitReason) {
+      pushNotification({ type: 'warning', key, title: 'Over your deposit limit', message: depositLimitReason })
+    } else {
+      dismissNotificationByKey(key)
+    }
+  }, [pendingHoldReason, depositLimitReason])
 
   // Binding conflict is only meaningful once BOTH wallets are connected (it's
   // derived from the connected pair). Before that the button is a Connect CTA,
@@ -463,16 +542,14 @@ function BridgeActionButton({
     if (!isWaapConnected) return 'Connect Ethereum Wallet'
     if (!isAztecConnected) return 'Connect Aztec Wallet'
 
-    // Binding conflict: connected to the wrong pair — name the linked wallet so
-    // the user knows exactly which account to switch to before bridging.
-    if (bindingConflictBlocked) {
-      return bindingBlockedLabel || 'Switch to your linked wallet to continue'
-    }
+    // Binding conflict deliberately does NOT rewrite the label (#297b): the button
+    // stays a plain, disabled operation label and the concise reason renders under
+    // it, while the full switch-your-wallet notice lives in the Messages feed.
 
-    // Temporary reservation hold: a signed-but-unconfirmed deposit is holding the user's
-    // budget. Distinct from a permanent cap — say it clears itself so they wait, not verify.
+    // Temporary reservation hold: a signed-but-unconfirmed deposit is holding the user's budget.
+    // Short critical label only — the full sentence lives in Messages and on the aria-label (#415b).
     if (pendingHoldBlocked) {
-      return 'Pending deposit — limit frees in ≤30 min'
+      return 'Limit held'
     }
 
     // Travel Rule: passport tier exhausted, POCH required (deposits only)
@@ -480,16 +557,19 @@ function BridgeActionButton({
       return 'Verify with Clean Hands to bridge more'
     }
 
-    // Alpha deposit cap (deposits only)
+    // Alpha deposit cap (deposits only). Short critical label only — the figure and the full
+    // explanation live in Messages and on the aria-label, not wrapped inside the button (#415b).
     if (depositLimitBlocked) {
-      return remainingDepositUsd != null && remainingDepositUsd > 0
-        ? `Only $${remainingDepositUsd.toFixed(2)} left (Alpha limit)`
-        : 'Alpha Deposit Limit Reached'
+      return 'Over your limit'
     }
 
-    // Faucet
+    // Faucet — name what is actually missing (the faucet supplies both ETH gas and
+    // test USDC): tokens only when the user already has gas, gas only when they have
+    // tokens, or both.
     if (needsGas || needsTokensOnly) {
-      return needsTokensOnly ? 'Click to Get Tokens' : 'Click to Get Testnet ETH'
+      if (needsGas && needsTokens) return 'Click to Get Testnet ETH + USDC'
+      if (needsTokensOnly) return 'Click to Get Testnet USDC'
+      return 'Click to Get Testnet ETH'
     }
 
     // SBT requirements
@@ -510,16 +590,28 @@ function BridgeActionButton({
     return getOperationLabel(direction)
   }
 
+  // Binding conflict (#297b): the button is a plain disabled control; this concise
+  // reason renders under it. The full "switch to your linked pair (0x…)" notice is
+  // pushed into the Messages feed by the parent, not crammed into the button label.
+  const bindingShortReason = bindingConflictBlocked ? "Wallets don't match your linked pair" : undefined
+
   // Graceful states: when the button is disabled by an external gate whose reason isn't already
   // carried in the label (fuel / recipient / amount / auth), surface it right under the button
   // instead of leaving a silent greyed control. Suppressed while loading or on completion.
+  const effectiveDisabledReason = bindingShortReason ?? disabledReason
   const showDisabledReason =
-    !!disabledReason && (isDisabled || isButtonDisabled) && !showLoadingSpinner && !bridgeCompleted
+    !!effectiveDisabledReason && (isDisabled || isButtonDisabled) && !showLoadingSpinner && !bridgeCompleted
 
   return (
     <>
       <div className="w-full">
-        <TextButton onClick={handleButtonClick} disabled={isButtonDisabled || isDisabled} className="">
+        <TextButton
+          onClick={handleButtonClick}
+          disabled={isButtonDisabled || isDisabled}
+          className=""
+          title={limitBlockReason}
+          aria-label={limitBlockReason}
+        >
           {showLoadingSpinner ? (
             <LoadingContent label={getLoadingText()} />
           ) : bridgeCompleted ? (
@@ -532,7 +624,14 @@ function BridgeActionButton({
           )}
         </TextButton>
         {showDisabledReason && (
-          <p className="mt-1 text-center text-[11px] leading-[15px] font-medium text-[#B54708]">{disabledReason}</p>
+          <p className="mt-1 text-center text-[11px] leading-[15px] font-medium text-[#B54708]">
+            {effectiveDisabledReason}
+          </p>
+        )}
+        {amountError && !showLoadingSpinner && !bridgeCompleted && (
+          <p className="mt-1 text-center text-[11px] leading-[15px] font-medium text-[#D92D20]">
+            {amountError}
+          </p>
         )}
       </div>
 

@@ -45,7 +45,7 @@ export default function FuelClaimLinkModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className='text-lg font-semibold'>Share fuel claim link</h3>
-        <p className='text-sm text-latest-grey-600 mt-1'>
+        <p className='text-sm text-neutral-600 mt-1'>
           Send this link to <span className='font-mono'>{shortenAztec(recipient)}</span> through a trusted channel.
           Anyone with the link can pay gas to submit the claim, but the Fee Juice always lands at the encoded
           recipient address.
@@ -80,7 +80,7 @@ export default function FuelClaimLinkModal({
           <button
             type='button'
             onClick={onClose}
-            className='text-sm font-medium text-latest-grey-600 hover:text-latest-grey-900 px-3 py-1.5'
+            className='text-sm font-medium text-neutral-600 hover:text-latest-grey-900 px-3 py-1.5'
           >
             Close
           </button>

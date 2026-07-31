@@ -56,7 +56,7 @@ export default function MetaMaskPrompt({ onClose }: { onClose: () => void }) {
                 className='bg-[#F5F5F5] p-2 rounded-lg mb-6 flex items-center gap-4'
               >
                 <img src='/assets/svg/metamask.svg' alt='MetaMask' />
-                <p className='text-latest-grey-600 text-14'>
+                <p className='text-neutral-600 text-14'>
                   MetaMask is the world&apos;s most secure and flexible crypto wallet,
                   trusted by millions of users to buy, sell, and swap digital
                   assets.
@@ -89,7 +89,7 @@ export default function MetaMaskPrompt({ onClose }: { onClose: () => void }) {
                   alt=''
                   className='h-4 w-[14px]'
                 />
-                <p className='text-12 font-medium text-latest-grey-600'>
+                <p className='text-12 font-medium text-neutral-600'>
                   Secured by human.tech
                 </p>
               </motion.div>

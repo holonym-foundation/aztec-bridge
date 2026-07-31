@@ -1,4 +1,6 @@
 import { useToast } from '@/hooks/useToast'
+import { humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 
 export type L2ErrorType = 'BALANCE' | 'NODE' | 'CONTRACT' | 'TRANSACTION' | 'GENERAL'
 
@@ -29,19 +31,14 @@ export const useL2ErrorHandler = () => {
             ? error
             : 'Unknown error'
 
-    // Log the error for debugging
+    // Log the RAW error so it stays visible in the console and in Datadog metrics
+    // even though the user only ever sees the humanized copy below.
     console.error(`L2 ${type} Error:`, error)
-
-    // Operation-specific messages
-    const operationMessages = {
-      BALANCE: 'Failed to load the balance',
-      NODE: 'Failed to connect to the node',
-      CONTRACT: 'Failed to interact with the contract',
-      TRANSACTION: 'Failed to process the transaction',
-      GENERAL: 'An error occurred',
-    }
-
-    let fullMessage = ''
+    logError(
+      `L2 ${type} error`,
+      { errorType: type, rawMessage: errorMessage },
+      error instanceof Error ? error : undefined,
+    )
 
     // Check for wallet disconnect errors — silently return defaults.
     // The disconnect handler in walletStore already shows a toast when
@@ -61,20 +58,11 @@ export const useL2ErrorHandler = () => {
       return getDefaultValue<T>(type)
     }
 
-    // Check for Aztec network / node errors (any node URL or Failed to fetch)
-    const isNodeUnavailable =
-      errorMessage.includes('500 from server') ||
-      errorMessage.includes('Failed to fetch') ||
-      /aztec.*\.(zkv\.xyz|aztec-labs\.com)/i.test(errorMessage)
-    if (isNodeUnavailable) {
-      fullMessage =
-        'Unable to connect to Aztec network. The bridge service is temporarily unavailable. Please check back later.'
-      fullMessage = `${operationMessages[type]} - ${fullMessage}`
-    } else {
-      fullMessage = `${operationMessages[type]} - ${errorMessage}`
-    }
-
-    notify('error', fullMessage)
+    // Everything else is routed through the central humanizer so the raw
+    // viem / contract-revert / RPC string is NEVER shown to the user. The
+    // balance surface gets an operation-specific lead in front of it.
+    const lead = type === 'BALANCE' ? "Couldn't load your balance right now. " : ''
+    notify('error', `${lead}${humanizeError(error)}`.trim())
     return getDefaultValue<T>(type)
   }
 

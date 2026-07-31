@@ -13,8 +13,9 @@ import { isConsumedMessageError } from '@/utils/resumability'
 import { logInfo, logError, DatadogUserAction } from '@/utils/datadog'
 
 export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
-  const { setProgressStep, setTransactionUrls, clearRecovery } = useBridgeStore()
-  const { aztecAddress, aztecLoginMethod } = useWalletStore()
+  const { setProgressStep, setTransactionUrls, clearRecovery, markOperationLive, clearOperationLive } =
+    useBridgeStore()
+  const { aztecAddress, aztecLoginMethod, signWaapMessage } = useWalletStore()
   const walletAdapter = useWalletAdapter()
   const notify = useToast()
   const bridge = useBridge()
@@ -52,6 +53,10 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
       setTransactionUrls(claimData.l1TxUrl, null)
     }
 
+    // This resume IS the thing driving the operation now, so Activity must stop
+    // offering a second Resume for it while this one runs (cleared in onSettled).
+    markOperationLive(claimData.operationId)
+
     const result = await bridge.resume(claimData.operationId, {
       walletAdapter: walletAdapter as any,
       l1Address,
@@ -61,8 +66,13 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
       },
       signMessage: async (msg: string) => {
         verifyEncryptionDomain()
-        const sig = await requestWaapWallet(WAAP_METHOD.personal_sign, [msg, l1Address])
-        return sig as string
+        // Cached signer (not raw personal_sign): resuming in the same session
+        // reuses the "Unlock My Secrets" signature from the original deposit, so
+        // it never re-prompts. The message is byte-identical, so the cache key
+        // (address+message) matches (#408 / P1).
+        const sig = await signWaapMessage(msg)
+        if (!sig) throw new Error('Failed to sign message')
+        return sig
       },
       onStep: (step, status) => setProgressStep(step, status),
       onEvent: (event: BridgeEvent) => {
@@ -168,6 +178,11 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
             refreshL2Balances()
             setTimeout(refreshL2Balances, 6000)
             setTimeout(refreshL2Balances, 15000)
+            // The op just reached its terminal 'completed' status on the backend.
+            // Refetch operations (prefix-matched, since the query keys on the
+            // connected wallet, not this deposit's l1Address) so Activity
+            // re-derives it as done rather than still resumable.
+            queryClient.invalidateQueries({ queryKey: ['bridgeOperations'] })
             break
           case BridgeEventType.ATTESTATION_FETCH:
             logInfo('Resume attestation fetch', {
@@ -248,6 +263,9 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
     onSuccess: (txHash) => {
       refreshL2Balances()
       if (onSuccess) onSuccess(txHash)
+    },
+    onSettled: (_data, _error, claimData) => {
+      clearOperationLive(claimData?.operationId)
     },
   })
 }

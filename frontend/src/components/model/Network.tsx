@@ -11,7 +11,7 @@ function FilterButton({ active, children, className = '', ...props }: React.Comp
       className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200 ${
         active
           ? 'bg-latest-red-100 text-white'
-          : 'bg-latest-grey-200 text-latest-grey-600 hover:bg-latest-grey-300'
+          : 'bg-latest-grey-200 text-neutral-600 hover:bg-latest-grey-300'
       } ${className}`}
     >
       {children}
@@ -99,7 +99,7 @@ export default function Network({ networkData, setNetworkData, handleClose, dire
                 key={network.id}
                 onClick={() => !isLoading && handleNetworkSelect(network)}
                 className={`hover:bg-latest-red-100 cursor-pointer p-2.5 flex gap-2 transition-colors duration-200 ${
-                  isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                  isLoading ? 'opacity-40 cursor-not-allowed' : ''
                 }`}
                 role="button"
                 tabIndex={0}
@@ -124,7 +124,7 @@ export default function Network({ networkData, setNetworkData, handleClose, dire
             <StyledImage src='/assets/svg/silk.svg' alt='Silk' className='h-10 w-10' />
             <div>
               <p className='text-latest-black-100 text-16 font-medium'>silk.sc</p>
-              <p className='text-latest-grey-600 text-14 font-medium'>Not connected</p>
+              <p className='text-neutral-600 text-14 font-medium'>Not connected</p>
             </div>
           </div>
           <img src='/assets/svg/Toggle.svg' alt='Toggle' />

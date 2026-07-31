@@ -3,19 +3,25 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
+import { Tooltip as ReactTooltip } from 'react-tooltip'
 import { useCountdown } from 'usehooks-ts'
 import LoadingStepsBars from '@/components/LoadingStepsBars'
+import CryptexAnimation from '@/components/CryptexAnimation'
 import StyledImage from '@/components/StyledImage'
 import TextButton from '@/components/TextButton'
 import type { LoadingStep } from '@/stores/bridgeStore'
 import { STORAGE_KEYS } from '@human.tech/clean.sdk'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
-import { exportClaimData, exportWithdrawalData } from '@/utils'
+import { exportClaimData, exportWithdrawalData, humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useToast } from '@/hooks/useToast'
 import { isResumable, hasPossibleLockedFunds } from '@/utils/resumability'
+import { useResumeAttemptsStore } from '@/stores/useResumeAttemptsStore'
+import { pushNotification, dismissNotificationByKey } from '@/stores/useNotificationsStore'
+import { openSupport } from '@/utils/support'
 import { BridgeDirection } from '@/types/bridge'
 
 export interface ProgressCardProps {
@@ -153,6 +159,16 @@ function formatSeconds(totalSeconds: number): string {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
 
+// Once the estimate reaches 0 the countdown must stop showing a frozen "00:00"
+// (reads as broken). It switches to a reassuring label instead: "Any moment now"
+// at/just past 0, then "Taking a little longer" once it runs this many seconds
+// past the estimate. Reassuring, never alarming.
+const OVERRUN_GRACE_SECONDS = 45
+
+// Stable feed key for the calm "keep this page open" in-progress notice, so it
+// upserts to a single Messages row and can be cleared by key on completion.
+const STAY_ON_PAGE_KEY = 'progress-stay-on-page'
+
 export default function ProgressCard({
   steps,
   progressStep,
@@ -173,11 +189,15 @@ export default function ProgressCard({
   const notify = useToast()
 
   const { waapAddress: l1Address, signWaapMessage } = useWalletStore()
-  const { setRecovery, setWithdrawalRecovery, setDirection } = useBridgeStore()
+  const { setRecovery, setWithdrawalRecovery, setDirection, isPrivacyModeEnabled, setPrivacyModeEnabled } =
+    useBridgeStore()
   const { data: operations } = useBridgeOperations()
   const [resuming, setResuming] = useState(false)
 
   const isAllComplete = steps.every((step) => step.status === 'completed')
+  // The pending/working state — neither finished nor failed. Drives the redesigned layout
+  // (ticker + top From/To panel + in-clock countdown) while success/failure keep their own.
+  const isInProgress = !isAllComplete && !hasError
 
   // The L2 claim ("Claiming tokens on Aztec Network") is the step that spends bridged
   // Fee Juice — the one that stalls when gas runs short. Detect it by label so both the
@@ -203,6 +223,15 @@ export default function ProgressCard({
   // two disagree we surface a warning so the user doesn't resume in the wrong mode.
   const modeKnown = isPrivate !== undefined
   const privacyMismatch = modeKnown && currentPrivacyMode !== undefined && isPrivate !== currentPrivacyMode
+
+  // The operation on screen is private, so match the user's intent by enabling Privacy Mode
+  // automatically instead of warning about a mismatch. Guarded to fire only while the op is
+  // private and the toggle is still off, so it settles after a single set and never loops.
+  useEffect(() => {
+    if (isPrivate === true && !isPrivacyModeEnabled) {
+      setPrivacyModeEnabled(true)
+    }
+  }, [isPrivate, isPrivacyModeEnabled, setPrivacyModeEnabled])
   // Fall back to offering top-up only when the deposit already landed on L1 (l1TxUrl set)
   // — i.e. we're at/after the claim boundary where Fee Juice matters. A pre-deposit
   // failure moved no funds and needs no gas top-up.
@@ -220,6 +249,25 @@ export default function ProgressCard({
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null
     )
   }, [operations, direction])
+
+  // This op has failed resume enough times that re-offering the naive full-width Resume
+  // just loops. The detail + support live in the Messages feed and the status chip now, so
+  // the card only softens to a calm "Get help" line (see the escalation in progress/resume).
+  const stuckCount = useResumeAttemptsStore((s) => (resumableOp ? (s.attempts[resumableOp.id]?.count ?? 0) : 0))
+  const escalated = stuckCount >= 3
+
+  // The primary failure CTA is one of three: escalated support ("Get help"), a Fee-Juice top-up,
+  // or resume. Resume is only a REAL action when there's a resumable backend op to hand off to
+  // /progress/resume. When there isn't, the button renders inactive (opacity-40, not-allowed)
+  // rather than a live-looking dead button — the "View in Activity" link below is the escape.
+  const primaryMode: 'help' | 'fuel' | 'resume' =
+    escalated && !fuelErrorDetected ? 'help' : fuelErrorDetected ? 'fuel' : 'resume'
+  const resumeInactive = primaryMode === 'resume' && !resumableOp
+  // #458: a "pre-deposit" failure moved no funds and created no resumable op, so
+  // "Resume claim" is meaningless — it renders as a dead greyed button. The whole
+  // transfer was cancelled before anything moved, so the right action is a LIVE
+  // "Try again" that returns to the bridge to start fresh.
+  const startOver = failure.kind === 'pre-deposit'
 
   // Mirrors the Activity page/drawer resume handler (activity/page.tsx isn't importable):
   // decrypt to prove wallet ownership, stash recovery data, then hand off to /progress/resume.
@@ -310,8 +358,12 @@ export default function ProgressCard({
         router.push('/progress/resume')
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to decrypt'
-      notify('error', msg)
+      console.error('[ProgressCard] resume/decrypt failed:', err)
+      logError('Resume decrypt failed', {
+        errorType: 'resume_decrypt_failed',
+        error: err instanceof Error ? err.message : String(err),
+      })
+      notify('error', humanizeError(err))
     } finally {
       setResuming(false)
     }
@@ -382,6 +434,50 @@ export default function ProgressCard({
   const formattedCountdown = formatSeconds(count)
   const initialEstimateFormatted = formatSeconds(estimatedTimeSeconds)
 
+  // `useCountdown` clamps at 0, so `count` never goes negative — it just sits at
+  // "00:00" while the transfer keeps running. That frozen zero is what reads as
+  // broken (#407). We measure how long we've been parked at 0 separately, and once
+  // the countdown hits 0 the display stops showing a number entirely.
+  const [overrunSeconds, setOverrunSeconds] = useState(0)
+  useEffect(() => {
+    if (count > 0 || !isInProgress) {
+      setOverrunSeconds(0)
+      return
+    }
+    const id = setInterval(() => setOverrunSeconds((s) => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [count, isInProgress])
+
+  // At/past 0 the number is replaced by a reassuring label; while counting, the
+  // label is null and the numeric "MM:SS" carries the estimate. Exactly one of the
+  // two is ever non-null in progress, so the mini-bar never renders a stuck 00:00.
+  const countdownRemaining = count > 0 ? formattedCountdown : null
+  const countdownLabel =
+    count > 0 ? null : overrunSeconds < OVERRUN_GRACE_SECONDS ? 'Any moment now' : 'Taking a little longer'
+
+  // Stream the live countdown to the mini-bar (BridgeHeader), which renders it on the left in
+  // place of the decorative glyph. BridgeHeader is a sibling and the shared store is off-limits,
+  // so the value crosses via a window event. `remaining` carries the number while counting;
+  // `label` carries the graceful zero/overrun copy once it reaches 0. Both null while not in
+  // progress, and cleared on unmount so the glyph returns when the user leaves the screen.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.dispatchEvent(
+      new CustomEvent('shield:progress-timer', {
+        detail: {
+          remaining: isInProgress ? countdownRemaining : null,
+          label: isInProgress ? countdownLabel : null,
+        },
+      }),
+    )
+  }, [isInProgress, countdownRemaining, countdownLabel])
+  useEffect(() => {
+    return () => {
+      if (typeof window === 'undefined') return
+      window.dispatchEvent(new CustomEvent('shield:progress-timer', { detail: { remaining: null } }))
+    }
+  }, [])
+
   // Time taken = total estimate - remaining
   const timeTakenSeconds = estimatedTimeSeconds - count
   const formattedTimeTaken = formatSeconds(timeTakenSeconds)
@@ -405,6 +501,35 @@ export default function ProgressCard({
     }
   }
 
+  // Calm, informational "keep this page open" notice, surfaced in the Messages feed
+  // while the transfer is actively in progress. Type `info` so it never hijacks the
+  // header ticker (which only surfaces warning/error) — it stays a quiet record that
+  // also carries the recovery-file download as an inline action. Keyed so it upserts
+  // to one row and clears cleanly the moment the transfer is no longer in progress
+  // (completed or failed), so it never lingers on the idle bridge later.
+  useEffect(() => {
+    if (!isInProgress) {
+      dismissNotificationByKey(STAY_ON_PAGE_KEY)
+      return
+    }
+    pushNotification({
+      type: 'info',
+      key: STAY_ON_PAGE_KEY,
+      title: 'Keep this page open',
+      message:
+        'Keep this page open while your transfer completes. If it is interrupted you can resume from Activity, or download a recovery file to restore it later.',
+      action:
+        direction && hasBackup ? { label: 'Download recovery file', onClick: handleExportBackup } : undefined,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInProgress, direction, hasBackup])
+
+  // Leaving the progress screen (unmount) also retires the notice, so a mid-transfer
+  // navigation away can't leave it sitting in the persisted feed.
+  useEffect(() => {
+    return () => dismissNotificationByKey(STAY_ON_PAGE_KEY)
+  }, [])
+
   const copyError = () => {
     if (!errorMessage) return
     navigator.clipboard
@@ -416,6 +541,23 @@ export default function ProgressCard({
   const heading = hasError ? failure.heading : isAllComplete ? 'Transaction complete' : 'Transaction in progress'
 
   const showBackButton = isAllComplete || hasError
+
+  // The From/To marks follow the direction, so each mark always matches the network named beside
+  // it: a deposit (L1→L2) runs Eth→Aztec, a withdrawal (L2→L1) runs Aztec→Eth. The Aztec mark
+  // keeps its dark-chip treatment. Direction unknown falls back to the deposit orientation.
+  const isWithdrawal = direction === 'L2_TO_L1'
+  const renderEthMark = (small = false) => (
+    <StyledImage src="/assets/svg/ethLogo.svg" alt="" className={small ? 'h-5 w-5' : 'h-6 w-6'} />
+  )
+  const renderAztecMark = (small = false) => (
+    <span
+      className={`inline-flex ${small ? 'h-5 w-5' : 'h-6 w-6'} shrink-0 items-center justify-center rounded-full bg-[#0A0A0A]`}
+    >
+      <StyledImage src="/assets/svg/aztec.svg" alt="" className={small ? 'h-[15px] w-[15px]' : 'h-[18px] w-[18px]'} />
+    </span>
+  )
+  const renderFromMark = (small = false) => (isWithdrawal ? renderAztecMark(small) : renderEthMark(small))
+  const renderToMark = (small = false) => (isWithdrawal ? renderEthMark(small) : renderAztecMark(small))
 
   // One compact, icon-led explorer-link row used across every state (in-progress, success,
   // failure). Kept near the status so it never sinks to the bottom of the card where the big
@@ -449,36 +591,155 @@ export default function ProgressCard({
     ) : null
 
   return (
-    <div>
-      {/* Warning banner — only when in progress */}
-      {!isAllComplete && !hasError && (
-        <div className="bg-light-yellow border border-dark-yellow/20 rounded-md mt-2 px-3 py-2">
-          <p className="text-xs text-dark-yellow font-medium text-center">
-            Please don't reload or close this page, or it may be difficult to recover your funds.
-          </p>
+    <div className="flex h-full flex-col">
+      {/* In-progress layout: the title leads, the From/To + amount panel sits centered in the
+          space freed by moving the countdown to the mini-bar, and the step-dots + status line
+          close it out. The single do-not-reload indicator is the mini-bar pill (no in-card banner). */}
+      {isInProgress && (
+        <div className="flex min-h-full flex-col justify-center py-4">
+          <p className="text-center font-semibold text-md">Transaction in progress</p>
+
+          {/* Cryptex — concentric cipher rings settling around an Aztec diamond, filling the
+              slack the fixed-height card leaves above the From/To panel. Decorative and
+              reassuring ("privately processing"), never competing with the progress bar or
+              status line. In-progress only; success/failure keep their own content. */}
+          <CryptexAnimation height={132} className="mt-1" />
+
+          {/* Privacy-mode mismatch — a public operation is on screen while the live toggle is on.
+              The private case auto-enables Privacy Mode (no warning), so only the public case
+              surfaces here. Concise, icon-led, only on that edge case. */}
+          {privacyMismatch && !isPrivate && (
+            <div className="mx-auto mt-2 flex max-w-sm items-start gap-1.5 rounded-md bg-light-yellow px-2.5 py-1.5">
+              <Icon icon="ph:warning-fill" width={13} height={13} className="mt-[1px] flex-shrink-0 text-dark-yellow" />
+              <p className="text-[11px] font-medium leading-snug text-dark-yellow">
+                This transfer is Public, but Privacy Mode is on.
+              </p>
+            </div>
+          )}
+
+          {/* From/To + amount panel, absorbing the recovery-backup control (top-left), the
+              PUBLIC/PRIVATE mode pill (top-right), and the explorer link (View L1 Tx). */}
+          <div className="bg-[#F5F5F5] rounded-md mt-3 p-4">
+            <div className="flex items-center justify-between">
+              {direction && hasBackup ? (
+                <button
+                  onClick={handleExportBackup}
+                  data-tooltip-id="progress-recovery-tip"
+                  data-tooltip-content="Export a recovery backup. Save this so you can recover your funds if the page closes."
+                  aria-label="Export a recovery backup"
+                  className="relative flex h-7 w-7 items-center justify-center rounded-full bg-[#047857]/[0.10] text-[#047857] transition-colors hover:bg-[#047857]/[0.18] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]/40"
+                >
+                  <Icon icon="ph:key" width={15} height={15} />
+                  <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#047857]" />
+                </button>
+              ) : (
+                <span className="h-7 w-7" aria-hidden="true" />
+              )}
+              {modeKnown && (
+                <div
+                  className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    isPrivate ? 'bg-[#FDE7F3] text-[#81133B]' : 'bg-[#EEF1FB] text-[#17235E]'
+                  }`}
+                  title={isPrivate ? 'This transfer runs in Private mode' : 'This transfer runs in Public mode'}
+                >
+                  <Icon icon={isPrivate ? 'ph:shield-check-fill' : 'ph:eye-bold'} width={12} height={12} />
+                  {isPrivate ? 'Private' : 'Public'}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-between mt-3">
+              <div>
+                <p className="text-14 font-semibold text-latest-grey-100">From</p>
+                <div className="flex gap-2 mt-2">
+                  {renderFromMark()}
+                  <p className="text-16 font-medium text-latest-black-100 w-[106px]">{fromNetwork}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-14 font-semibold text-latest-grey-100">To</p>
+                <div className="flex gap-2 mt-2">
+                  {renderToMark()}
+                  <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
+                </div>
+              </div>
+            </div>
+            <hr className="text-latest-grey-300 my-3" />
+            <p className="text-32 text-black font-medium text-center">{amountDisplay}</p>
+            {fuelBreakdown && (
+              <p className="text-center text-[11px] leading-tight font-medium text-latest-grey-500 mt-0.5">
+                {fuelBreakdown.bridgeAmount} to bridge + {fuelBreakdown.fuelAmount}
+              </p>
+            )}
+            {explorerLinks}
+            <ReactTooltip id="progress-recovery-tip" place="top" className="z-[100]" style={{ fontSize: '11px', maxWidth: '220px' }} />
+          </div>
+
+          {/* Step-dots + live status line ("Exiting from Aztec…"). */}
+          <div className="mt-4">
+            <LoadingStepsBars steps={steps} currentStep={progressStep - 1} />
+          </div>
+
+          {/* Calm, reassuring "stay on this page" notice — informational, never a red alert.
+              Reframes the old "do not reload" banner as helpful guidance and points to the two
+              recovery paths (resume from Activity, or download a recovery file). Only shown while
+              in progress, so a completed/failed transfer never carries it. */}
+          <div className="mx-auto mt-3 flex max-w-sm items-start gap-2 rounded-md bg-[#F5F5F5] px-3 py-2">
+            <Icon icon="ph:info" width={14} height={14} className="mt-[1px] flex-shrink-0 text-latest-grey-500" />
+            <div className="text-[11px] font-medium leading-snug text-latest-grey-500">
+              <p>
+                Keep this page open while your transfer completes. If it is interrupted you can resume from
+                Activity, or download a recovery file to restore it later.
+              </p>
+              {direction && hasBackup && (
+                <button
+                  onClick={handleExportBackup}
+                  className="mt-1 inline-flex items-center gap-1 font-semibold text-[#047857] underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                >
+                  <Icon icon="ph:download-simple" width={13} height={13} />
+                  Download recovery file
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Escape hatch during the L2 claim: the claim pays gas from bridged Fee Juice and can
+              loop/retry when it runs short. Offer a top-up route so the user isn't forced to wait
+              out the retry loop. Subtle — the claim usually succeeds on its own. */}
+          {claimStepActive && (
+            <div className="mt-3 flex justify-center">
+              <button
+                onClick={() => router.push('/fee-juice?resume=1')}
+                className="inline-flex items-center gap-1 text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"
+              >
+                <Icon icon="ph:gas-pump" width={13} height={13} className="shrink-0" />
+                Not enough gas? Top up Fee Juice
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Progress Card */}
+      {/* Progress Card — success and failure states keep the icon-led card. */}
+      {!isInProgress && (
       <div className="bg-white rounded-md mt-2 p-4 relative">
         {/* Encrypted-backup export — a small icon affordance in the top-right rather than a
             full-width button. Recovery-critical, so it stays in the transaction frame, but
             it must not dominate the layout. The green dot marks it as an available action. */}
-        {direction && hasBackup && !isAllComplete && (
+        {direction && hasBackup && hasError && (
           <button
             onClick={handleExportBackup}
             title="Export an encrypted local backup. Your data is already backed up. This saves a copy for manual recovery."
             aria-label="Export an encrypted local backup"
             className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-[#047857]/[0.10] text-[#047857] transition-colors hover:bg-[#047857]/[0.18]"
           >
-            <Icon icon="ph:download-simple-bold" width={16} height={16} />
+            <Icon icon="ph:key" width={16} height={16} />
             <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#047857]" />
           </button>
         )}
         {/* PUBLIC/PRIVATE badge — pinned top-left, mirroring the export button top-right. Derived
             from the operation's own mode, so a resumed public claim always reads PUBLIC even when
             Privacy Mode is toggled on. Icon-led, so it costs no vertical space in the flow. */}
-        {modeKnown && (
+        {modeKnown && !isInProgress && (
           <div
             className={`absolute left-3 top-3 inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[10px] font-semibold uppercase tracking-wide ${
               isPrivate ? 'bg-[#FDE7F3] text-[#81133B]' : 'bg-[#EEF1FB] text-[#17235E]'
@@ -489,7 +750,7 @@ export default function ProgressCard({
             {isPrivate ? 'Private' : 'Public'}
           </div>
         )}
-        <div className="flex items-center justify-center">
+        <div className="flex flex-col items-center justify-center">
           {isAlreadyCompleted ? (
             <Icon icon="ph:check-circle-fill" width={48} height={48} className="text-[#047857]" />
           ) : hasError ? (
@@ -521,16 +782,14 @@ export default function ProgressCard({
 
         {hasError && <p className="text-center text-12 text-latest-grey-500 mt-1 px-2">{failure.message}</p>}
 
-        {/* Privacy-mode mismatch warning — the operation on screen was created in the opposite mode
-            from the live toggle (e.g. resuming a public claim while Privacy Mode is on). Concise,
-            icon-led, only rendered on the mismatch edge case so it never eats the no-scroll budget. */}
-        {privacyMismatch && (
+        {/* Privacy-mode mismatch warning — a public operation is on screen while Privacy Mode is on
+            (e.g. resuming a public claim). The private case auto-enables Privacy Mode instead of
+            warning, so only the public case renders here, keeping it inside the no-scroll budget. */}
+        {privacyMismatch && !isPrivate && (
           <div className="mt-2 flex items-start gap-1.5 rounded-md bg-light-yellow px-2.5 py-1.5">
             <Icon icon="ph:warning-fill" width={13} height={13} className="mt-[1px] flex-shrink-0 text-dark-yellow" />
             <p className="text-[11px] font-medium leading-snug text-dark-yellow">
-              {isPrivate
-                ? 'This transfer is Private, but Privacy Mode is off.'
-                : 'This transfer is Public, but Privacy Mode is on.'}
+              This transfer is Public, but Privacy Mode is on.
             </p>
           </div>
         )}
@@ -544,37 +803,23 @@ export default function ProgressCard({
           <LoadingStepsBars steps={steps} currentStep={progressStep - 1} />
         </div>
 
-        {!hasError && (
+        {/* Completed state summary — final estimate + total time taken. */}
+        {isAllComplete && (
           <>
-            <hr className={`text-latest-grey-300 ${isAllComplete ? 'my-2' : 'my-3'}`} />
+            <hr className="text-latest-grey-300 my-2" />
             <div className="flex justify-between mt-[2px]">
               <p className="text-14 font-medium text-latest-grey-100">Estimated time </p>
-              <p className="font-semibold text-14">~{isAllComplete ? initialEstimateFormatted : formattedCountdown}</p>
+              <p className="font-semibold text-14">~{initialEstimateFormatted}</p>
             </div>
-            {isAllComplete && (
-              <div className="flex justify-between mt-[2px]">
-                <p className="text-14 font-medium text-latest-grey-100">Total time taken </p>
-                <p className="font-semibold text-14">{formattedTimeTaken}</p>
-              </div>
-            )}
+            <div className="flex justify-between mt-[2px]">
+              <p className="text-14 font-medium text-latest-grey-100">Total time taken </p>
+              <p className="font-semibold text-14">{formattedTimeTaken}</p>
+            </div>
           </>
         )}
 
-        {/* Escape hatch during the L2 claim: the claim pays gas from bridged Fee Juice and
-            can loop/retry when it runs short. Offer a top-up route so the user isn't forced
-            to wait out the retry loop. Subtle — the claim usually succeeds on its own. */}
-        {claimStepActive && (
-          <div className="mt-3 flex justify-center">
-            <button
-              onClick={() => router.push('/fee-juice?resume=1')}
-              className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"
-            >
-              Not enough gas? Top up Fee Juice
-            </button>
-          </div>
-        )}
-
       </div>
+      )}
 
       {/* Transaction Details — on a failure this collapses to a single compact line
           (from → to · amount) to stay inside the no-scroll budget while still anchoring
@@ -583,37 +828,37 @@ export default function ProgressCard({
       {hasError ? (
         <div className="bg-[#F5F5F5] rounded-md mt-3 px-4 py-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
           <span className="inline-flex items-center gap-1.5">
-            <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-5 w-5" />
+            {renderFromMark(true)}
             <span className="text-14 font-medium text-latest-black-100">{fromNetwork}</span>
           </span>
           <Icon icon="ph:arrow-right-bold" width={13} height={13} className="text-latest-grey-100" />
           <span className="inline-flex items-center gap-1.5">
-            <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-5 w-5" />
+            {renderToMark(true)}
             <span className="text-14 font-medium text-latest-black-100">{toNetwork}</span>
           </span>
           <span className="text-latest-grey-300">·</span>
           <span className="text-16 font-semibold text-latest-black-100">{amountDisplay}</span>
         </div>
-      ) : (
-        <div className={`bg-[#F5F5F5] rounded-md ${isAllComplete ? 'mt-2 px-4 py-3' : 'mt-3 p-4'}`}>
+      ) : isAllComplete ? (
+        <div className="bg-[#F5F5F5] rounded-md mt-2 px-4 py-3">
           <div className="flex justify-between">
             <div>
               <p className="text-14 font-semibold text-latest-grey-100">From</p>
-              <div className={`flex gap-2 ${isAllComplete ? 'mt-1.5' : 'mt-2'}`}>
-                <StyledImage src="/assets/svg/ethLogo.svg" alt="" className="h-6 w-6" />
+              <div className="flex gap-2 mt-1.5">
+                {renderFromMark()}
                 <p className="text-16 font-medium text-latest-black-100 w-[106px]">{fromNetwork}</p>
               </div>
             </div>
             <div>
               <p className="text-14 font-semibold text-latest-grey-100">To</p>
-              <div className={`flex gap-2 ${isAllComplete ? 'mt-1.5' : 'mt-2'}`}>
-                <StyledImage src="/assets/svg/aztec.svg" alt="" className="h-6 w-6" />
+              <div className="flex gap-2 mt-1.5">
+                {renderToMark()}
                 <p className="text-16 font-medium text-latest-black-100 w-[106px]">{toNetwork}</p>
               </div>
             </div>
           </div>
-          <hr className={`text-latest-grey-300 ${isAllComplete ? 'my-2' : 'my-3'}`} />
-          <p className={`${isAllComplete ? 'text-26' : 'text-32'} text-black font-medium text-center`}>{amountDisplay}</p>
+          <hr className="text-latest-grey-300 my-2" />
+          <p className="text-26 text-black font-medium text-center">{amountDisplay}</p>
           {fuelBreakdown && (
             <p className="text-center text-[11px] leading-tight font-medium text-latest-grey-500 mt-0.5">
               {/* bridgeAmount/fuelAmount strings already include their own
@@ -623,7 +868,7 @@ export default function ProgressCard({
             </p>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* Already-completed recovery — the deposit's L1→L2 message was already consumed, so a
           Resume would just re-fail. Lead the user to Activity / their L2 balance instead, with a
@@ -632,18 +877,18 @@ export default function ProgressCard({
         <div className="mt-3 mb-6 flex flex-col items-center gap-2">
           <div className="flex w-full items-stretch gap-2">
             <button
-              onClick={() => router.push('/activity')}
-              className="flex-[8_1_0%] rounded-lg bg-[#047857] py-[10px] font-semibold text-white transition-opacity hover:opacity-80"
-            >
-              View in Activity
-            </button>
-            <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/?app=1')}
               title="Back to main screen"
               aria-label="Back to main screen"
               className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"
             >
               <Icon icon="ph:arrow-left-bold" width={18} height={18} />
+            </button>
+            <button
+              onClick={() => router.push('/activity')}
+              className="flex-[8_1_0%] rounded-lg bg-[#047857] py-[10px] font-semibold text-white transition-opacity hover:opacity-80"
+            >
+              View in Activity
             </button>
           </div>
         </div>
@@ -651,27 +896,50 @@ export default function ProgressCard({
 
       {/* Error recovery actions — the primary CTA (resume, or top-up for a diagnosed fuel
           shortfall) shares one row with a real back button in an ~80/20 split. The alternate
-          recovery path and the Activity link ride underneath as light text links, so the whole
-          block stays inside the no-scroll budget instead of stacking full-width pills. */}
+          recovery path and the Activity link sit directly beneath the CTA as light text links,
+          grouped tightly with it rather than floated to the card footer. */}
       {hasError && !isAlreadyCompleted && direction && (
-        <div className="mt-3 mb-6 flex flex-col items-center gap-2">
+        <div className="mt-4 mb-6 flex flex-col items-center gap-2">
           <div className="flex w-full items-stretch gap-2">
             <button
-              onClick={fuelErrorDetected ? () => router.push('/fee-juice?resume=1') : handleResumeClick}
-              disabled={!fuelErrorDetected && resuming}
-              className={`flex-[8_1_0%] rounded-lg py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60 ${
-                fuelErrorDetected ? 'bg-[#81133B]' : 'bg-[#17235E]'
-              }`}
-            >
-              {fuelErrorDetected ? 'Top up Fee Juice' : resuming ? 'Resuming…' : resumeLabel}
-            </button>
-            <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/?app=1')}
               title="Back to main screen"
               aria-label="Back to main screen"
               className="flex flex-[2_1_0%] items-center justify-center rounded-lg border border-latest-grey-300 text-latest-grey-100 transition-colors hover:border-latest-black-100 hover:text-latest-black-100"
             >
               <Icon icon="ph:arrow-left-bold" width={18} height={18} />
+            </button>
+            <button
+              onClick={
+                startOver
+                  ? () => router.push('/?app=1')
+                  : resumeInactive
+                    ? undefined
+                    : primaryMode === 'help'
+                      ? openSupport
+                      : primaryMode === 'fuel'
+                        ? () => router.push('/fee-juice?resume=1')
+                        : handleResumeClick
+              }
+              disabled={!startOver && (resumeInactive || (primaryMode === 'resume' && resuming))}
+              aria-disabled={!startOver && resumeInactive}
+              className={`flex-[8_1_0%] rounded-lg py-[10px] font-semibold text-white transition-opacity ${
+                primaryMode === 'fuel' && !startOver ? 'bg-[#81133B]' : 'bg-black'
+              } ${
+                !startOver && resumeInactive
+                  ? 'cursor-not-allowed opacity-40'
+                  : 'hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60'
+              }`}
+            >
+              {startOver
+                ? 'Try again'
+                : primaryMode === 'help'
+                  ? 'Get help'
+                  : primaryMode === 'fuel'
+                    ? 'Top up Fee Juice'
+                    : resuming
+                      ? 'Resuming…'
+                      : resumeLabel}
             </button>
           </div>
 
@@ -684,11 +952,12 @@ export default function ProgressCard({
             >
               {resuming ? 'Resuming…' : `Already topped up? ${resumeLabel}`}
             </button>
-          ) : fuelTopUpSecondary ? (
+          ) : fuelTopUpSecondary && !escalated ? (
             <button
               onClick={() => router.push('/fee-juice?resume=1')}
-              className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"
+              className="inline-flex items-center gap-1 text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-[#81133B] hover:underline"
             >
+              <Icon icon="ph:gas-pump" width={13} height={13} className="shrink-0" />
               Not enough gas? Top up Fee Juice
             </button>
           ) : failure.kind === 'unknown' && errorMessage ? (
@@ -703,8 +972,9 @@ export default function ProgressCard({
 
           <button
             onClick={() => router.push('/activity')}
-            className="text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-latest-black-100 hover:underline"
+            className="inline-flex items-center gap-1 text-12 font-medium text-latest-grey-500 underline-offset-2 hover:text-latest-black-100 hover:underline"
           >
+            <Icon icon="ph:clock-counter-clockwise" width={13} height={13} />
             View in Activity
           </button>
         </div>
@@ -713,9 +983,40 @@ export default function ProgressCard({
       {/* Back to Main Screen — completion state, and the error fallback when no
           direction is available to build the resume action above. The already-completed
           state carries its own back button, so it's excluded here. */}
-      {showBackButton && !isAlreadyCompleted && !(hasError && direction) && (
+      {/* Completion CTAs (#459): now that funds are private on Aztec, feature one
+          thing to DO next, plus a back-to-main button carrying the arrow. The featured
+          app/use case is intentionally swappable — Nyx (private payments) is a real
+          ecosystem app; drop in a different one when a launch partner is chosen. */}
+      {showBackButton && !isAlreadyCompleted && !(hasError && direction) && isAllComplete && (
+        <div className="mt-3 mb-4 flex flex-col gap-2.5">
+          <a
+            href="https://www.nyx.money"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 rounded-xl border border-latest-grey-300 px-3 py-2.5 text-left transition-colors hover:border-latest-black-100"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F5F5F5]">
+              <img src="/assets/svg/ecosystem/nyx.svg" alt="" className="h-5 w-5" />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-13 font-semibold text-latest-black-100">Spend privately with Nyx</span>
+              <span className="text-11 text-latest-grey-500">Put your now-private Aztec balance to work.</span>
+            </span>
+            <Icon icon="ph:arrow-up-right" width={15} height={15} className="shrink-0 text-latest-grey-500" />
+          </a>
+          <button
+            onClick={() => router.push('/?app=1')}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-black py-[11px] font-semibold text-white transition-opacity hover:opacity-80"
+          >
+            <Icon icon="ph:arrow-left-bold" width={16} height={16} />
+            Back to Main Screen
+          </button>
+        </div>
+      )}
+      {/* Error fallback (no direction to build a resume action): plain back to main. */}
+      {showBackButton && !isAlreadyCompleted && !(hasError && direction) && !isAllComplete && (
         <div className="flex flex-row items-center justify-center mt-2 mb-4">
-          <TextButton className="" onClick={() => router.push('/')}>
+          <TextButton className="" onClick={() => router.push('/?app=1')}>
             Back to Main Screen
           </TextButton>
         </div>

@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import {
   truncateDecimals,
@@ -439,12 +440,19 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
     fuelType,
     fuelRecipientOverride,
     setCurrentOperationId,
+    markOperationLive,
+    clearOperationLive,
   } = useBridgeStore()
   const notify = useToast()
 
   const walletAdapter = useWalletAdapter()
   const selectedToken = bridgeConfig.from.token ?? undefined
   const bridge = useBridge()
+
+  // Operations this hook is driving right now. Marked live so Activity shows them as
+  // running instead of offering Resume on a transfer that is still in flight, and
+  // cleared in onSettled so a finished or failed run never leaves a stale marker.
+  const drivenOperationIds = useRef<string[]>([])
 
   const mutationFn = async (params: {
     amountL1: string
@@ -562,6 +570,8 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
             })
             console.log('[L1→L2] Operation created:', event.operationId)
             setCurrentOperationId(event.operationId)
+            drivenOperationIds.current.push(String(event.operationId))
+            markOperationLive(event.operationId)
             break
           case BridgeEventType.DEPOSIT_SENT:
             logInfo('L1 deposit tx sent', {
@@ -982,6 +992,12 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
         )
       }
     },
+    onSettled: () => {
+      // Nothing is driving these any more. Whatever the backend status says, Activity
+      // is now the right place to resume them from.
+      drivenOperationIds.current.forEach(clearOperationLive)
+      drivenOperationIds.current = []
+    },
   })
 }
 
@@ -1010,7 +1026,7 @@ const TOAST_ID_FJ_TOPUP_PROGRESS = 'fj-topup-progress'
  */
 export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void) {
   const { waapAddress: l1Address, aztecAddress, signWaapMessage } = useWalletStore()
-  const { isPrivacyModeEnabled } = useBridgeStore()
+  const { isPrivacyModeEnabled, markOperationLive, clearOperationLive } = useBridgeStore()
   const queryClient = useQueryClient()
   const notify = useToast()
   const walletAdapter = useWalletAdapter()
@@ -1058,96 +1074,110 @@ export function useL1TopUpFeeJuice(onTopUpSuccess?: (l2TxHash?: string) => void)
       userAction: DatadogUserAction.BRIDGE_L1_TO_L2_INITIATED,
     })
 
-    const result = await bridge.bridgeL1ToL2({
-      token: tokenSymbol,
-      amount: params.spendAmount,
-      l1Address,
-      l2Address: aztecAddress,
-      isPrivate: isPrivacyModeEnabled ?? false,
-      fuel: {
-        enabled: true,
-        amount: params.fuelAmount,
-        fuelType: effectiveFuelType,
-        ...(params.recipient ? { recipient: params.recipient } : {}),
-      },
-      sendTransaction: async (tx) => {
-        return (await requestWaapWallet(WAAP_METHOD.eth_sendTransaction, [tx])) as string
-      },
-      walletAdapter: walletAdapter as any,
-      signMessage: async (msg: string) => {
-        verifyEncryptionDomain()
-        const sig = await signWaapMessage(msg)
-        if (!sig) throw new Error('Failed to sign message')
-        return sig
-      },
-      signTypedData: async (address: string, typedDataJson: string) => {
-        return (await requestWaapWallet(WAAP_METHOD.eth_signTypedData_v4, [address, typedDataJson])) as string
-      },
-      onEvent: (event: BridgeEvent) => {
-        switch (event.type) {
-          case BridgeEventType.DEPOSIT_SENT:
-            notify(
-              'warn',
-              {
-                heading: 'Buying Fee Juice',
-                message: 'On L1 now. Keep this page open while it bridges.',
-              },
-              { autoClose: false, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
-            )
-            break
-          case BridgeEventType.DEPOSIT_CONFIRMED:
-            notify(
-              'info',
-              'Top-up confirmed. Claiming Fee Juice on Aztec.',
-              { autoClose: 15000, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
-            )
-            break
-          case BridgeEventType.SYNC_POLL:
-            notify(
-              'info',
-              `Syncing your Fee Juice to Aztec. ${event.elapsedMinutes.toFixed(0)} min elapsed.`,
-              { autoClose: 15000, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
-            )
-            break
-          case BridgeEventType.CLAIM_ATTEMPT:
-            notify('info', `Claiming Fee Juice on Aztec (attempt ${event.attempt}/${event.maxAttempts})…`, {
-              autoClose: 15000,
-              toastId: TOAST_ID_FJ_TOPUP_PROGRESS,
-            })
-            break
-          case BridgeEventType.ERROR:
-            logError(
-              event.error?.message ?? 'Fee Juice top-up error event',
-              {
-                direction: 'L1_TO_L2',
-                context: 'withdraw_fuel_topup',
-                fundsAtRisk: event.fundsAtRisk,
-                operationId: event.operationId,
-                l1Address,
-                l2Address: aztecAddress,
-                userAction: 'bridge_l1_to_l2_fj_topup_error',
-              },
-              event.error,
-            )
-            notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
-            break
-        }
-      },
-    })
+    // Operations this call is driving, so the Activity drawer shows them as running
+    // rather than offering Resume on a top-up that is mid-flight (a top-up sits at
+    // `deposited` for the whole wait on the L2 claim — the same status a dropped
+    // session leaves behind). Cleared in `finally`, success or failure.
+    const drivenOperationIds: string[] = []
 
-    notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
-    logInfo('Fee Juice top-up (L1→L2) completed', {
-      direction: 'L1_TO_L2',
-      context: 'withdraw_fuel_topup',
-      l1Address,
-      l2Address: aztecAddress,
-      l1TxHash: result.l1TxHash,
-      l2TxHash: result.l2TxHash,
-      isPrivacyModeEnabled,
-      userAction: DatadogUserAction.BRIDGE_L1_TO_L2_COMPLETED,
-    })
+    try {
+      const result = await bridge.bridgeL1ToL2({
+        token: tokenSymbol,
+        amount: params.spendAmount,
+        l1Address,
+        l2Address: aztecAddress,
+        isPrivate: isPrivacyModeEnabled ?? false,
+        fuel: {
+          enabled: true,
+          amount: params.fuelAmount,
+          fuelType: effectiveFuelType,
+          ...(params.recipient ? { recipient: params.recipient } : {}),
+        },
+        sendTransaction: async (tx) => {
+          return (await requestWaapWallet(WAAP_METHOD.eth_sendTransaction, [tx])) as string
+        },
+        walletAdapter: walletAdapter as any,
+        signMessage: async (msg: string) => {
+          verifyEncryptionDomain()
+          const sig = await signWaapMessage(msg)
+          if (!sig) throw new Error('Failed to sign message')
+          return sig
+        },
+        signTypedData: async (address: string, typedDataJson: string) => {
+          return (await requestWaapWallet(WAAP_METHOD.eth_signTypedData_v4, [address, typedDataJson])) as string
+        },
+        onEvent: (event: BridgeEvent) => {
+          switch (event.type) {
+            case BridgeEventType.OPERATION_CREATED:
+              drivenOperationIds.push(String(event.operationId))
+              markOperationLive(event.operationId)
+              break
+            case BridgeEventType.DEPOSIT_SENT:
+              notify(
+                'warn',
+                {
+                  heading: 'Buying Fee Juice',
+                  message: 'On L1 now. Keep this page open while it bridges.',
+                },
+                { autoClose: false, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
+              )
+              break
+            case BridgeEventType.DEPOSIT_CONFIRMED:
+              notify(
+                'info',
+                'Top-up confirmed. Claiming Fee Juice on Aztec.',
+                { autoClose: 15000, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
+              )
+              break
+            case BridgeEventType.SYNC_POLL:
+              notify(
+                'info',
+                `Syncing your Fee Juice to Aztec. ${event.elapsedMinutes.toFixed(0)} min elapsed.`,
+                { autoClose: 15000, toastId: TOAST_ID_FJ_TOPUP_PROGRESS },
+              )
+              break
+            case BridgeEventType.CLAIM_ATTEMPT:
+              notify('info', `Claiming Fee Juice on Aztec (attempt ${event.attempt}/${event.maxAttempts})…`, {
+                autoClose: 15000,
+                toastId: TOAST_ID_FJ_TOPUP_PROGRESS,
+              })
+              break
+            case BridgeEventType.ERROR:
+              logError(
+                event.error?.message ?? 'Fee Juice top-up error event',
+                {
+                  direction: 'L1_TO_L2',
+                  context: 'withdraw_fuel_topup',
+                  fundsAtRisk: event.fundsAtRisk,
+                  operationId: event.operationId,
+                  l1Address,
+                  l2Address: aztecAddress,
+                  userAction: 'bridge_l1_to_l2_fj_topup_error',
+                },
+                event.error,
+              )
+              notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
+              break
+          }
+        },
+      })
 
-    return result.l2TxHash
+      notify.dismiss(TOAST_ID_FJ_TOPUP_PROGRESS)
+      logInfo('Fee Juice top-up (L1→L2) completed', {
+        direction: 'L1_TO_L2',
+        context: 'withdraw_fuel_topup',
+        l1Address,
+        l2Address: aztecAddress,
+        l1TxHash: result.l1TxHash,
+        l2TxHash: result.l2TxHash,
+        isPrivacyModeEnabled,
+        userAction: DatadogUserAction.BRIDGE_L1_TO_L2_COMPLETED,
+      })
+
+      return result.l2TxHash
+    } finally {
+      drivenOperationIds.forEach(clearOperationLive)
+    }
   }
 
   return useMutation({

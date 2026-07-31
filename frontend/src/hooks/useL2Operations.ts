@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { L1_TOKENS, L1_CHAIN_ID, L2_CHAIN_ID, BRIDGED_FPC_ADDRESS, getAztecscanUrl, getEtherscanUrl } from '@/config'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { logInfo, logError, DatadogUserAction } from '@/utils/datadog'
@@ -306,12 +307,19 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
     bridgeConfig,
     l2TxUrl: currentL2TxUrl,
     setCurrentOperationId,
+    markOperationLive,
+    clearOperationLive,
   } = useBridgeStore()
 
   const { waapLoginMethod: loginMethod, waapWalletProvider: walletProvider, waapChainId: chainId } = useWalletStore()
   const walletAdapter = useWalletAdapter()
   const selectedToken = bridgeConfig.from.token ?? undefined
   const bridge = useBridge()
+
+  // Operations this hook is driving right now. Marked live so Activity shows them as
+  // running instead of offering Resume on a withdrawal that is still in flight, and
+  // cleared in onSettled so a finished or failed run never leaves a stale marker.
+  const drivenOperationIds = useRef<string[]>([])
 
   const mutationFn = async (params: {
     amountL1: string
@@ -395,6 +403,8 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
             })
             console.log('[L2→L1] Operation created:', event.operationId)
             setCurrentOperationId(event.operationId)
+            drivenOperationIds.current.push(String(event.operationId))
+            markOperationLive(event.operationId)
             break
           case BridgeEventType.BURN_SENT:
             logInfo('L2 burn tx sent', {
@@ -725,6 +735,12 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
           { autoClose: false },
         )
       }
+    },
+    onSettled: () => {
+      // Nothing is driving these any more. Whatever the backend status says, Activity
+      // is now the right place to resume them from.
+      drivenOperationIds.current.forEach(clearOperationLive)
+      drivenOperationIds.current = []
     },
   })
 }

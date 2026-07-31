@@ -12,7 +12,8 @@ import { getEtherscanUrl, L1_CHAIN_ID } from '@/config'
 import { logInfo, logError, DatadogUserAction } from '@/utils/datadog'
 
 export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
-  const { setProgressStep, setTransactionUrls, clearRecovery } = useBridgeStore()
+  const { setProgressStep, setTransactionUrls, clearRecovery, markOperationLive, clearOperationLive } =
+    useBridgeStore()
   const { waapAddress: l1Address, signWaapMessage } = useWalletStore()
   const notify = useToast()
   const bridge = useBridge()
@@ -39,6 +40,10 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
 
     // Show L2 tx URL if available
     if (data.l2TxUrl) setTransactionUrls(null, data.l2TxUrl)
+
+    // This resume IS the thing driving the operation now, so Activity must stop
+    // offering a second Resume for it while this one runs (cleared in onSettled).
+    markOperationLive(data.operationId)
 
     const result = await bridge.resume(data.operationId, {
       l1Address: withdrawRecipient,
@@ -207,6 +212,9 @@ export function useResumeL2WithdrawToL1(onSuccess?: (data: any) => void) {
     mutationFn,
     onSuccess: (txHash) => {
       if (onSuccess) onSuccess(txHash)
+    },
+    onSettled: (_data, _error, withdrawalData) => {
+      clearOperationLive(withdrawalData?.operationId)
     },
   })
 }

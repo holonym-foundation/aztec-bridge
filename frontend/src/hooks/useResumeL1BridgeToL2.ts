@@ -13,7 +13,8 @@ import { isConsumedMessageError } from '@/utils/resumability'
 import { logInfo, logError, DatadogUserAction } from '@/utils/datadog'
 
 export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
-  const { setProgressStep, setTransactionUrls, clearRecovery } = useBridgeStore()
+  const { setProgressStep, setTransactionUrls, clearRecovery, markOperationLive, clearOperationLive } =
+    useBridgeStore()
   const { aztecAddress, aztecLoginMethod, signWaapMessage } = useWalletStore()
   const walletAdapter = useWalletAdapter()
   const notify = useToast()
@@ -51,6 +52,10 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
     if (claimData.l1TxUrl) {
       setTransactionUrls(claimData.l1TxUrl, null)
     }
+
+    // This resume IS the thing driving the operation now, so Activity must stop
+    // offering a second Resume for it while this one runs (cleared in onSettled).
+    markOperationLive(claimData.operationId)
 
     const result = await bridge.resume(claimData.operationId, {
       walletAdapter: walletAdapter as any,
@@ -258,6 +263,9 @@ export function useResumeL1BridgeToL2(onSuccess?: (data: any) => void) {
     onSuccess: (txHash) => {
       refreshL2Balances()
       if (onSuccess) onSuccess(txHash)
+    },
+    onSettled: (_data, _error, claimData) => {
+      clearOperationLive(claimData?.operationId)
     },
   })
 }

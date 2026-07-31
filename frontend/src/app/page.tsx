@@ -401,24 +401,28 @@ export default function Home() {
   // BridgedFPC balance in privacy mode (spent via pay_fee), else the public
   // FeeJuice balance. The BridgedFPC balance is a DIFFERENT quantity from the raw
   // private Fee Juice a user sees in their wallet, so a user can hold in-wallet FJ
-  // yet have zero here and be genuinely unable to pay the burn. Mirror the panel's
-  // fuel selection and block only on a CONFIRMED shortfall (balance loaded AND
-  // estimate loaded AND short) so we never false-block while either is resolving.
+  // yet have zero here and be genuinely unable to pay the burn.
+  //
+  // Only an EMPTY balance blocks. `useClaimFeeEstimate` bounds an L1→L2 *claim*
+  // (a 2M-L2-gas ceiling at 2-3x base fee), not this burn, so a user holding
+  // slightly less than that ceiling was being told to top up for gas they would
+  // very likely never spend. The wallet sizes the real fee by simulating the burn
+  // and refuses to send when the balance truly falls short — nothing moves on a
+  // failed preflight — so a non-zero balance is left to that authority and the
+  // panel only advises.
   const withdrawFuelType: 'public' | 'private' =
     isPrivacyModeEnabled && !!BRIDGED_FPC_ADDRESS ? 'private' : 'public'
-  const { data: withdrawBurnFeeWei } = useClaimFeeEstimate(withdrawFuelType)
   const withdrawFuelBalance = withdrawFuelType === 'private' ? privateFeeJuiceBalance : feeJuiceBalance
   const withdrawFuelInsufficient =
     bridgeConfig.direction === BridgeDirection.L2_TO_L1 &&
     isWaapConnected &&
     isAztecConnected &&
     withdrawFuelBalance != null &&
-    withdrawBurnFeeWei != null &&
-    Number(withdrawFuelBalance) < Number(withdrawBurnFeeWei) / 1e18
+    Number(withdrawFuelBalance) === 0
   const withdrawDisabledReason = withdrawFuelInsufficient
     ? withdrawFuelType === 'private'
-      ? 'Not enough private fuel to cover the L2 burn. Top up to withdraw.'
-      : 'Not enough Fee Juice to cover the L2 burn. Top up to withdraw.'
+      ? 'No private fuel to pay the L2 burn. Top up to withdraw.'
+      : 'No Fee Juice to pay the L2 burn. Top up to withdraw.'
     : undefined
 
   // Bridge success callback (runs after L1→L2 bridge or L2→L1 withdrawal)
@@ -786,7 +790,6 @@ export default function Home() {
                 feeJuiceBalanceLoading={feeJuiceBalanceLoading}
                 privateFeeJuiceBalanceLoading={privateFeeJuiceBalanceLoading}
                 isPrivacyModeEnabled={isPrivacyModeEnabled}
-                bridgeAmount={bridgeConfig.amount}
               />
             )}
             <TransactionBreakdown

@@ -727,44 +727,31 @@ const AccountChip: React.FC<AccountChipProps> = ({
                 avatar center is 16 + 12 = 28px from the row's left edge.
                 Maroon on light, pink accent on dark. */}
             {isWaapConnected && isAztecConnected && aztecConnectorLinked && (
-              <>
-                {/* Vertical line, avatar center to avatar center. */}
+              // The connector IS the indicator — no node, no glyph. The hover target is
+              // this wrapper, sized to the EXPOSED span of track: the line runs avatar
+              // center to avatar center, but each w-6 avatar paints over 12px of it, so
+              // only the gap between them can be hovered. Insetting the wrapper by that
+              // 12px keeps it clear of both wallet rows, which own their own hover (the
+              // group-hover copy control) and must not lose it to an overlay.
+              <span
+                data-tooltip-id="wallet-link-tooltip"
+                data-tooltip-content="This Aztec account is linked to your EVM wallet."
+                tabIndex={0}
+                role="img"
+                aria-label="Linked to your EVM wallet"
+                className={`absolute left-[20px] top-[calc(25%_+_12px)] bottom-[calc(25%_+_12px)] w-4 rounded-full outline-none focus-visible:ring-2 ${
+                  isDark ? 'focus-visible:ring-[#FA8FC4]' : 'focus-visible:ring-[#81133B]'
+                }`}
+              >
+                {/* Vertical line, avatar center to avatar center: the wrapper's own 12px
+                    insets, given back. Glows in place rather than travelling — a moving
+                    charge would spend most of its run hidden behind the avatars. */}
                 <span
                   aria-hidden="true"
-                  className={`pointer-events-none absolute left-[27px] top-1/4 bottom-1/4 w-0.5 rounded-full ${
-                    isDark ? 'bg-[rgba(250,143,196,0.45)]' : 'bg-[rgba(129,19,59,0.35)]'
-                  }`}
+                  style={{ '--wallet-link-color': isDark ? '#FA8FC4' : '#81133B' } as React.CSSProperties}
+                  className="wallet-link-glow pointer-events-none absolute bottom-[-12px] left-1/2 top-[-12px] w-0.5 -translate-x-1/2 rounded-full"
                 />
-                {/* Halo breathing out of the node — the ambient "these are live
-                    and paired" signal. Sits before the node so the node paints
-                    over it. */}
-                <span
-                  aria-hidden="true"
-                  className={`linked-pulse pointer-events-none absolute left-[28px] top-1/2 h-[18px] w-[18px] rounded-full ${
-                    isDark ? 'bg-[#FA8FC4]' : 'bg-[#81133B]'
-                  }`}
-                />
-                {/* The ONLY "Linked" indicator: an icon-only node on the line at
-                    its midpoint. The word "Linked" moved into the tooltip — the
-                    pill that carried it was wide enough to overlap the avatars and
-                    the balance text in a 290px menu. Solid fill so it interrupts
-                    the line cleanly, and it keeps pointer events (the track above
-                    is inert) so it can own the tooltip. */}
-                <span
-                  data-tooltip-id="wallet-link-tooltip"
-                  data-tooltip-content="This Aztec account is linked to your EVM wallet."
-                  tabIndex={0}
-                  role="img"
-                  aria-label="Linked to your EVM wallet"
-                  className={`absolute left-[28px] top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-[18px] w-[18px] items-center justify-center rounded-full shadow-sm outline-none focus-visible:ring-2 ${
-                    isDark
-                      ? 'bg-[#FA8FC4] text-[#2A0E1C] focus-visible:ring-[#FA8FC4]'
-                      : 'bg-[#81133B] text-white focus-visible:ring-[#81133B]'
-                  }`}
-                >
-                  <Icon icon="ph:link-simple" width={11} height={11} className="flex-shrink-0" />
-                </span>
-              </>
+              </span>
             )}
 
           {isWaapConnected && (

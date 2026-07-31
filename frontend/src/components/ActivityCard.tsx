@@ -9,6 +9,7 @@ import { formatUnits } from 'viem'
 import { L1_TOKEN_METADATA, L1_NETWORKS, AZTEC_VERSION } from '@/config'
 import StyledImage from '@/components/StyledImage'
 import { canResumeOp, hasPossibleLockedFunds, isLikelyCompleted } from '@/utils/resumability'
+import { useIsOperationLive } from '@/hooks/useResumableCount'
 import { formatFjAmount } from '@/utils/fuelPricing'
 import { copyToClipboard } from '@/utils'
 import { useToast } from '@/hooks/useToast'
@@ -255,7 +256,11 @@ export default function ActivityCard({
   // resumable/locked states. A bare 'pending' (the session dropped before any tx
   // landed, so no hash exists yet) still needs a route back into the flow.
   // Terminal (completed/failed) and likely-completed rows never resume.
-  const showResume = canResumeOp(operation)
+  // ...and an operation a client mutation is driving RIGHT NOW is running, not
+  // interrupted: it holds a resumable-looking status for its whole run, so Resume
+  // would offer a second run of a live transfer (SOP §8).
+  const live = useIsOperationLive()(operation.id)
+  const showResume = !live && canResumeOp(operation)
   const fuelTopUp = fuelTopUpFj(operation)
 
   // Unique per card so multiple cards' tooltips don't collide.
@@ -270,7 +275,7 @@ export default function ActivityCard({
 
   const showShareFuelClaim = !!onShareFuelClaim && hasFuelClaimData(operation) && fuelShareState !== 'self'
 
-  const hasActionRow = operation.l1TxUrl || operation.l2TxUrl || showShareFuelClaim || showResume
+  const hasActionRow = operation.l1TxUrl || operation.l2TxUrl || showShareFuelClaim || showResume || live
 
   return (
     <div className="bg-[#F5F5F5] rounded-xl p-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
@@ -366,6 +371,12 @@ export default function ActivityCard({
                 </div>
                 <ReactTooltip id={fuelTipId} place="top" className="z-[100]" style={{ fontSize: '11px', maxWidth: '220px' }} />
               </div>
+            )}
+            {live && (
+              <span className="flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-[#81133B]">
+                <Icon icon="ph:spinner-gap-bold" width={12} height={12} className="shrink-0 animate-spin" />
+                In progress
+              </span>
             )}
             {showResume && (
               <button

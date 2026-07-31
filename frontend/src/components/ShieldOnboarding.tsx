@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { useWalletStore } from '@/stores/walletStore'
+import { POCH_MINT_URL } from '@/config'
 import { useOnboardingStore } from '@/stores/useOnboardingStore'
 import { PASSPORT_BUILD_URL } from '@/config'
 
@@ -97,7 +98,7 @@ const SCREENS: Screen[] = [
             Human Passport
           </a>
           <a
-            href="https://id.human.tech/clean-hands"
+            href={POCH_MINT_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="ob-pill ob-pill-outline"

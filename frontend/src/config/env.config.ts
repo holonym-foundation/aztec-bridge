@@ -16,7 +16,7 @@ export const L1_RPC_MAINNET = process.env.NEXT_PUBLIC_L1_RPC_MAINNET ?? ''
 
 export const AZTEC_NODE_DEVNET = process.env.NEXT_PUBLIC_AZTEC_NODE_DEVNET ?? 'https://v4-devnet-3.aztec-labs.com'
 export const AZTEC_NODE_TESTNET = process.env.NEXT_PUBLIC_AZTEC_NODE_TESTNET ?? 'https://v5.testnet.rpc.aztec-labs.com'
-export const AZTEC_NODE_MAINNET = process.env.NEXT_PUBLIC_AZTEC_NODE_MAINNET ?? 'https://aztec-mainnet.drpc.org'
+export const AZTEC_NODE_MAINNET = process.env.NEXT_PUBLIC_AZTEC_NODE_MAINNET ?? 'https://lb.drpc.live/aztec-mainnet/AhqdYXubU0sPoLfwNfap2bZnSOPShQgR8ankwosiOHdW'
 
 export const L1_CHAIN_ID_SEPOLIA = Number(process.env.NEXT_PUBLIC_L1_CHAIN_ID_SEPOLIA ?? '11155111')
 export const L1_CHAIN_ID_MAINNET = Number(process.env.NEXT_PUBLIC_L1_CHAIN_ID_MAINNET ?? '1')

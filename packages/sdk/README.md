@@ -16,7 +16,7 @@ pnpm add @human.tech/clean.sdk
 import { HumanTechBridge } from '@human.tech/clean.sdk'
 
 const bridge = new HumanTechBridge({
-  l1RpcUrl: 'https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY',
+  l1RpcUrl: 'https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY',
 })
 ```
 
@@ -40,7 +40,7 @@ const { token, userId } = await bridge.authenticate({
   l2Address: '0x...', // Aztec wallet address
   domain: window.location.host,
   uri: window.location.origin,
-  chainId: 11155111, // Sepolia
+  chainId: 1, // Ethereum mainnet
   signMessage: (msg) => wallet.signMessage(msg), // Your wallet's sign function
 })
 
@@ -68,9 +68,8 @@ const result = await bridge.bridgeL1ToL2({
   walletAdapter: aztecWalletAdapter,
   signMessage: (msg) => wallet.signMessage(msg),
 
-  // Optional: fund L2 gas
-  fuel: { enabled: true, amount: '5' },
-  fuelQuote: await getMockFuelQuote({ ... }),
+  // Optional: fund L2 gas — the SDK auto-builds the Uniswap V4 quote
+  fuel: { enabled: true, amount: '5', slippageBps: 300 },
 
   // Optional: progress callbacks
   onStep: (step, status) => console.log(`Step ${step}: ${status}`),
@@ -153,7 +152,7 @@ const config = createConfig(ACTIVE_DEPLOYMENT_ID, { l1RpcUrl: '...' })
 const token = resolveToken(config, 'USDC')
 
 // Block explorer URLs
-const etherscanUrl = getEtherscanUrl(11155111) // Sepolia
+const etherscanUrl = getEtherscanUrl(1) // Ethereum mainnet
 const aztecscanUrl = getAztecscanUrl(deployment.network.l2ChainId)
 ```
 
@@ -271,7 +270,7 @@ The [frontend](../../frontend/) directory in this monorepo is a full Next.js app
 
 ## Network
 
-Currently targeting **Aztec Devnet 4** on Sepolia. See `package.json` for pinned Aztec package versions.
+Currently targeting **Aztec Alpha**, which settles on **Ethereum mainnet**. See `package.json` for pinned Aztec package versions.
 
 ## License
 

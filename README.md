@@ -1,303 +1,161 @@
-# Aztec Bridge UI
-A visual overview of the Aztec Bridge flow:
+<div align="center">
 
-![Aztec Bridge Flow](docs/aztec%20bridge%20flow.png)
+<img src="frontend/public/assets/svg/shield-lockup-maroon.svg" alt="Shield" width="320" />
 
-A comprehensive bridge application for transferring tokens between Ethereum (L1) and Aztec Network (L2), featuring a modern React/Next.js frontend with seamless Web3 integration.
+### The private bridge that screens people, not just tokens
 
-## ⚠️ **Aztec Mainnet Alpha — Use Caution**
+Move assets from Ethereum to Aztec privately, with proof-of-personhood and proof-of-innocence enforced at both entry and exit.
 
-Active deployment: **Ethereum mainnet (L1) + Aztec Mainnet Alpha v4.3.0 (L2)** with real ZK proofs, live since 2026-05-29 per `bridge-script/deployments/registry.json`.
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#license)
+[![npm](https://img.shields.io/npm/v/@human.tech/clean.sdk?label=%40human.tech%2Fclean.sdk&color=blue)](https://www.npmjs.com/package/@human.tech/clean.sdk)
+[![Aztec v5](https://img.shields.io/badge/Aztec-v5-6E4BF4)](https://docs.aztec.network/)
+[![Audited: Nethermind | Halborn | Hexens](https://img.shields.io/badge/Audited-Nethermind%20%7C%20Halborn%20%7C%20Hexens-brightgreen)](#audits)
+[![Live on Mainnet](https://img.shields.io/badge/Live%20on-Mainnet-success)](https://shield.human.tech)
 
-**Aztec is in Alpha**, not full production:
+[**Launch the app**](https://shield.human.tech) &nbsp;·&nbsp; [**Product**](https://human.tech/shield) &nbsp;·&nbsp; [**Docs**](https://docs.holonym.id/for-developers/clean-hands) &nbsp;·&nbsp; [**Clean SDK on npm**](https://www.npmjs.com/package/@human.tech/clean.sdk) &nbsp;·&nbsp; [**Testnet**](https://testnet.shield.human.tech/)
 
-- ~1 TPS, ~6s block times (blocks bundled into ~72s checkpoints settled to L1)
-- Ongoing audits + bug bounty (see [aztec.network/blog/alpha-network-security-what-to-expect](https://aztec.network/blog/alpha-network-security-what-to-expect))
-- Aztec advises users to only deposit funds they can afford to lose
-
-**Bridge-specific:**
-
-- Audited by Nethermind Security (NM-0756, May 2026) — 1 critical / 2 high / 3 medium findings, all resolved before deployment
-- Public marketing launch aligned with Aztec v5 release (~July 2026)
-
-Prior testnet deployments (Sepolia + Aztec testnet 4.2.0-rc.1) remain in `bridge-script/deployments/` for historical reference but are no longer the active deployment.
-
-## 🌟 Overview
-
-The Aztec Bridge UI enables users to:
-- Bridge tokens between Ethereum Layer 1 and Aztec Layer 2
-- Manage multiple token types (ERC20, NFTs)
-- Interact with Aztec's privacy-preserving Layer 2 network
-- Use sponsored transactions for improved UX
-- Connect multiple wallet types including MetaMask and Silk Wallet
-
-## 🏗️ Architecture
-
-```
-aztec-ui/
-├── frontend/           # Next.js React application
-├── bridge-script/      # Bridge automation scripts
-├── l1-contracts/       # L1 smart contracts (Foundry)
-├── aztec-contracts/    # L2 Aztec contracts (Noir)
-└── .github/           # CI/CD workflows
-```
-
-### Key Components
-
-- **Frontend**: Modern Next.js app with TypeScript, Tailwind CSS, and Web3 integrations
-- **Bridge Scripts**: Automated bridging logic and deployment scripts
-- **L1 Contracts**: Ethereum smart contracts for token portals and handlers
-- **L2 Contracts**: Aztec Noir contracts for private token management
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js 18+ and pnpm
-- Foundry (for L1 contracts)
-- Aztec CLI (for L2 contracts)
-
-### Installation
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd aztec-ui
-
-# Install frontend dependencies
-cd frontend
-pnpm install
-
-# Install bridge script dependencies
-cd ../bridge-script
-pnpm install
-```
-
-### Environment Setup
-
-Create environment files for sensitive configuration:
-
-```bash
-# Frontend (.env.local)
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_walletconnect_id
-FAUCET_PRIVATE_KEY=0x...
-ETHEREUM_RPC_URL=https://sepolia.infura.io/v3/...
-ALCHEMY_API_KEY=your_alchemy_key
-
-# Bridge Scripts (.env)
-L1_URL=https://sepolia.infura.io/v3/...
-MNEMONIC=your_test_mnemonic
-PXE_URL=http://localhost:8081
-```
-
-### Development
-
-```bash
-# Start the frontend development server
-cd frontend
-pnpm dev
-
-# The app will be available at http://localhost:3000
-```
-
-## 🔧 Development Scripts
-
-### Frontend Commands
-
-```bash
-cd frontend
-
-# Development
-pnpm dev          # Start dev server with Turbo
-pnpm build        # Build for production
-pnpm start        # Start production server
-pnpm lint         # Run ESLint
-```
-
-### Bridge Scripts
-
-```bash
-cd bridge-script
-
-# Bridge operations
-node index.js                    # Run main bridge script
-node index-testnet.js           # Run testnet deployment
-node fees.ts                    # Fee management utilities
-```
-
-### L1 Contracts (Foundry)
-
-```bash
-cd l1-contracts
-
-# Contract operations
-forge build       # Compile contracts
-forge test         # Run tests
-forge deploy       # Deploy contracts
-```
-
-## 🌐 Supported Networks
-
-### Layer 1 (Ethereum)
-- **Mainnet**: Ethereum Mainnet
-- **Testnet**: Sepolia
-
-### Layer 2 (Aztec)
-- **Testnet**: Aztec Testnet (Chain ID: 1337)
-
-## 🎨 Frontend Features
-
-### Modern UI/UX
-- **Design System**: Custom Tailwind CSS components
-- **Responsive**: Mobile-first responsive design
-- **Dark Mode**: Theme support
-- **Toast Notifications**: Real-time user feedback
-
-### Web3 Integration
-- **Multi-Wallet Support**: MetaMask, Silk Wallet, WalletConnect
-- **Token Management**: ERC20 and NFT support
-- **Transaction Tracking**: Real-time transaction status
-- **Gas Optimization**: Sponsored transactions support
-
-### Data & Analytics
-- **Datadog Integration**: Performance monitoring and logging
-- **React Query**: Efficient data fetching and caching
-- **Persistent State**: Local storage persistence
-
-## 🔐 Security
-
-### ⚠️ **CRITICAL SECURITY DISCLAIMER**
-**THIS IS A TESTNET BRIDGE WITH KNOWN VULNERABILITIES - NOT PRODUCTION READY**
-
-This bridge implementation:
-- ❌ Contains known security vulnerabilities
-- ❌ Has not undergone professional security audits
-- ❌ Should never be used with real value or on mainnet
-- ❌ May have unpatched critical security flaws
-- ⚠️ Is intended for educational and testing purposes only
-
-### Basic Security Practices Implemented
-- ✅ Environment variables for all sensitive data
-- ✅ Proper secret management in CI/CD
-- ✅ No hardcoded production credentials
-- ✅ Basic input validation
-- ⚠️ **However, these do not address the underlying architectural vulnerabilities**
-
-### Environment Variables
-All sensitive information is properly managed through environment variables:
-- API keys, private keys, and RPC URLs are never committed
-- Production secrets are managed through Vercel and GitHub Secrets
-- Test values are clearly marked and separated from production
-
-### Known Limitations
-- Bridge contracts may have reentrancy vulnerabilities
-- Insufficient access controls in some components
-- Lack of comprehensive validation in bridge operations
-- Potential for fund loss due to architectural issues
-- Missing security features required for production use
-
-## 🚀 Deployment
-
-### Vercel Deployment (Automated)
-The project uses GitHub Actions for automated deployment:
-
-```yaml
-# Triggers on main branch push
-# Deploys to both preview and production environments
-# Manages environment variables securely
-```
-
-### Manual Deployment
-
-```bash
-# Build and deploy frontend
-cd frontend
-pnpm build
-vercel --prod
-
-# Deploy L1 contracts
-cd l1-contracts
-forge script script/Deploy.s.sol --broadcast
-```
-
-## 🧪 Testing
-
-### Frontend Testing
-```bash
-cd frontend
-pnpm test          # Run unit tests
-pnpm test:e2e      # Run end-to-end tests
-```
-
-### Contract Testing
-```bash
-cd l1-contracts
-forge test         # Test L1 contracts
-
-cd aztec-contracts
-aztec test         # Test L2 contracts
-```
-
-## 📚 API Reference
-
-### Bridge API Endpoints
-
-#### Faucet
-- `POST /api/faucet` - Request test ETH for gas fees
-- Body: `{ "address": "0x..." }`
-
-#### Token Minting
-- `POST /api/mint-tokens` - Mint test tokens
-- Body: `{ "address": "0x...", "amount": "1000" }`
-
-#### Alchemy Integration
-- `GET /api/alchemy/nfts` - Fetch user NFTs
-- `GET /api/alchemy/tokens-balances` - Get token balances
-
-## 🛠️ Development Workflow
-
-### Code Quality
-- **ESLint**: Configured with Next.js and React rules
-- **Prettier**: Code formatting
-- **TypeScript**: Full type safety
-- **Git Hooks**: Pre-commit validation
-
-### Branch Strategy
-- `main`: Production-ready code
-- `develop`: Integration branch
-- `feature/*`: Feature development
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
-
-### Development Guidelines
-- Follow TypeScript best practices
-- Maintain test coverage
-- Update documentation for new features
-- Ensure security review for sensitive changes
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Support
-
-- **Documentation**: Check the `/docs` directory
-- **Issues**: GitHub Issues for bug reports
-- **Discussions**: GitHub Discussions for questions
-
-## 🔗 Links
-
-- [Aztec Network](https://aztec.network/)
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Foundry Book](https://book.getfoundry.sh/)
-- [Noir Documentation](https://noir-lang.org/)
+</div>
 
 ---
 
-Built with ❤️ for the Aztec ecosystem
+Shield is a privacy-preserving bridge between Ethereum (L1) and Aztec (L2). It is the first application built on the [Clean SDK](https://www.npmjs.com/package/@human.tech/clean.sdk) (`@human.tech/clean.sdk`), and it is **live on mainnet**.
+
+Most privacy tools face a hard trade-off: shield user activity and you also shield bad actors. Shield takes a different approach. It verifies the **person** on the way in and on the way out, so honest users get real privacy while sanctioned addresses and Sybil actors are screened at the door. The result is transparent accountability without sacrificing privacy.
+
+## Why Shield is different
+
+Shield screens people, not just tokens. Every deposit and every withdrawal carries two proofs:
+
+- **Proof of Personhood.** The sender is a unique, real human, not a bot or a Sybil farm.
+- **Proof of Innocence.** The sender is not a sanctioned or flagged address, established through a zero-knowledge Proof of Clean Hands.
+
+Both checks run at **entry and exit**, so compliance holds across the full bridge lifecycle rather than at a single choke point. The screening is enforced by zero-knowledge proofs: Shield learns that a user qualifies without learning who they are.
+
+### Two verification tiers
+
+Screening scales with transfer size. The threshold is **$1,000**:
+
+| Transfer size | Requirement |
+|---------------|-------------|
+| Under $1,000 | **Human Passport**: proof of unique personhood |
+| $1,000 and above | **ZK Gov-ID Proof of Clean Hands**: government-ID-backed sanctions screening, proven in zero knowledge |
+
+Human Passport brings a proven personhood layer to the bridge, with **2.3M+ users** and **44M+ credentials** issued.
+
+Shield charges a flat **0.5%** bridge fee. **USDC** is supported today, running on **Aztec v5**.
+
+## Clean SDK: integrate without the UI
+
+Shield is the reference app, but the bridge is a library. `@human.tech/clean.sdk` exposes the full deposit, withdraw, attestation, and recovery flow with no UI attached, so you can embed a screened private bridge directly into your own product.
+
+### Install
+
+```bash
+npm install @human.tech/clean.sdk
+# or
+pnpm add @human.tech/clean.sdk
+```
+
+### Quickstart
+
+```ts
+import { HumanTechBridge } from '@human.tech/clean.sdk'
+
+const bridge = new HumanTechBridge({
+  l1RpcUrl: 'https://ethereum-rpc.publicnode.com',
+})
+
+// 1. Authenticate with Sign-In with Ethereum (SIWE)
+const { token } = await bridge.authenticate({
+  l1Address,                                   // Ethereum wallet address
+  l2Address,                                   // Aztec wallet address
+  domain: window.location.host,
+  uri: window.location.origin,
+  chainId: 1,                                  // Ethereum mainnet
+  signMessage: (msg) => wallet.signMessage(msg),
+})
+
+// 2. Private deposit: Ethereum (L1) -> Aztec (L2)
+const result = await bridge.bridgeL1ToL2({
+  token: 'USDC',
+  amount: '100',
+  l1Address,
+  l2Address,
+  isPrivate: true,                             // screened, privacy-preserving deposit
+  sendTransaction: (tx) => wallet.sendTransaction(tx),
+  walletAdapter,                               // Aztec wallet adapter
+  signMessage: (msg) => wallet.signMessage(msg),
+  onStep: (step, status) => console.log(step, status),
+})
+
+console.log(result.operationId, result.l1TxHash)
+```
+
+Personhood and Clean Hands attestation is handled automatically when `isPrivate: true`. Withdrawals use `bridgeL2ToL1` with the same shape, and interrupted operations can be recovered with `bridge.resume(operationId, ...)`. Recovery data is encrypted client-side before it is backed up, so secrets never leave the client unencrypted.
+
+The full SDK reference lives in [`packages/sdk/README.md`](packages/sdk/README.md).
+
+## Repository layout
+
+```
+frontend/         Next.js app that powers shield.human.tech
+packages/sdk/     @human.tech/clean.sdk, the Clean SDK (env-agnostic bridge core)
+bridge-script/    Deployment and E2E test scripts (TypeScript + viem)
+l1-contracts/     Ethereum contracts (Solidity, Foundry)
+aztec-contracts/  Aztec L2 contracts (Noir)
+```
+
+### Local development
+
+```bash
+pnpm install      # install all workspaces
+pnpm dev          # run the dev servers via turbo
+pnpm build        # build all packages
+pnpm typecheck    # type-check the monorepo
+```
+
+## Architecture
+
+Shield bridges ERC-20 assets from Ethereum L1 to Aztec L2, with an optional atomic fuel swap that converts a slice of the bridged amount into Aztec FeeJuice so users can pay for L2 gas in a single flow.
+
+- **L1.** Solidity contracts (`TokenPortal`, `SwapBridgeRouter`, `UniswapFuelSwap`) handle deposits, withdrawals, and the fuel swap through Uniswap V4.
+- **L2.** Aztec Noir contracts mint, hold, and burn the bridged assets as private notes, with the compliance gate enforced on claims and exits.
+- **Clean SDK.** Orchestrates the cross-chain lifecycle, client-side encryption of recovery data, SIWE auth, and attestation.
+
+For the concepts behind Proof of Clean Hands and the zero-knowledge screening model, see the [Clean Hands developer docs](https://docs.holonym.id/for-developers/clean-hands).
+
+## Contracts
+
+Shield's deployed contract addresses (L1 portals, router, fuel swap, and the active Aztec deployment) are published in human-readable form on the support site at [support.shield.human.tech/contracts](https://support.shield.human.tech/contracts) for address verification, and as the machine-readable source of truth in [`packages/sdk/src/contracts/deployments.json`](packages/sdk/src/contracts/deployments.json), which the SDK reads directly. The current active deployment targets Ethereum mainnet and Aztec v5. Always verify an address against the support page before signing.
+
+## Audits
+
+Shield's contracts have been independently audited by three firms:
+
+| Firm | Scope |
+|------|-------|
+| **Nethermind Security** | Full-scope contract review (report NM-0756) |
+| **Halborn** | Full-scope contract review |
+| **Hexens** | Full-scope contract review |
+
+Findings raised during these reviews were addressed before the mainnet deployment.
+
+> **Aztec is an alpha network.** Shield is live on mainnet, but Aztec is early-stage software under active hardening. As with any new protocol, only bridge funds you can afford to lose.
+
+## Links
+
+- **App:** https://shield.human.tech
+- **Testnet (no real funds):** https://testnet.shield.human.tech/
+- **Product:** https://human.tech/shield
+- **Clean Hands docs:** https://docs.holonym.id/for-developers/clean-hands
+- **Clean SDK on npm:** https://www.npmjs.com/package/@human.tech/clean.sdk
+- **Blog:** https://human.tech/blog
+- **X:** https://x.com/0xHolonym
+
+## Contributing
+
+Contributions are welcome. Please open an issue to discuss substantial changes before sending a pull request, and keep contract or SDK changes covered by tests. Run `pnpm typecheck` and the relevant package tests before opening a PR.
+
+## License
+
+Released under the [MIT License](LICENSE). Some individual source files carry their own SPDX license headers, which govern the files that bear them.

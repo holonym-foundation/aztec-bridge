@@ -141,6 +141,21 @@ interface BridgeStoreState extends StepState, BridgeConfigState, TransactionStat
   clearRecovery: () => void
   setCurrentOperationId: (id: string | number | null) => void
 
+  /**
+   * Operations a client mutation is driving RIGHT NOW, in this tab. Deliberately
+   * in-memory only — never localStorage, and never part of `initialState`, so
+   * neither a reload nor `reset()` can leave a stale "still running" marker
+   * behind. After a reload nothing IS driving them, which is exactly the
+   * interrupted case the Activity drawer must offer Resume for.
+   *
+   * A backend status alone cannot tell the two apart: an in-flight top-up sits at
+   * `deposited` for the whole 5 to 15 minutes it waits on the L2 claim — the same
+   * status a dropped session leaves behind.
+   */
+  liveOperationIds: string[]
+  markOperationLive: (id: string | number) => void
+  clearOperationLive: (id: string | number | null | undefined) => void
+
   // Reset
   resetStepState: () => void
   reset: () => void
@@ -428,6 +443,23 @@ const bridgeStore = create<BridgeStoreState>((set, get) => ({
     set({ currentOperationId: normalized })
   },
 
+  liveOperationIds: [],
+  markOperationLive: (id) =>
+    set((state) => {
+      const key = String(id)
+      return state.liveOperationIds.includes(key)
+        ? state
+        : { liveOperationIds: [...state.liveOperationIds, key] }
+    }),
+  clearOperationLive: (id) =>
+    set((state) => {
+      if (id == null) return state
+      const key = String(id)
+      return state.liveOperationIds.includes(key)
+        ? { liveOperationIds: state.liveOperationIds.filter((v) => v !== key) }
+        : state
+    }),
+
   // Reset
   resetStepState: () => set({ ...initialStepState }),
   reset: () => {
@@ -512,5 +544,8 @@ export const useBridgeStore = () =>
       // Current operation tracking
       currentOperationId: state.currentOperationId,
       setCurrentOperationId: state.setCurrentOperationId,
+      liveOperationIds: state.liveOperationIds,
+      markOperationLive: state.markOperationLive,
+      clearOperationLive: state.clearOperationLive,
     })),
   )

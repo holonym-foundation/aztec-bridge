@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { formatUnits } from 'viem'
 import type { BridgeOperation, RecoveryClaimData, RecoveryWithdrawalData } from '@human.tech/clean.sdk'
 import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
-import { useResumableCount } from '@/hooks/useResumableCount'
+import { useIsOperationLive, useResumableCount } from '@/hooks/useResumableCount'
 import { useWalletStore } from '@/stores/walletStore'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useToast } from '@/hooks/useToast'
@@ -244,6 +244,7 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
   // Count across ALL operations (not just the visible 5), so the tab flags
   // resumable work even when it has scrolled out of the recent peek.
   const resumableCount = useResumableCount()
+  const isLive = useIsOperationLive()
 
   const handleResume = async (operation: BridgeOperation) => {
     if (!l1Address) {
@@ -356,7 +357,12 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
       { hour: 'numeric', minute: '2-digit' },
     )}`
     const meta = getStatusBadge(op.status)
-    const showResume = canResumeOp(op)
+    // A transfer this tab is still driving is NOT resumable — it is running. Showing
+    // Resume beside a screen that says "Buying Fee Juice…" made the row contradict the
+    // app (SOP §8), and starting a second run of the same operation is exactly what the
+    // Resume button would have done.
+    const live = isLive(op.id)
+    const showResume = !live && canResumeOp(op)
     const fuelTopUp = fuelTopUpFj(op)
 
     return (
@@ -394,6 +400,12 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
           <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] font-medium text-amber-700">
             <Icon icon="ph:gas-pump" width={10} height={10} className="flex-shrink-0" />
             Fee Juice top up · {fuelTopUp} FJ
+          </p>
+        )}
+        {live && (
+          <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-[#81133B]">
+            <Icon icon="ph:spinner-gap-bold" width={11} height={11} className="shrink-0 animate-spin" />
+            In progress
           </p>
         )}
         {showResume && (

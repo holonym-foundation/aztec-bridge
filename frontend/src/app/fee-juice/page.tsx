@@ -138,25 +138,13 @@ function FeeJuicePageInner() {
       <AztecWalletConnectionModals />
       <div className="flex h-full flex-col overflow-hidden">
         <div className="px-5 pt-5">
-          {/* Back is always a left-aligned arrow (SOP §4 / #194), never a stacked
-              full-width button. Mirrors the ProgressCard / Activity back affordance. */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => router.push('/?app=1')}
-              title="Back to main screen"
-              aria-label="Back to main screen"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-latest-grey-100 transition-colors hover:bg-latest-grey-200 hover:text-latest-black-100"
-            >
-              <Icon icon="ph:arrow-left-bold" width={18} height={18} />
-            </button>
-            <div className="min-w-0 flex-1">
-              <BridgeHeader title="TOP UP" />
-            </div>
-          </div>
+          <BridgeHeader title="TOP UP" />
         </div>
 
-        <div className="px-5 pb-5 min-h-0 flex-1 overflow-y-auto">
+        {/* The return affordance is the Home button in the panel's pinned action row
+            (SOP §4/#194 — back shares the primary CTA's row), so the header carries no
+            second back arrow. */}
+        <div className="flex min-h-0 flex-1 flex-col px-5 pb-5">
           {/* One-line title only. The rich public/private balances are owned by the
               FeeJuiceTopUp panel below, so the header never duplicates them. Kept on a
               single line (never wraps) beside the gas-pump icon and info tooltip. */}
@@ -176,8 +164,9 @@ function FeeJuicePageInner() {
 
           {/* Reusable buy + bridge Fee Juice form (auto + manual). Owns ALL top-up status
               messaging (including the interrupted-claim banner) so the screen can never show
-              two contradictory statements. */}
-          <div className="mt-3">
+              two contradictory statements. It also owns the pinned action row, so the CTA and
+              Home keep the same position in every state. */}
+          <div className="mt-3 flex min-h-0 flex-1 flex-col">
             <FeeJuiceTopUp
               isPrivacyModeEnabled={isPrivacyModeEnabled}
               feeJuiceBalance={feeJuiceBalance}
@@ -188,21 +177,25 @@ function FeeJuicePageInner() {
               depositLikelyCompleted={depositLikelyCompleted}
               onLandingCoveredChange={setLandingCovered}
               onSuccess={() => setToppedUp(true)}
+              onHome={() => router.push('/?app=1')}
+              // Prominent "Resume claim" once the claim is fundable — either after a
+              // successful top-up, or immediately when the existing balance already covers
+              // it (public mode). Never offered when the deposit likely already completed
+              // (resume would only re-fail). Passed into the pinned footer so it sits with
+              // the action row rather than floating mid-card.
+              footerExtra={
+                fromResume && !depositLikelyCompleted && (toppedUp || landingCovered) ? (
+                  <button
+                    onClick={handleResume}
+                    disabled={resuming}
+                    className="w-full rounded-lg bg-black py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {resuming ? 'Resuming…' : 'Resume claim'}
+                  </button>
+                ) : null
+              }
             />
           </div>
-
-          {/* Prominent "Resume claim" once the claim is fundable — either after a successful
-              top-up, or immediately when the existing balance already covers it (public mode).
-              Never offered when the deposit likely already completed (resume would only re-fail). */}
-          {fromResume && !depositLikelyCompleted && (toppedUp || landingCovered) && (
-            <button
-              onClick={handleResume}
-              disabled={resuming}
-              className="mt-3 w-full rounded-lg bg-black py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {resuming ? 'Resuming…' : 'Resume claim'}
-            </button>
-          )}
         </div>
       </div>
     </RootStyle>

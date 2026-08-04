@@ -6,7 +6,7 @@ import './globals.css'
 const SITE_URL = 'https://shield.human.tech'
 
 const DESCRIPTION =
-  "Move your funds between Ethereum and Aztec with privacy. Shield is human.tech's programmable privacy bridge."
+  "Move your funds between Ethereum and Aztec with privacy. Shield is human.tech's accountable privacy bridge."
 
 // Server component: every route ships real <head> metadata (and the /docs routes ship
 // full content) to search engines and non-JS agents. The wallet/providers, the

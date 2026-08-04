@@ -217,26 +217,30 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           Desktop/tablet only (md+): the centered 360px card leaves no gutter on
           phones, so the tab would sit over the card edge — the mobile dock below
           takes over there. */}
-      <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
-        <BridgeStepsRail />
-        <ActivityDrawer />
-        <NotificationsDrawer />
-        {/* Only surface the Support tab once the Iris widget is actually
-            openable; until then the native bubble is the working entry point and
-            a tab that can't open anything would be dead. See shield.human.tech#86. */}
-        {SUPPORT_TAB_ENABLED && hideNativeBubble && <SupportTab />}
-      </div>
+      {mounted && (
+        <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
+          <BridgeStepsRail />
+          <ActivityDrawer />
+          <NotificationsDrawer />
+          {/* Only surface the Support tab once the Iris widget is actually
+              openable; until then the native bubble is the working entry point and
+              a tab that can't open anything would be dead. See shield.human.tech#86. */}
+          {SUPPORT_TAB_ENABLED && hideNativeBubble && <SupportTab />}
+        </div>
+      )}
       {/* Below md the centered card leaves no right gutter, so the right-edge
           binder tabs would sit off-screen (#243). Relocate them to a compact,
           tappable dock in the bottom-LEFT corner, clear of the bottom-right
           support chat bubble. Each tab keeps its icon + badge and opens its
           panel as a bottom-anchored sheet. */}
-      <div className="pointer-events-none fixed bottom-4 left-4 z-40 flex items-end gap-2 md:hidden">
-        <BridgeStepsRail variant="dock" />
-        <ActivityDrawer variant="dock" />
-        <NotificationsDrawer variant="dock" />
-        {SUPPORT_TAB_ENABLED && hideNativeBubble && <SupportTab variant="dock" />}
-      </div>
+      {mounted && (
+        <div className="pointer-events-none fixed bottom-4 left-4 z-40 flex items-end gap-2 md:hidden">
+          <BridgeStepsRail variant="dock" />
+          <ActivityDrawer variant="dock" />
+          <NotificationsDrawer variant="dock" />
+          {SUPPORT_TAB_ENABLED && hideNativeBubble && <SupportTab variant="dock" />}
+        </div>
+      )}
       {/* See shield.human.tech#86 — hide the native Iris floating bubble ONLY once
           it's programmatically openable, so the Support tab replaces it without ever
           leaving support unreachable. Until then the native launcher stays visible. */}

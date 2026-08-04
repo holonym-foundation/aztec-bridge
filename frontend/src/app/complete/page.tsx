@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 export default function CompletePage() {
   const router = useRouter()
   useEffect(() => {
-    router.replace('/')
+    router.replace('/?app=1')
   }, [router])
   return null
 }

@@ -1,7 +1,12 @@
 {
   "name": "@human.tech/clean.sdk",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holonym-foundation/shield.human.tech.git",
+    "directory": "packages/sdk"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -24,7 +29,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@alejoamiras/aztec-fee-payment": "5.0.1",
+    "@alejoamiras/private-fee-juice": "5.0.1",
     "@aztec-foundation/aztec-standards": "5.0.1",
     "@aztec/aztec.js": "5.0.1",
     "@aztec/ethereum": "5.0.1",

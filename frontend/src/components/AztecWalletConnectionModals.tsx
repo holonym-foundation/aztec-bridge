@@ -99,7 +99,7 @@ function PaginatedAccountModal({
 
             <div className='mt-4 mx-2.5'>
               {accounts.length === 0 ? (
-                <p className='text-latest-grey-600 text-14 mb-4'>No accounts available.</p>
+                <p className='text-neutral-600 text-14 mb-4'>No accounts available.</p>
               ) : (
                 <div className='flex flex-col gap-2 mb-3'>
                   {paged.map((account, i) => {
@@ -117,7 +117,7 @@ function PaginatedAccountModal({
                         }`}>
                         <div className='flex-1 min-w-0'>
                           <p className='text-14 font-medium text-latest-black-300 truncate'>{label}</p>
-                          <p className='text-12 text-latest-grey-600 truncate'>{truncateAddress(account.address)}</p>
+                          <p className='text-12 text-neutral-600 truncate'>{truncateAddress(account.address)}</p>
                         </div>
                         {isLinked && (
                           <span
@@ -142,7 +142,7 @@ function PaginatedAccountModal({
                   can't flag a row. Reassure the user that picking "wrong" is safe
                   — the button-guard blocks bridging a mismatched pair regardless. */}
               {accounts.length > 0 && !linkedAddress && (
-                <p className='text-12 text-latest-grey-600 leading-snug mb-3 px-1'>
+                <p className='text-12 text-neutral-600 leading-snug mb-3 px-1'>
                   Not sure which to pick? Choose any — we&apos;ll flag it before you bridge and won&apos;t
                   let you bridge the wrong pair.
                 </p>
@@ -191,7 +191,7 @@ function PaginatedAccountModal({
                 transition={{ delay: 0.2 }}
                 className='flex justify-center gap-2 mt-2 mb-2'>
                 <StyledImage src='/assets/svg/silk0.4.svg' alt='' className='h-4 w-[14px]' />
-                <p className='text-12 font-medium text-latest-grey-600'>Secured by human.tech</p>
+                <p className='text-12 font-medium text-neutral-600'>Secured by human.tech</p>
               </motion.div>
             </div>
           </div>
@@ -221,6 +221,7 @@ export function AztecWalletConnectionModals() {
     selectAccount,
     showWalletInstallPrompt,
     setShowWalletInstallPrompt,
+    startWalletDiscovery,
     webWalletUrl,
     setWebWalletUrl,
     waapAddress,
@@ -236,26 +237,32 @@ export function AztecWalletConnectionModals() {
   useBindingStatus()
   const linkedAddress = useSessionLinkedL2(waapAddress)
 
+  // Single source of truth for "the wallet discovery/install modal is open".
+  // The "No Aztec Wallet Found" (install prompt) and "Select Aztec Wallet"
+  // (discovery) screens are two STATES of one modal instance, never two
+  // simultaneously-mounted modals (#332). The modal picks its own state from
+  // `isDiscovering` + `wallets`; mounting it a second time while it's already
+  // open is impossible because there is only one render site.
+  const isWalletDiscoveryOpen =
+    showWalletInstallPrompt ||
+    walletConnectionPhase === 'discovering' ||
+    walletConnectionPhase === 'selecting'
+
   return (
     <>
-      {showWalletInstallPrompt && (
-        <WalletDiscoveryModal
-          isOpen={true}
-          wallets={[]}
-          isDiscovering={false}
-          onSelectWallet={() => {}}
-          onClose={() => setShowWalletInstallPrompt(false)}
-          webWalletUrl={webWalletUrl}
-          onConnectWebWallet={setWebWalletUrl}
-        />
-      )}
-      {(walletConnectionPhase === 'discovering' || walletConnectionPhase === 'selecting') && (
+      {isWalletDiscoveryOpen && (
         <WalletDiscoveryModal
           isOpen={true}
           wallets={discoveredWallets}
           isDiscovering={walletConnectionPhase === 'discovering'}
           onSelectWallet={selectWallet}
-          onClose={cancelWalletConnection}
+          onClose={() => {
+            cancelWalletConnection()
+            setShowWalletInstallPrompt(false)
+          }}
+          onRecheck={() => {
+            void startWalletDiscovery()
+          }}
           webWalletUrl={webWalletUrl}
           onConnectWebWallet={setWebWalletUrl}
         />
@@ -273,15 +280,19 @@ export function AztecWalletConnectionModals() {
           check. Hold a loading state here so the modal never blinks out and
           looks like the click did nothing. */}
       {walletConnectionPhase === 'verifying' && !verificationEmojis && (
-        <div className='absolute inset-0 bg-latest-grey-1000 z-20 rounded-lg flex flex-col items-center justify-center gap-4'>
-          <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />
-          <p className='text-latest-grey-600 text-14 font-medium'>Connecting to wallet...</p>
+        <div className='fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4'>
+          <div className='flex flex-col items-center gap-4 rounded-2xl bg-white px-8 py-7 shadow-xl'>
+            <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />
+            <p className='text-neutral-600 text-14 font-medium'>Connecting to wallet...</p>
+          </div>
         </div>
       )}
       {walletConnectionPhase === 'requesting' && (
-        <div className='absolute inset-0 bg-latest-grey-1000 z-20 rounded-lg flex flex-col items-center justify-center gap-4'>
-          <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />
-          <p className='text-latest-grey-600 text-14 font-medium'>Requesting permissions...</p>
+        <div className='fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4'>
+          <div className='flex flex-col items-center gap-4 rounded-2xl bg-white px-8 py-7 shadow-xl'>
+            <Oval height={40} width={40} color='#81133B' secondaryColor='#FA8FC4' strokeWidth={4} />
+            <p className='text-neutral-600 text-14 font-medium'>Requesting permissions...</p>
+          </div>
         </div>
       )}
       {walletConnectionPhase === 'account-select' && (

@@ -6,16 +6,17 @@ import { Icon } from '@iconify/react'
 import { Tooltip as ReactTooltip } from 'react-tooltip'
 import RootStyle from '@/components/RootStyle'
 import BridgeHeader from '@/components/BridgeHeader'
+import AztecWalletConnectionModals from '@/components/AztecWalletConnectionModals'
 import FeeJuiceTopUp from '@/components/FeeJuiceTopUp'
-import TextButton from '@/components/TextButton'
 import { useL2FeeJuiceBalance, useL2PrivateFeeJuiceBalance } from '@/hooks/useL2Operations'
 import { useBridgeOperations, decryptOperationPayload } from '@/hooks/useBridgeOperations'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useWalletStore } from '@/stores/walletStore'
 import { useToast } from '@/hooks/useToast'
 import { isResumable, hasPossibleLockedFunds, isLikelyCompleted } from '@/utils/resumability'
+import { humanizeError } from '@/utils'
+import { logError } from '@/utils/datadog'
 import { BridgeDirection } from '@/types/bridge'
-import { BRIDGED_FPC_ADDRESS } from '@/config'
 import type { BridgeOperation, RecoveryClaimData } from '@human.tech/clean.sdk'
 
 function FeeJuicePageInner() {
@@ -121,33 +122,35 @@ function FeeJuicePageInner() {
       setRecovery(operation.id, recoveryData)
       router.push('/progress/resume')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to decrypt'
-      notify('error', msg)
+      console.error('[fee-juice] resume/decrypt failed:', err)
+      logError('Resume decrypt failed', {
+        errorType: 'resume_decrypt_failed',
+        error: err instanceof Error ? err.message : String(err),
+      })
+      notify('error', humanizeError(err))
     } finally {
       setResuming(false)
     }
   }
 
-  // Show both balances whenever private fuel exists on this deployment, so the
-  // one-line summary always reflects the full picture regardless of the active mode.
-  const showPrivate = !!BRIDGED_FPC_ADDRESS
-  // The active side of the balance line is highlighted (bold + brand color); the inactive side
-  // is dimmed. This is the mode indication — mirrors FeeJuiceTopUp's fuelType resolution.
-  const privateActive = isPrivacyModeEnabled && showPrivate
-
   return (
-    <RootStyle className="min-h-0 max-h-[calc(90vh-2rem)] overflow-hidden">
-      <div className="flex h-full max-h-[calc(90vh-2rem)] flex-col overflow-hidden">
+    <RootStyle className="min-h-0 overflow-hidden">
+      <AztecWalletConnectionModals />
+      <div className="flex h-full flex-col overflow-hidden">
         <div className="px-5 pt-5">
-          <div className="flex items-center gap-4">
-            <BridgeHeader title="TOP UP" />
-          </div>
+          <BridgeHeader title="TOP UP" />
         </div>
 
-        <div className="px-5 pb-5 min-h-0 flex-1 overflow-y-auto">
+        {/* The return affordance is the Home button in the panel's pinned action row
+            (SOP §4/#194 — back shares the primary CTA's row), so the header carries no
+            second back arrow. */}
+        <div className="flex min-h-0 flex-1 flex-col px-5 pb-5">
+          {/* One-line title only. The rich public/private balances are owned by the
+              FeeJuiceTopUp panel below, so the header never duplicates them. Kept on a
+              single line (never wraps) beside the gas-pump icon and info tooltip. */}
           <div className="mt-2 flex items-center gap-2">
             <Icon icon="ph:gas-pump-fill" width={20} height={20} className="text-[#17235E]" />
-            <h1 className="text-16 font-semibold text-latest-black-100">Fee Juice</h1>
+            <h1 className="whitespace-nowrap text-16 font-semibold text-latest-black-100">Fee Juice</h1>
             <Icon
               icon="ph:info"
               width={15}
@@ -159,91 +162,39 @@ function FeeJuicePageInner() {
           </div>
           <ReactTooltip id="fj-purpose" place="bottom" className="z-[100]" style={{ fontSize: '12px', maxWidth: '220px' }} />
 
-          {/* Current Fee Juice balances — one compact line; the active mode's side is highlighted
-              (bold + brand color) and the inactive side is dimmed. */}
-          <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-md bg-[#F5F5F5] px-3 py-2 text-12">
-            <span className="font-medium text-latest-grey-700">Fee Juice</span>
-            {fjLoading ? (
-              <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
-            ) : (
-              <>
-                <span className={privateActive ? 'font-medium text-latest-grey-500' : 'font-bold text-[#17235E]'}>
-                  {feeJuiceBalance ?? '--'}
-                </span>
-                <span
-                  className={`flex items-center gap-0.5 ${
-                    privateActive ? 'text-latest-grey-500' : 'font-semibold text-[#17235E]'
-                  }`}
-                >
-                  public
-                  <Icon
-                    icon="ph:globe-hemisphere-west-fill"
-                    width={11}
-                    height={11}
-                    style={{ color: privateActive ? '#747474' : '#17235E' }}
-                  />
-                </span>
-              </>
-            )}
-            {showPrivate && (
-              <>
-                <span className="text-latest-grey-400">·</span>
-                {privateFjLoading ? (
-                  <span className="inline-block h-3 w-10 bg-neutral-300 rounded animate-pulse" />
-                ) : (
-                  <span className={privateActive ? 'font-bold text-[#81133B]' : 'font-medium text-latest-grey-500'}>
-                    {privateFeeJuiceBalance ?? '--'}
-                  </span>
-                )}
-                <span
-                  className={`flex items-center gap-0.5 ${
-                    privateActive ? 'font-semibold text-[#81133B]' : 'text-latest-grey-500'
-                  }`}
-                >
-                  private
-                  <Icon
-                    icon="ph:lock-key-fill"
-                    width={11}
-                    height={11}
-                    style={{ color: privateActive ? '#81133B' : '#747474' }}
-                  />
-                </span>
-              </>
-            )}
-          </div>
-
           {/* Reusable buy + bridge Fee Juice form (auto + manual). Owns ALL top-up status
               messaging (including the interrupted-claim banner) so the screen can never show
-              two contradictory statements. */}
-          <div className="mt-3">
+              two contradictory statements. It also owns the pinned action row, so the CTA and
+              Home keep the same position in every state. */}
+          <div className="mt-3 flex min-h-0 flex-1 flex-col">
             <FeeJuiceTopUp
               isPrivacyModeEnabled={isPrivacyModeEnabled}
               feeJuiceBalance={feeJuiceBalance}
               privateFeeJuiceBalance={privateFeeJuiceBalance}
+              feeJuiceBalanceLoading={fjLoading}
+              privateFeeJuiceBalanceLoading={privateFjLoading}
               landingClaimShort={fromResume}
               depositLikelyCompleted={depositLikelyCompleted}
               onLandingCoveredChange={setLandingCovered}
               onSuccess={() => setToppedUp(true)}
+              onHome={() => router.push('/?app=1')}
+              // Prominent "Resume claim" once the claim is fundable — either after a
+              // successful top-up, or immediately when the existing balance already covers
+              // it (public mode). Never offered when the deposit likely already completed
+              // (resume would only re-fail). Passed into the pinned footer so it sits with
+              // the action row rather than floating mid-card.
+              footerExtra={
+                fromResume && !depositLikelyCompleted && (toppedUp || landingCovered) ? (
+                  <button
+                    onClick={handleResume}
+                    disabled={resuming}
+                    className="w-full rounded-lg bg-black py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {resuming ? 'Resuming…' : 'Resume claim'}
+                  </button>
+                ) : null
+              }
             />
-          </div>
-
-          {/* Prominent "Resume claim" once the claim is fundable — either after a successful
-              top-up, or immediately when the existing balance already covers it (public mode).
-              Never offered when the deposit likely already completed (resume would only re-fail). */}
-          {fromResume && !depositLikelyCompleted && (toppedUp || landingCovered) && (
-            <button
-              onClick={handleResume}
-              disabled={resuming}
-              className="mt-3 w-full rounded-lg bg-[#17235E] py-[10px] font-semibold text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {resuming ? 'Resuming…' : 'Resume claim'}
-            </button>
-          )}
-
-          <div className="mt-3 flex items-center justify-center">
-            <TextButton className="" onClick={() => router.push('/')}>
-              Back to Main Screen
-            </TextButton>
           </div>
         </div>
       </div>

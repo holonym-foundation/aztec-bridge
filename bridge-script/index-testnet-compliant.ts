@@ -71,13 +71,13 @@ import UniswapFuelSwapJson from '../l1-contracts/out/UniswapFuelSwap.sol/Uniswap
 import SwapBridgeRouterJson from '../l1-contracts/out/SwapBridgeRouter.sol/SwapBridgeRouter.json'
 // @ts-ignore
 import PoolSeederJson from '../l1-contracts/out/SeedUniswapPools.s.sol/PoolSeeder.json'
-import { PrivateMintAndPayFeePaymentMethod } from '@alejoamiras/aztec-fee-payment'
+import { PrivateMintAndPayFeePaymentMethod } from '@alejoamiras/private-fee-juice'
 import {
   registerPrivateContract,
   maxFeesPerGasFromBaseFees,
   maxGasCostFor,
-} from '@alejoamiras/aztec-fee-payment/utils'
-// @alejoamiras/aztec-fee-payment 5.0 dropped REASONABLE_GAS_LIMITS; inline the worst-case it
+} from '@alejoamiras/private-fee-juice/utils'
+// @alejoamiras/private-fee-juice 5.0 dropped REASONABLE_GAS_LIMITS; inline the worst-case it
 // represented (~6.54M L2 gas). DA gas must stay under the network per-tx cap (~117k), so it is
 // NOT symmetric with L2 gas — a claim's DA footprint is small.
 const REASONABLE_GAS_LIMITS = Gas.from({ l2Gas: 6_540_000, daGas: 100_000 })

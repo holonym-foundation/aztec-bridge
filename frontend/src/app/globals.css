@@ -373,10 +373,44 @@ body {
   }
 }
 
-/* Match the DS: both animations disabled under reduced-motion. */
+/* The wallet-link connector in the account dropdown: the line itself is the "these
+   two are paired and live" signal, so it breathes in place — a charge travelling it
+   would be invisible for most of its run, since the wallet-row avatars paint over
+   all but the ~17px of track exposed between them. Colour comes from the element
+   (--wallet-link-color) so one rule serves the light and Privacy-Mode palettes.
+   The translate lives in the keyframes because animating `transform` would
+   otherwise override Tailwind's -translate-x-1/2 centering. */
+.wallet-link-glow {
+  animation: wallet-link-glow 2.6s ease-in-out infinite;
+  background-color: var(--wallet-link-color);
+}
+
+@keyframes wallet-link-glow {
+  0%,
+  100% {
+    transform: translateX(-50%);
+    opacity: 0.4;
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    transform: translateX(-50%);
+    opacity: 1;
+    box-shadow: 0 0 7px 1px color-mix(in srgb, var(--wallet-link-color) 60%, transparent);
+  }
+}
+
+/* Match the DS: every ambient animation is disabled under reduced-motion. The
+   connector keeps its resting colour — unlike the old pulse rings, the line is the
+   indicator itself, so hiding it would remove the "linked" state, not just its
+   motion. */
 @media (prefers-reduced-motion: reduce) {
   .humn-points-spin {
     animation: none !important;
+  }
+  .wallet-link-glow {
+    animation: none !important;
+    opacity: 0.7 !important;
+    box-shadow: none !important;
   }
   .humanity-glow {
     animation: none !important;

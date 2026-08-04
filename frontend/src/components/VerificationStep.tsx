@@ -1,32 +1,144 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Icon } from '@iconify/react'
+import { useQueryClient } from '@tanstack/react-query'
+import { usePassportScore, LightTheme, PassportScoreWidget } from '@human.tech/passport-embed'
 import TextButton from './TextButton'
 import { useAttestationCheck } from '@/hooks/useAttestationCheck'
-import { POCH_MINT_URL } from '@/config'
-
-const PASSPORT_BUILD_URL = 'https://app.passport.xyz/'
+import { useWalletStore, requestWaapWallet, WAAP_METHOD } from '@/stores/walletStore'
+import {
+  POCH_MINT_URL,
+  PASSPORT_BUILD_URL,
+  L1_CHAIN_ID,
+  PASSPORT_EMBED_ENABLED,
+  PASSPORT_EMBED_API_KEY,
+  PASSPORT_EMBED_SCORER_ID,
+  PASSPORT_EMBED_PROXY_URL,
+} from '@/config'
 
 interface VerificationStepProps {
   onClose: () => void
+  // `upgrade` = a Passport-verified user who hit the $1,000 Travel Rule cap and
+  // asked to bridge more. Success then requires a valid Proof of Clean Hands, not
+  // the Passport credential they already hold. `initial` is the first-time flow.
+  intent?: 'initial' | 'upgrade'
 }
 
-const VerificationStep: React.FC<VerificationStepProps> = ({ onClose }) => {
+// In-app Passport score widget (Phase 1 of embedded verification). Rendered in
+// place of the "Build your Human Passport score" out-link when the keyless flag
+// PASSPORT_EMBED_ENABLED is on. All embed API calls are routed through the
+// same-origin proxy (PASSPORT_EMBED_PROXY_URL), which injects the server-only
+// Passport key — the browser only ever holds a placeholder apiKey. Passport-score
+// path only — the upgrade (Clean Hands) flow is untouched.
+const PassportEmbedCard: React.FC = () => {
+  const queryClient = useQueryClient()
+  const { waapAddress, isWaapConnected, waapChainId, switchWaapChain } = useWalletStore()
+
+  // Sign the widget's challenge with Shield's EVM (WaaP) wallet. Passport scores
+  // are read on the app's L1 chain, so make sure the wallet is on L1_CHAIN_ID
+  // (Sepolia on testnet, mainnet on prod) before signing — never hardcode 1.
+  const generateSignature = async (message: string): Promise<string> => {
+    if (!isWaapConnected || !waapAddress) {
+      throw new Error('Connect your wallet to verify your Human Passport score.')
+    }
+    if (waapChainId !== L1_CHAIN_ID) {
+      await switchWaapChain(L1_CHAIN_ID)
+    }
+    const signature = await requestWaapWallet(WAAP_METHOD.personal_sign, [message, waapAddress])
+    return signature as string
+  }
+
+  // Read-only score, used to auto-advance: the instant Passport reports a passing
+  // score, refresh Shield's tier/limits/badges by invalidating the attestation
+  // query — same effect as the manual "re-check" button.
+  const { data: passportScore } = usePassportScore({
+    apiKey: PASSPORT_EMBED_API_KEY,
+    scorerId: PASSPORT_EMBED_SCORER_ID,
+    address: waapAddress ?? undefined,
+    embedServiceUrl: PASSPORT_EMBED_PROXY_URL,
+  })
+  const passing = passportScore?.passingScore
+
+  useEffect(() => {
+    if (passing) {
+      queryClient.invalidateQueries({ queryKey: ['attestationCheck'] })
+    }
+  }, [passing, queryClient])
+
+  return (
+    <div className="mt-2 w-full max-w-[400px]">
+      <PassportScoreWidget
+        apiKey={PASSPORT_EMBED_API_KEY}
+        scorerId={PASSPORT_EMBED_SCORER_ID}
+        address={waapAddress ?? undefined}
+        overrideEmbedServiceUrl={PASSPORT_EMBED_PROXY_URL}
+        generateSignatureCallback={generateSignature}
+        theme={LightTheme}
+      />
+      <a
+        href={PASSPORT_BUILD_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80"
+      >
+        Having trouble? Open Passport
+        <Icon icon="ph:arrow-up-right" width={13} height={13} />
+      </a>
+    </div>
+  )
+}
+
+const VerificationStep: React.FC<VerificationStepProps> = ({ onClose, intent = 'initial' }) => {
   const attestation = useAttestationCheck()
   const data = attestation.data
   const eligible = !!data?.eligible
   const checking = attestation.isFetching
 
+  const pochEligible = data?.method === 'poch' && !!data?.eligible
+  // Upgrade success gate is stricter: only a valid PoCH counts. Being Passport-
+  // eligible (which `eligible` already is for these users) must NOT flip to success.
+  const showSuccess = intent === 'upgrade' ? pochEligible : eligible
+
+  // Manual re-check spinner, kept separate from `isFetching` so the background
+  // upgrade poll below doesn't make the fallback button flicker every tick.
+  const [isRechecking, setIsRechecking] = useState(false)
+  const recheckLoading = intent === 'upgrade' ? isRechecking : checking
+
   // Tracks the outcome of a manual re-check so we can confirm it ran even when
   // the result is unchanged. `n` bumps each attempt so the banner re-animates.
   const [recheck, setRecheck] = useState<{ n: number; status: 'blocked' | 'error' } | null>(null)
 
+  // Background poll: while the upgrade screen is open and PoCH is not yet detected,
+  // refetch on an interval and on tab focus so returning from the external mint tab
+  // advances to success without a manual click. Stops on success and on unmount.
+  const refetch = attestation.refetch
+  const shouldPoll = intent === 'upgrade' && !pochEligible
+  useEffect(() => {
+    if (!shouldPoll) return
+    const id = setInterval(() => {
+      refetch()
+    }, 5000)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refetch()
+    }
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener('focus', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [shouldPoll, refetch])
+
   const handleRecheck = async () => {
     setRecheck(null)
+    setIsRechecking(true)
     const res = await attestation.refetch()
-    if (res.data?.eligible) return // success view takes over
+    setIsRechecking(false)
+    const ok = intent === 'upgrade' ? res.data?.method === 'poch' && !!res.data?.eligible : !!res.data?.eligible
+    if (ok) return // success view takes over
     setRecheck((prev) => ({ n: (prev?.n ?? 0) + 1, status: res.data ? 'blocked' : 'error' }))
   }
 
@@ -49,10 +161,12 @@ const VerificationStep: React.FC<VerificationStepProps> = ({ onClose }) => {
         >
           <Icon icon="ph:arrow-left" width={20} height={20} />
         </button>
-        <h2 className="text-[16px] font-semibold text-[#0A0A0A]">Verify you’re human</h2>
+        <h2 className="text-[16px] font-semibold text-[#0A0A0A]">
+          {intent === 'upgrade' ? 'Upgrade to Clean Hands' : 'Verify you’re human'}
+        </h2>
       </div>
 
-      {eligible ? (
+      {showSuccess ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-5 pb-5 text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#DBFAAE]">
             <Icon icon="ph:check-bold" width={28} height={28} className="text-[#2F5214]" />
@@ -68,62 +182,106 @@ const VerificationStep: React.FC<VerificationStepProps> = ({ onClose }) => {
       ) : (
         <>
           <div className="flex-1 overflow-y-auto px-5">
-            <p className="text-[13px] leading-[19px] text-[#737373]">
-              A one-time humanity check is required before your first bridge. It keeps the network compliant and
-              sybil-resistant. Complete <span className="font-medium text-[#0A0A0A]">either</span> option below, then
-              re-check.
-            </p>
+            {intent === 'upgrade' ? (
+              <>
+                <p className="text-[13px] leading-[19px] text-[#737373]">
+                  You’re verified with Human Passport, which lets you bridge up to{' '}
+                  <span className="font-medium text-[#0A0A0A]">$1,000</span>. To bridge more, complete{' '}
+                  <span className="font-medium text-[#0A0A0A]">Proof of Clean Hands</span> once. It’s a
+                  privacy-preserving proof with no per-transaction limit.
+                </p>
 
-            {/* Option 1: POCH */}
-            <div className="mt-4 rounded-[12px] border border-[#D4D4D4] p-3">
-              <div className="flex items-center gap-2">
-                <p className="text-[13px] font-semibold text-[#0A0A0A]">Proof of Clean Hands</p>
-                <span className="rounded-full bg-[#E5EFFF] px-1.5 py-0.5 text-[10px] font-semibold text-[#17235E]">
-                  recommended
-                </span>
-              </div>
-              <p className="mt-1 text-[12px] leading-[17px] text-[#737373]">
-                A privacy-preserving proof you complete once. No per-transaction limit.
-              </p>
-              <a
-                href={POCH_MINT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80"
-              >
-                Get your Proof of Clean Hands
-                <Icon icon="ph:arrow-up-right" width={13} height={13} />
-              </a>
-            </div>
+                {/* Single primary path: Proof of Clean Hands. Passport is intentionally
+                    omitted here — the user already holds it. */}
+                <a
+                  href={POCH_MINT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 flex items-center justify-between gap-3 rounded-[12px] border border-[#D4D4D4] p-3 transition-colors hover:border-[#0A0A0A]"
+                >
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#0A0A0A]">Get your Proof of Clean Hands</p>
+                    <p className="mt-1 text-[12px] leading-[17px] text-[#737373]">
+                      Opens id.human.tech in a new tab. We’ll detect it automatically when you come back.
+                    </p>
+                  </div>
+                  <Icon
+                    icon="ph:arrow-up-right"
+                    width={16}
+                    height={16}
+                    className="flex-shrink-0 text-latest-blue-100"
+                  />
+                </a>
 
-            {/* Option 2: Human Passport */}
-            <div className="mt-3 rounded-[12px] border border-[#D4D4D4] p-3">
-              <p className="text-[13px] font-semibold text-[#0A0A0A]">Human Passport</p>
-              <p className="mt-1 text-[12px] leading-[17px] text-[#737373]">
-                Requires a Human Passport score of at least {data?.passportThreshold ?? 20}
-                {data?.passportScore != null ? ` (you have ${data.passportScore})` : ''}. Caps each transaction until
-                you upgrade to Proof of Clean Hands.
-              </p>
-              <a
-                href={PASSPORT_BUILD_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80"
-              >
-                Build your Human Passport score
-                <Icon icon="ph:arrow-up-right" width={13} height={13} />
-              </a>
-            </div>
+                <p className="mt-3 text-[11px] leading-[16px] text-[#737373]">
+                  Checking automatically for your Proof of Clean Hands. It can take a moment to propagate after you
+                  mint.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[13px] leading-[19px] text-[#737373]">
+                  A one-time humanity check is required before your first bridge. It keeps the network compliant and
+                  sybil-resistant. Complete <span className="font-medium text-[#0A0A0A]">either</span> option below,
+                  then re-check.
+                </p>
 
-            <p className="mt-3 text-[11px] leading-[16px] text-[#989898]">
-              Just minted? It can take a moment to propagate, so give it a few seconds before re-checking.
-            </p>
+                {/* Option 1: POCH */}
+                <div className="mt-4 rounded-[12px] border border-[#D4D4D4] p-3">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13px] font-semibold text-[#0A0A0A]">Proof of Clean Hands</p>
+                    <span className="rounded-full bg-[#E5EFFF] px-1.5 py-0.5 text-[10px] font-semibold text-[#17235E]">
+                      recommended
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[12px] leading-[17px] text-[#737373]">
+                    A privacy-preserving proof you complete once. No per-transaction limit.
+                  </p>
+                  <a
+                    href={POCH_MINT_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80"
+                  >
+                    Get your Proof of Clean Hands
+                    <Icon icon="ph:arrow-up-right" width={13} height={13} />
+                  </a>
+                </div>
+
+                {/* Option 2: Human Passport */}
+                <div className="mt-3 rounded-[12px] border border-[#D4D4D4] p-3">
+                  <p className="text-[13px] font-semibold text-[#0A0A0A]">Human Passport</p>
+                  <p className="mt-1 text-[12px] leading-[17px] text-[#737373]">
+                    Requires a Human Passport score of at least {data?.passportThreshold ?? 20}
+                    {data?.passportScore != null ? ` (you have ${data.passportScore})` : ''}. Caps each transaction
+                    until you upgrade to Proof of Clean Hands.
+                  </p>
+                  {PASSPORT_EMBED_ENABLED ? (
+                    <PassportEmbedCard />
+                  ) : (
+                    <a
+                      href={PASSPORT_BUILD_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-latest-blue-100 underline underline-offset-2 hover:opacity-80"
+                    >
+                      Build your Human Passport score
+                      <Icon icon="ph:arrow-up-right" width={13} height={13} />
+                    </a>
+                  )}
+                </div>
+
+                <p className="mt-3 text-[11px] leading-[16px] text-[#989898]">
+                  Just minted? It can take a moment to propagate, so give it a few seconds before re-checking.
+                </p>
+              </>
+            )}
           </div>
 
           {/* Pinned action bar */}
           <div className="border-t border-[#F0F0F0] px-5 pb-5 pt-3">
             <AnimatePresence mode="wait">
-              {recheck && !checking && (
+              {recheck && !recheckLoading && (
                 <motion.div
                   key={recheck.n}
                   initial={{ opacity: 0, y: -6 }}
@@ -136,13 +294,15 @@ const VerificationStep: React.FC<VerificationStepProps> = ({ onClose }) => {
                   <p className="text-[12px] leading-[17px] text-[#831816]">
                     {recheck.status === 'error'
                       ? 'Couldn’t complete the check. Please try again in a moment.'
-                      : 'Still not verified: no valid attestation found for your address yet. If you just completed a step, give it a few seconds and re-check.'}
+                      : intent === 'upgrade'
+                        ? 'No valid Proof of Clean Hands found for your address yet. If you just minted, give it a few seconds and re-check.'
+                        : 'Still not verified: no valid attestation found for your address yet. If you just completed a step, give it a few seconds and re-check.'}
                   </p>
                 </motion.div>
               )}
             </AnimatePresence>
-            <TextButton onClick={handleRecheck} isLoading={checking} className="h-12 w-full">
-              {checking ? 'Re-checking…' : 'I’ve completed this, re-check'}
+            <TextButton onClick={handleRecheck} isLoading={recheckLoading} className="h-12 w-full">
+              {recheckLoading ? 'Re-checking…' : 'I’ve completed this, re-check'}
             </TextButton>
           </div>
         </>

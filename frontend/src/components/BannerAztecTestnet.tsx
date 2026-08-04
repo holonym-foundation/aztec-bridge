@@ -33,7 +33,7 @@ const BannerAztecTestnet = () => {
             </div>
             <button
               onClick={() => setIsDownVisible(false)}
-              className='absolute right-4 hover:opacity-70 transition-opacity'>
+              className='absolute right-4 hover:opacity-80 transition-opacity'>
               <img src='/assets/svg/cross.svg' alt='Close' className='w-4 h-4' />
             </button>
           </motion.div>
@@ -58,7 +58,7 @@ const BannerAztecTestnet = () => {
             </div>
             <button
               onClick={() => setIsCongestionVisible(false)}
-              className='absolute right-4 hover:opacity-70 transition-opacity'>
+              className='absolute right-4 hover:opacity-80 transition-opacity'>
               <img src='/assets/svg/cross.svg' alt='Close' className='w-4 h-4' />
             </button>
           </motion.div>

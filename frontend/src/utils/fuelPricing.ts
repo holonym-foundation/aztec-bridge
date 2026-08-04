@@ -74,8 +74,8 @@ export function formatFuelDisplay(rawFj: bigint): string {
 
 /**
  * Convert a USD amount to the equivalent token amount (human-readable string).
- * e.g. usdToTokenAmount(5, "USDC") → "5" (at $1/USDC)
- *      usdToTokenAmount(5, "WETH") → "0.0024" (at $2100/WETH)
+ * e.g. usdToTokenAmount(5, "USDC") → "5.00" (at $1/USDC)
+ *      usdToTokenAmount(5, "WETH") → "0.002381" (at $2100/WETH)
  */
 export function usdToTokenAmount(
   usdAmount: number,

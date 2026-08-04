@@ -59,7 +59,7 @@ export default function EmojiVerificationModal({
               </motion.button>
             </div>
             <div className='mt-4 mx-2.5'>
-              <p className='text-latest-grey-600 text-14 mb-4'>
+              <p className='text-neutral-600 text-14 mb-4'>
                 This is a security check. Verify these emojis match what{' '}
                 <strong>{walletName || 'your wallet'}</strong> is showing to
                 confirm a secure connection.
@@ -88,7 +88,7 @@ export default function EmojiVerificationModal({
                 className='flex gap-3'>
                 <button
                   onClick={onCancel}
-                  className='flex-1 px-4 py-3 rounded-[8px] border border-[#D4D4D4] text-latest-grey-600 font-medium hover:bg-latest-grey-200 transition-colors'>
+                  className='flex-1 px-4 py-3 rounded-[8px] border border-[#D4D4D4] text-neutral-600 font-medium hover:bg-latest-grey-200 transition-colors'>
                   Cancel
                 </button>
                 <TextButton onClick={onConfirm} disabled={isConfirming} isLoading={isConfirming}>
@@ -106,7 +106,7 @@ export default function EmojiVerificationModal({
                   alt=''
                   className='h-4 w-[14px]'
                 />
-                <p className='text-12 font-medium text-latest-grey-600'>
+                <p className='text-12 font-medium text-neutral-600'>
                   Secured by human.tech
                 </p>
               </motion.div>

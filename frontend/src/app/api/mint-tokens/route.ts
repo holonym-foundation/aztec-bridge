@@ -130,13 +130,16 @@ export async function POST(request: NextRequest) {
       console.error('Error minting tokens:', err)
       return NextResponse.json(
         {
-          error: `Error minting tokens: ${err instanceof Error ? err.message : String(err)}`,
+          error: 'Could not send you test tokens right now. Please try again in a moment.',
         },
         { status: 500 },
       )
     }
   } catch (error) {
     console.error('Mint-tokens API error:', error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Could not send you test tokens right now. Please try again in a moment.' },
+      { status: 500 },
+    )
   }
 }

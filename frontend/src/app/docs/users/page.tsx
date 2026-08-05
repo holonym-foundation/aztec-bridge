@@ -22,7 +22,7 @@ const sections: DocsSection[] = [
         <UL>
           <li>
             Shield&apos;s components are independently audited, each scoped to its component: the bridge contracts by
-            Nethermind Security, and the Human Network threshold cryptography by Halborn.
+            Nethermind Security, the Clean Hands ZK circuits by Hexens, and the Human Network cryptography by Halborn.
             The Aztec network it runs on is still an early (alpha) network, so undiscovered bugs are still possible.
           </li>
           <li>There are no warranties, refunds, or insurance.</li>
@@ -164,9 +164,9 @@ const sections: DocsSection[] = [
             <tr>
               <Td>Cumulative (Human Passport)</Td>
               <Td>up to 1,000 USDC total</Td>
-              <Td>Requires a Human Passport attestation with score ≥ 20. This is your all-time total across
-                deposits, not a per-transaction limit — splitting a larger amount into several deposits does not
-                get around it. Past 1,000 USDC you need Proof of Clean Hands.</Td>
+              <Td>Requires a Human Passport attestation with score ≥ 20. This is an all-time total across
+                deposits, so splitting a larger amount into several smaller ones does not get around it. Past
+                1,000 USDC you need Proof of Clean Hands.</Td>
             </tr>
           </tbody>
         </Table>

@@ -270,7 +270,7 @@ The [frontend](../../frontend/) directory in this monorepo is a full Next.js app
 
 ## Network
 
-Currently targeting **Aztec Alpha**, which settles on **Ethereum mainnet**. See `package.json` for pinned Aztec package versions.
+Currently targeting **Aztec v5 mainnet**, deployment `5.0.0_2026-07-21`, which settles on **Ethereum mainnet** (chain id 1). See `package.json` for pinned Aztec package versions.
 
 ## License
 

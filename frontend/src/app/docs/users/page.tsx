@@ -144,7 +144,7 @@ const sections: DocsSection[] = [
     content: (
       <>
         <P>
-          Two limits apply. See{' '}
+          Two limits apply while the network is in Alpha. See{' '}
           <a href="#verification" className="text-latest-blue-100 underline">Verification</a> for how to qualify.
         </P>
         <Table>

@@ -17,7 +17,7 @@ const CARDS: DocCard[] = [
   {
     href: '/docs/users',
     title: 'For Users',
-    blurb: 'Everything you need to bridge safely.',
+    blurb: 'Everything you need to bridge safely while the network is in Alpha.',
     items: ['Network & risks', 'Rate limits & deposit caps', 'Private vs public mode', 'Backup & resuming'],
   },
   {

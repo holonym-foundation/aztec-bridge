@@ -23,7 +23,7 @@ const AUTH_PENDING_TOAST_ID = 'auth-pending'
  */
 export default function AuthSync() {
   const { waapAddress, aztecAddress, waapLoginMethod, waapWalletProvider, aztecLoginMethod } = useWalletStore()
-  const { setAuth, setAuthFailed, clearAuth, user, retryAuth } = useAuthStore()
+  const { setAuth, setAuthFailed, clearAuth, user, retryAuth, restoreCachedAuth, evictCachedAuth } = useAuthStore()
   const prevKeyRef = useRef<string | null>(null)
   const bridge = useBridge()
 
@@ -48,6 +48,10 @@ export default function AuthSync() {
       if (cancelled) return
 
       if (!status.valid && (status.reason === 'user_not_found' || status.reason === 'token_expired')) {
+        // Drop this pair from the cache so it isn't restored again (which would loop
+        // restore -> verifySession-clear -> restore); the flow then re-signs cleanly.
+        const u = useAuthStore.getState().user
+        if (u) evictCachedAuth(u.l1Address, u.l2Address)
         clearAuth()
         showToast('error', {
           heading: 'Session expired',
@@ -72,7 +76,7 @@ export default function AuthSync() {
       cancelled = true
       window.removeEventListener('online', handleOnline)
     }
-  }, [token, bridge, clearAuth])
+  }, [token, bridge, clearAuth, evictCachedAuth])
 
   useEffect(() => {
     if (!bothConnected) {
@@ -189,6 +193,16 @@ export default function AuthSync() {
       }
     }
 
+    // #4: switching between your own already-authed (EVM, Aztec) pairs must NOT force
+    // a fresh EVM signature. If we already authed this exact pair this session, restore
+    // its token instantly — no wallet popup. Only a pair we haven't seen signs. The
+    // token effect's verifySession still validates the restored token and re-auths
+    // (after evicting the stale entry) if it has genuinely expired.
+    if (restoreCachedAuth(l1Normalized!, l2Normalized!)) {
+      prevKeyRef.current = currentKey
+      return
+    }
+
     authenticate()
 
     return () => {
@@ -211,6 +225,7 @@ export default function AuthSync() {
     l2Normalized,
     bridge,
     retryAuth,
+    restoreCachedAuth,
   ])
 
   return null

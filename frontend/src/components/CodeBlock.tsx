@@ -3,7 +3,7 @@ import { createHighlighter, type Highlighter } from 'shiki'
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import CopyButton from './CopyButton'
 
-type Lang = 'typescript' | 'bash'
+type Lang = 'typescript' | 'bash' | 'html'
 
 let highlighterPromise: Promise<Highlighter> | null = null
 
@@ -11,7 +11,7 @@ function getHighlighter() {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
       themes: ['github-dark'],
-      langs: ['typescript', 'bash'],
+      langs: ['typescript', 'bash', 'html'],
       engine: createJavaScriptRegexEngine(),
     })
   }

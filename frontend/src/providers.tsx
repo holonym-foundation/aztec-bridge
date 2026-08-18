@@ -120,7 +120,9 @@ export function Providers({ children }: { children: ReactNode }) {
 
           {children}
         </BridgeProvider>
-        <ReactQueryDevtools initialIsOpen={false} />
+        {/* Dev only: this is a floating fixed-position panel, and in production
+            it would render on top of a partner's page inside the embed. */}
+        {process.env.NODE_ENV !== 'production' && <ReactQueryDevtools initialIsOpen={false} />}
       </QueryClientProvider>
       <ToastContainer toastClassName={'toast-container'} newestOnTop={true} />
     </>

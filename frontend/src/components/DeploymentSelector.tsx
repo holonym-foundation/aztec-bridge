@@ -162,6 +162,10 @@ const DeploymentSelector: React.FC = () => {
 
       {open && (
         <div
+          // Esc closes this, so the embed must not also forward `close` to the
+          // host. It is a display panel rather than a menu or dialog, so the
+          // contract is declared explicitly instead of via a borrowed role.
+          data-esc-closes
           className={`absolute left-0 top-full mt-2 w-[288px] rounded-xl shadow-lg z-50 py-1.5 border ${
             isDark ? 'bg-[#2A0E1C]/[0.97] border-white/[0.12] backdrop-blur-md' : 'bg-white border-[#E0E0E0]'
           }`}>

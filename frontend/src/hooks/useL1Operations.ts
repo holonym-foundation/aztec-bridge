@@ -26,6 +26,7 @@ import { I_UserTokenBalance, T_AlchemyTokenBalanceResponse, T_UserTokenType } fr
 import { axiosErrorMessage } from './helper'
 import { networkConfig } from '@/config/l1.config'
 import { isConsumedMessageError } from '@/utils/resumability'
+import { emitToParent } from '@/lib/embed/child'
 import { useBridge } from '@/hooks/useBridge'
 import type { BridgeEvent, StepStatus } from '@human.tech/clean.sdk'
 import { STORAGE_KEYS, BridgeEventType } from '@human.tech/clean.sdk'
@@ -454,6 +455,16 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
   // cleared in onSettled so a finished or failed run never leaves a stale marker.
   const drivenOperationIds = useRef<string[]>([])
 
+  // Partners hold the widget open on `tx:submitted` until a terminal event, so a
+  // failed bridge MUST report one. Tracked so the onError backstop below doesn't
+  // send a second `error` for a failure onEvent already reported.
+  const embedErrorSent = useRef(false)
+  const emitEmbedError = (code: string, message: string) => {
+    if (embedErrorSent.current) return
+    embedErrorSent.current = true
+    emitToParent({ type: 'error', code, message })
+  }
+
   const mutationFn = async (params: {
     amountL1: string
     amountL2: string
@@ -461,6 +472,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
     amountDisplayL2: string
   }): Promise<string | undefined> => {
     const { amountDisplayL1, amountDisplayL2 } = params
+    embedErrorSent.current = false
 
     if (!l1Address) throw new Error('Ethereum wallet not connected')
     if (!aztecAddress) throw new Error('Aztec wallet not connected')
@@ -587,6 +599,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               fuel_enabled: !!fuel,
             })
             setTransactionUrls(event.l1TxUrl, null)
+            emitToParent({ type: 'tx:submitted', hash: event.l1TxHash, chain: 'l1' })
             // Tx is in mempool — the "Do Not Reload" prep banner is now stale.
             notify.dismiss(TOAST_ID_L1L2_DO_NOT_RELOAD)
             // The toast was suppressed into the persistent feed, so also drop the
@@ -735,6 +748,11 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
               title: 'Bridge complete',
               message: 'Tokens claimed on Aztec.',
             })
+            emitToParent({
+              type: 'bridge:success',
+              operationId: String(event.operationId),
+              l1TxHash: event.l1TxHash,
+            })
             // The op just reached its terminal 'completed' status on the backend.
             // Refetch operations so Activity re-derives it as done (no Resume, no
             // "N to finish") instead of serving the stale resumable status from the
@@ -869,6 +887,9 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 title: 'Deposit likely already completed',
                 message: 'Check your L2 balance in Activity.',
               })
+              // Terminal, but not asserted as a success: the message was consumed
+              // by *some* claim, which we have not verified here.
+              emitEmbedError('already_completed', 'Deposit likely already completed. Check the L2 balance.')
               break
             }
 
@@ -880,6 +901,7 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 title: "L2 claim didn't finish",
                 message: 'Your funds are safe. Resume from Activity.',
               })
+              emitEmbedError(errorTag, "The L2 claim didn't finish. Funds are safe and the deposit can be resumed.")
               break
             }
 
@@ -904,24 +926,28 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
                 title: 'The Aztec network is busy',
                 message: 'Your deposit did not go through. No funds moved. Please try again.',
               })
+              emitEmbedError(errorTag, 'The Aztec network is busy. The deposit did not go through; no funds moved.')
             } else if (isReloadableErr) {
               pushNotification({
                 type: 'error',
                 title: 'Deposit could not finish',
                 message: 'Please reload the page and try again. No funds moved.',
               })
+              emitEmbedError(errorTag, 'The deposit could not finish. No funds moved.')
             } else if (isArtifactErr) {
               pushNotification({
                 type: 'error',
                 title: 'Bridge is temporarily unavailable',
                 message: 'We could not complete your deposit right now. No funds moved. Please try again soon.',
               })
+              emitEmbedError(errorTag, 'The bridge is temporarily unavailable. No funds moved.')
             } else {
               pushNotification({
                 type: 'error',
                 title: 'Deposit failed',
                 message: 'No funds moved. You can try again.',
               })
+              emitEmbedError(errorTag, 'The deposit failed. No funds moved.')
             }
             break
           }
@@ -981,6 +1007,15 @@ export function useL1BridgeToL2(onBridgeSuccess?: (data: any) => void) {
       // Only show here for backup failures (which are skipped in onEvent).
       const errorMessage =
         error instanceof Error ? error.message : typeof error === 'object' ? JSON.stringify(error) : String(error)
+      // Backstop for anything the onEvent handler never saw — a throw before the
+      // SDK emits, or a rejection with no ERROR event. Without it an embedded
+      // widget stays locked behind `busy` for the rest of the session.
+      emitEmbedError(
+        errorMessage.includes('Failed to backup') ? 'backup_failed' : 'unknown',
+        errorMessage.includes('Failed to backup')
+          ? 'Could not save the recovery backup, so the bridge stopped.'
+          : 'The deposit failed.',
+      )
       if (errorMessage.includes('Failed to backup')) {
         notify(
           'error',

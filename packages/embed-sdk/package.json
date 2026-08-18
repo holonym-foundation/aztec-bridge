@@ -1,0 +1,39 @@
+{
+  "name": "@human.tech/shield-embed",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Drop-in loader for embedding the Shield bridge in a partner site.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holonym-foundation/shield.human.tech.git",
+    "directory": "packages/embed-sdk"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.js",
+      "require": "./dist/protocol.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && node ./scripts/copy-loader.mjs",
+    "prepare": "pnpm build",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5"
+  }
+}

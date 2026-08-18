@@ -59,6 +59,9 @@ importers:
       '@human.tech/passport-embed':
         specifier: ^0.3.4
         version: 0.3.4(@types/react@19.2.14)(browserslist@4.28.1)(bufferutil@4.1.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      '@human.tech/shield-embed':
+        specifier: workspace:*
+        version: link:../packages/embed-sdk
       '@human.tech/waap-sdk':
         specifier: ^1.0.3
         version: 1.2.2(@ethersproject/sha2@5.8.0)(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.4)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@19.2.4))(utf-8-validate@6.0.6)
@@ -213,6 +216,9 @@ importers:
       eslint-plugin-react-hooks:
         specifier: ^5.2.0
         version: 5.2.0(eslint@9.39.4(jiti@1.21.7))
+      happy-dom:
+        specifier: ^20.9.0
+        version: 20.9.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       https-browserify:
         specifier: ^1.0.0
         version: 1.0.0
@@ -270,6 +276,15 @@ importers:
       webpack:
         specifier: ^5.99.9
         version: 5.105.4(esbuild@0.27.3)
+
+  packages/embed-sdk:
+    devDependencies:
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.10)(typescript@5.9.3)
+      typescript:
+        specifier: ^5
+        version: 5.9.3
 
   packages/sdk:
     dependencies:

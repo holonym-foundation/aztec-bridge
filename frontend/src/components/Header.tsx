@@ -912,6 +912,11 @@ const Header: React.FC<HeaderProps> = ({ credentials }) => {
       {mobileMenuOpen && (
         <div
           ref={mobileMenuRef}
+          // Esc closes this, so the embed must not also forward `close` to the
+          // host. A role would be the wrong signal — it holds plain nav links,
+          // and role="menu" without menuitem children misreports to a screen
+          // reader — so the contract is declared explicitly instead.
+          data-esc-closes
           className={`lg:hidden absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 z-50 ${panelSurface(isDark)} rounded-2xl shadow-lg py-3 px-3 flex flex-col items-start gap-2`}
         >
           {renderSecondaryNav(true)}

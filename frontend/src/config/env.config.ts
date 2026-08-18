@@ -90,6 +90,16 @@ export const SANCTIONS_SCREENING_ENABLED = (process.env.SANCTIONS_SCREENING_ENAB
  */
 export const AUTH_EXPECTED_DOMAIN = process.env.AUTH_EXPECTED_DOMAIN ?? 'shield.human.tech'
 
+// ─── Embedding (server) ─────────────────────────────────────────────
+
+/**
+ * Comma-separated origins allowed to frame Shield (the partner allowlist).
+ * Consumed by src/proxy.ts to build `Content-Security-Policy: frame-ancestors`.
+ * Server-side only — the browser never needs the list, because the browser is
+ * what enforces it. Unset means "no third-party framing" ('self' only).
+ */
+export const EMBED_ALLOWED_ORIGINS = process.env.EMBED_ALLOWED_ORIGINS ?? ''
+
 // ─── PostHog (client) ───────────────────────────────────────────────
 
 export const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY ?? ''

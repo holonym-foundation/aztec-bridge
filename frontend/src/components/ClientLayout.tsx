@@ -10,10 +10,13 @@ import ActivityDrawer from '@/components/ActivityDrawer'
 import NotificationsDrawer from '@/components/NotificationsDrawer'
 import SupportTab from '@/components/SupportTab'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
+import EmbedBridge from '@/components/EmbedBridge'
+import { useIsEmbedded } from '@/lib/embed/mode'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useNotificationsStore } from '@/stores/useNotificationsStore'
 import { useWalletStore } from '@/stores/walletStore'
 import { isSupportOpenable } from '@/utils/support'
+import clsxm from '@/utils/clsxm'
 import { motion } from 'framer-motion'
 import { MeshGradient } from '@paper-design/shaders-react'
 import { usePathname } from 'next/navigation'
@@ -21,6 +24,7 @@ import { useEffect, useState } from 'react'
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const { isPrivacyModeEnabled } = useBridgeStore()
   const pathname = usePathname()
+  const isEmbedded = useIsEmbedded()
   // Docs is a public, neutral reading surface: reachable without the onboarding gate and
   // rendered on a clean near-white background rather than the pink paper-shader field.
   const isDocs = pathname?.startsWith('/docs') ?? false
@@ -92,11 +96,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       // (bottom). On comfortable heights everything fits with no scroll at all — the
       // "looking through a window, see everything" experience. The clip guarantees the
       // footer is always visible and never pushed off-screen.
-      className="relative flex flex-col w-full min-w-0 overflow-hidden h-[100dvh]"
+      // 100dvh holds embedded too: inside an iframe it resolves to the frame's
+      // own box, so the host sizing the iframe is what sizes the shell. The
+      // min-height keeps the card usable if a partner sizes the frame too short.
+      className={`relative flex flex-col w-full min-w-0 overflow-hidden h-[100dvh] ${isEmbedded ? 'min-h-[560px]' : ''}`}
       style={{ minWidth: 0 }}
     >
-      {/* Onboarding is skipped on docs so the guides render without connecting a wallet. */}
-      {!isDocs && <ShieldOnboarding />}
+      <EmbedBridge />
+      {/* Onboarding is skipped on docs so the guides render without connecting a wallet.
+          Embedded, the full-screen splash gate is wrong for a widget the partner
+          already framed deliberately — the user goes straight to the bridge. */}
+      {!isDocs && !isEmbedded && <ShieldOnboarding />}
       {/* Background: a very soft white paper-shader field on docs (same MeshGradient
           treatment as the app for continuity, just near-white), pink field elsewhere.
           The white wash fades in so navigating INTO docs animates rather than cuts. */}
@@ -173,15 +183,24 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           transparent footer; the page still never scrolls because the root shell
           (h-[100dvh], overflow-hidden) clips any spill below the footer. */}
       <div className="relative z-20 flex flex-grow flex-col min-h-0 overflow-visible">
-        <div className="flex-grow">{children}</div>
+        {/* Embedded, the page region becomes a flex column so the card can claim
+            exactly the space left under the header (RootStyle sizes itself with
+            flex-1). Standalone it stays a plain block: the card there is a fixed
+            dvh-derived height and a flex context would change its centering. */}
+        <div className={isEmbedded ? 'flex flex-grow flex-col min-h-0' : 'flex-grow'}>{children}</div>
       </div>
       {/* Footer pinned to the bottom of the fixed shell (shrink-0 so it keeps its
           height). It rests at the bottom edge on every route and can never be clipped:
           when a short viewport can't fit the card, the column above scrolls under this
           footer rather than pushing it off-screen or forcing a document scroll. */}
-      <div className="relative z-20 shrink-0">
-        <Footer />
-      </div>
+      {/* Dropped in embed: the footer is social/legal out-links that all open new
+          tabs, which is noise inside a partner's widget. The Header stays — it
+          carries the account chip and the network banners. */}
+      {!isEmbedded && (
+        <div className="relative z-20 shrink-0">
+          <Footer />
+        </div>
+      )}
       {/* Persistent binder dock: app-shell chrome mounted once, so the Tutorial /
           Activity / Messages tabs are present on EVERY route and navigation never
           drops them (their badges stay live across routes because they read global
@@ -207,7 +226,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           tappable dock in the bottom-LEFT corner, clear of the bottom-right
           support chat bubble. Each tab keeps its icon + badge and opens its
           panel as a bottom-anchored sheet. */}
-      <div className="pointer-events-none fixed bottom-4 left-4 z-40 flex items-end gap-2 md:hidden">
+      {/* Embedded there is no footer under the card, so the bottom-left dock lands
+          directly on the primary CTA. Move it to the left gutter instead — the
+          360px card inside a narrow frame still leaves room beside it. */}
+      <div
+        className={clsxm(
+          'pointer-events-none fixed z-40 flex gap-2 md:hidden',
+          isEmbedded
+            ? 'left-1 top-1/2 -translate-y-1/2 flex-col items-start'
+            : 'bottom-4 left-4 items-end'
+        )}>
         <BridgeStepsRail variant="dock" />
         <ActivityDrawer variant="dock" />
         <NotificationsDrawer variant="dock" />

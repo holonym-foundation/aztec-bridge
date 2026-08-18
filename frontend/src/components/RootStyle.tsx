@@ -1,3 +1,6 @@
+'use client'
+
+import { useIsEmbedded } from '@/lib/embed/mode'
 import clsxm from '@/utils/clsxm'
 import React from 'react'
 
@@ -11,13 +14,23 @@ interface RootStyleProps extends React.PropsWithChildren {
 // that renders this card. That keeps card centering completely independent of the
 // drawers: this wrapper is sized to the card, so the card is always centered.
 export default function RootStyle({ children, className }: RootStyleProps) {
+  const isEmbedded = useIsEmbedded()
+  // Embedded there is no footer and the frame can be any height a partner picks,
+  // so the card fills whatever the flex column leaves below the header instead of
+  // budgeting a fixed nav+footer reserve out of the viewport. A dvh calculation
+  // here clipped the primary CTA in short frames.
+  const height = isEmbedded ? 'h-full' : 'h-[min(85vh,calc(100dvh-11rem))]'
   return (
     // 85vh (not 90vh) + py-6 (not py-10): the app's top nav (~94px) lives ABOVE this
     // region, so a full 90vh reserve here plus the nav overflowed the viewport and
     // scrolled the whole page on short (<~940px) laptop windows. The reduced reserve keeps
     // the card centered while leaving room for the nav so the page never scrolls; the card's
     // own max-h-[calc(90vh-5rem)] budget (set by the caller) still caps its height.
-    <div className={`flex items-center min-h-[min(85vh,calc(100dvh-11rem))] justify-center py-6`}>
+    <div
+      className={clsxm(
+        'flex items-center justify-center',
+        isEmbedded ? 'flex-1 min-h-0 py-2' : 'py-6 min-h-[min(85vh,calc(100dvh-11rem))]'
+      )}>
       <div
         className={clsxm(
           `relative rounded-xl bg-white shadow-[0px_383px_107px_0px_rgba(0,0,0,0),0px_245px_98px_0px_rgba(0,0,0,0.01),0px_138px_83px_0px_rgba(0,0,0,0.05),0px_61px_61px_0px_rgba(0,0,0,0.09),0px_15px_34px_0px_rgba(0,0,0,0.10)]`,
@@ -26,7 +39,8 @@ export default function RootStyle({ children, className }: RootStyleProps) {
           // frame. It is NOT content-driven. Each page fills this fixed card (flex column, its own
           // internal scroll region for overflow) rather than growing/shrinking the card. The height
           // is sized to fit under the nav within one viewport (11rem reserves nav + footer).
-          'w-[360px] shrink-0 min-w-0 h-[min(85vh,calc(100dvh-11rem))] flex flex-col overflow-hidden',
+          'w-[360px] max-w-full shrink-0 min-w-0 flex flex-col overflow-hidden',
+          height,
           className
         )}>
         {children}

@@ -1,3 +1,5 @@
+import { emitToParent } from '@/lib/embed/child'
+import { getEmbedContext } from '@/lib/embed/mode'
 import { useNotificationsStore } from '@/stores/useNotificationsStore'
 
 // The Iris support widget (src/app/layout.tsx, data-iris-key="shield") renders its
@@ -8,6 +10,14 @@ import { useNotificationsStore } from '@/stores/useNotificationsStore'
 // Every branch is guarded so a missing widget is a silent no-op rather than a throw.
 export function openSupport(): boolean {
   if (typeof window === 'undefined') return false
+
+  // 0. Embedded, the Iris script is never loaded (src/app/layout.tsx is top-frame
+  //    only), so none of the DOM paths below can resolve. Hand support off to the
+  //    partner instead of returning false and leaving the user with nothing.
+  if (getEmbedContext().isEmbedded) {
+    emitToParent({ type: 'support' })
+    return true
+  }
 
   // 1. A control object on the global, if a future widget build exposes one.
   const globals = [(window as any).Iris, (window as any).IrisWidget, (window as any).iris]
@@ -62,6 +72,9 @@ export function openSupport(): boolean {
 // the Support tab (shield.human.tech#86). SSR-guarded.
 export function isSupportOpenable(): boolean {
   if (typeof window === 'undefined') return false
+
+  // Embedded, support is always reachable — it goes to the host page.
+  if (getEmbedContext().isEmbedded) return true
 
   // 1. A callable control method on the global (future widget build).
   const globals = [(window as any).Iris, (window as any).IrisWidget, (window as any).iris]

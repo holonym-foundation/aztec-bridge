@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatUnits, parseUnits } from 'viem'
 import { useToast, useToastMutation } from './useToast'
 import { pushNotification, dismissNotificationByKey } from '@/stores/useNotificationsStore'
+import { emitToParent } from '@/lib/embed/child'
 import {
   exportWithdrawalData,
   copyToClipboard,
@@ -321,6 +322,16 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
   // cleared in onSettled so a finished or failed run never leaves a stale marker.
   const drivenOperationIds = useRef<string[]>([])
 
+  // Partners hold the widget open on `tx:submitted` until a terminal event, so a
+  // failed withdrawal MUST report one. Tracked so the onError backstop below
+  // doesn't send a second `error` for a failure onEvent already reported.
+  const embedErrorSent = useRef(false)
+  const emitEmbedError = (code: string, message: string) => {
+    if (embedErrorSent.current) return
+    embedErrorSent.current = true
+    emitToParent({ type: 'error', code, message })
+  }
+
   const mutationFn = async (params: {
     amountL1: string
     amountL2: string
@@ -328,6 +339,7 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
     amountDisplayL2: string
   }) => {
     const { amountDisplayL2 } = params
+    embedErrorSent.current = false
 
     if (!l1Address) throw new Error('Ethereum wallet not connected')
     if (!aztecAddress) throw new Error('Aztec wallet not connected')
@@ -414,6 +426,10 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               l2Address: aztecAddress,
               userAction: DatadogUserAction.WITHDRAWAL_L2_TO_L1_BURN_SENT,
             })
+            // Mirrors DEPOSIT_SENT on the L1 path: this is the point past which
+            // the withdrawal must not be interrupted, so an embedding partner
+            // locks its modal here until a terminal event arrives.
+            emitToParent({ type: 'tx:submitted', hash: event.l2TxHash, chain: 'l2' })
             // Burn is on L2 — the "Do Not Reload" prep banner is now stale.
             notify.dismiss('l2-to-l1-do-not-reload')
             // The toast was suppressed into the persistent feed, so also drop the
@@ -534,6 +550,11 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
               title: 'Withdrawal complete',
               message: 'Tokens withdrawn to Ethereum.',
             })
+            emitToParent({
+              type: 'bridge:success',
+              operationId: String(event.operationId),
+              l1TxHash: event.l1TxHash,
+            })
             // The op just reached its terminal 'completed' status on the backend.
             // Refetch operations so Activity re-derives it as done (no Resume, no
             // "N to finish") instead of serving the stale resumable status from the
@@ -635,6 +656,12 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                   ? 'The network needs a little more time. Please try again later.'
                   : 'Your funds are safe on Aztec. You can resume this withdrawal from Activity.',
               })
+              emitEmbedError(
+                errorTag,
+                isBlockNotProvenHint
+                  ? 'The withdrawal is not ready yet — the network needs more time.'
+                  : 'The withdrawal did not finish. Funds are safe on Aztec and it can be resumed.',
+              )
               break
             }
 
@@ -649,12 +676,14 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
                 title: 'Bridge is temporarily unavailable',
                 message: 'We could not complete your withdrawal right now. No funds moved. Please try again soon.',
               })
+              emitEmbedError(errorTag, 'The bridge is temporarily unavailable. No funds moved.')
             } else {
               pushNotification({
                 type: 'error',
                 title: 'Withdrawal failed',
                 message: 'No funds moved. You can try again.',
               })
+              emitEmbedError(errorTag, 'The withdrawal failed. No funds moved.')
             }
             break
         }
@@ -725,6 +754,15 @@ export function useL2WithdrawTokensToL1(onBridgeSuccess?: (data: any) => void) {
       // Only show here for backup failures (which are skipped in onEvent).
       const errorMessage =
         error instanceof Error ? error.message : typeof error === 'object' ? JSON.stringify(error) : String(error)
+      // Backstop for anything the onEvent handler never saw — a throw before the
+      // SDK emits, or a rejection with no ERROR event. Without it an embedded
+      // widget stays locked behind `busy` for the rest of the session.
+      emitEmbedError(
+        errorMessage.includes('Failed to backup') ? 'backup_failed' : 'unknown',
+        errorMessage.includes('Failed to backup')
+          ? 'Could not save the recovery backup, so the withdrawal stopped.'
+          : 'The withdrawal failed.',
+      )
       if (errorMessage.includes('Failed to backup')) {
         notify(
           'error',

@@ -152,6 +152,14 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
   // edge never rises over the nav no matter where the dock sits (#318).
   const [maxPanelHeight, setMaxPanelHeight] = useState<number | undefined>(undefined)
   const open = hovered || pinned
+  // Only the PINNED panel is a dialog: that is the state that captures Esc and
+  // outside clicks. A hover preview must not claim the role — the embed forwards
+  // Esc to the host only when nothing in-app is open (EmbedBridge), so a hovered
+  // tab would otherwise silently swallow the widget's dismissal.
+  const panelDialogProps = {
+    role: pinned ? 'dialog' : undefined,
+    'aria-label': pinned ? 'Bridge activity' : undefined,
+  }
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
 
@@ -539,6 +547,7 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
             >
               <div
                 id={panelId}
+                {...panelDialogProps}
                 className="flex max-h-[70dvh] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
               >
                 {panelBody(closeDesktop)}
@@ -595,6 +604,7 @@ const ActivityDrawer: React.FC<ActivityDrawerProps> = ({ variant = 'rail' }) => 
           >
             <div
               id={panelId}
+              {...panelDialogProps}
               style={{
                 height: maxPanelHeight != null ? Math.min(maxPanelHeight, PANEL_TARGET_HEIGHT) : undefined,
                 maxHeight: maxPanelHeight,

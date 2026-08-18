@@ -198,6 +198,14 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
   // never pops out over an open Tutorial/Activity panel (#160/#181).
   const [othersOpen, setOthersOpen] = useState(false)
   const open = hovered || pinned
+  // Only the PINNED panel is a dialog: that is the state that captures Esc and
+  // outside clicks. A hover preview must not claim the role — the embed forwards
+  // Esc to the host only when nothing in-app is open (EmbedBridge), so a hovered
+  // tab would otherwise silently swallow the widget's dismissal.
+  const panelDialogProps = {
+    role: pinned ? 'dialog' : undefined,
+    'aria-label': pinned ? 'Messages' : undefined,
+  }
 
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
@@ -556,6 +564,7 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
             >
               <div
                 id={panelId}
+                {...panelDialogProps}
                 className={`flex max-h-[70dvh] flex-col rounded-[16px] border border-[#D4D4D4] bg-white ${PANEL_PADDING} shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]`}
               >
                 {panelBody(closeDesktop)}
@@ -654,6 +663,7 @@ const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({ variant = 'ra
           >
             <div
               id={panelId}
+              {...panelDialogProps}
               style={{ maxHeight: maxPanelHeight, maxWidth: CARD_SAFE_MAX_WIDTH }}
               className={`flex max-h-[calc(100dvh-1.5rem)] w-[300px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white ${PANEL_PADDING} shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]`}
             >

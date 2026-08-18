@@ -92,6 +92,14 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
   // whole binder tab is hidden and stays hidden across routes/reloads (#320b).
   const [dismissed, setDismissed] = useState(false)
   const open = hovered || pinned
+  // Only the PINNED panel is a dialog: that is the state that captures Esc and
+  // outside clicks. A hover preview must not claim the role — the embed forwards
+  // Esc to the host only when nothing in-app is open (EmbedBridge), so a hovered
+  // tab would otherwise silently swallow the widget's dismissal.
+  const panelDialogProps = {
+    role: pinned ? 'dialog' : undefined,
+    'aria-label': pinned ? 'Bridge in 4 steps' : undefined,
+  }
   const drawerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLButtonElement>(null)
 
@@ -445,6 +453,7 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
             >
               <div
                 id={panelId}
+                {...panelDialogProps}
                 className="flex max-h-[70dvh] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
               >
                 {panelBody(handleDismiss)}
@@ -502,6 +511,7 @@ const BridgeStepsRail: React.FC<BridgeStepsRailProps> = ({ variant = 'rail' }) =
           >
             <div
               id={panelId}
+              {...panelDialogProps}
               style={{ maxHeight: maxPanelHeight, maxWidth: CARD_SAFE_MAX_WIDTH }}
               className="flex max-h-[calc(100dvh-1.5rem)] w-[260px] flex-col rounded-[16px] border border-[#D4D4D4] bg-white p-4 shadow-[0px_15px_34px_0px_rgba(0,0,0,0.10)]"
             >

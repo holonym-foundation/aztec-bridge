@@ -73,6 +73,7 @@ import {
   SWAP_BRIDGE_ROUTER_ADDRESS,
 } from '@/config'
 import { BRIDGE_MAX_DEPOSIT_USD } from '@/config/env.config'
+import { getEmbedContext } from '@/lib/embed/mode'
 
 export default function Home() {
   const router = useRouter()
@@ -156,6 +157,7 @@ export default function Home() {
     swapDirection,
     setDirection,
     setBridgeConfig,
+    setAmount,
     resetStepState,
     reset: resetBridgeStore,
     fuelEnabled,
@@ -612,6 +614,27 @@ export default function Home() {
   useEffect(() => {
     resetStepState()
     resetBridgeStore()
+    // Partner-supplied starting values, applied here rather than alongside the
+    // rest of the embed wiring in EmbedBridge: this reset runs on mount and
+    // would clear anything written before it. Token pairing mirrors
+    // handleSelectToken — setting `from` alone would strand `to` on the old asset.
+    const { isEmbedded, defaults } = getEmbedContext()
+    if (!isEmbedded) return
+    // setAmount, not setBridgeConfig: the latter replaces the whole object from
+    // this render's closure, which predates the resetBridgeStore() above and so
+    // would re-apply the pre-reset from/to/amount. `defaults.amount` is already
+    // validated by parseEmbedAmount when the embed context is parsed.
+    if (defaults.amount) setAmount(defaults.amount)
+    const from = defaults.token
+      ? L1_TOKENS.find((t) => t.symbol.toLowerCase() === defaults.token?.toLowerCase())
+      : undefined
+    if (from) {
+      updateToken('from', from)
+      const paired = getL2PairedToken(from)
+      if (paired) updateToken('to', paired)
+    }
+    // Runs once on mount; the setters are stable store actions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetStepState, resetBridgeStore])
 
   if (!mounted) return null

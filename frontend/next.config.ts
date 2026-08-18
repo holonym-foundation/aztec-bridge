@@ -13,15 +13,17 @@ const nextConfig: NextConfig = {
   // Barretenberg WASM) works on localhost without these headers. For
   // production, a different strategy is needed (e.g. service worker proxy
   // or isolating WASM in a cross-origin-isolated iframe).
+  // Framing (CSP frame-ancestors) and Permissions-Policy are NOT set here —
+  // they depend on the partner embed allowlist and are built per request in
+  // src/proxy.ts. X-Frame-Options is gone: it has no allowlist form, so it
+  // cannot coexist with partner embedding; frame-ancestors replaces it.
   async headers() {
     return [
       {
         source: '/(.*)',
         headers: [
           { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
         ],
       },
     ]
@@ -40,7 +42,7 @@ const nextConfig: NextConfig = {
   },
   // Keep @aztec/bb.js as external on the server so the WASM file resolves
   // from node_modules instead of being broken by webpack bundling.
-  transpilePackages: ['@human.tech/clean.sdk'],
+  transpilePackages: ['@human.tech/clean.sdk', '@human.tech/shield-embed'],
   serverExternalPackages: [
     '@aztec/bb.js',
     '@aztec/aztec.js',

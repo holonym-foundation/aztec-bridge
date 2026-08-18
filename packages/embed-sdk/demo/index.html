@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shield embed harness</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        padding: 2rem;
+        font: 15px/1.5 ui-sans-serif, system-ui, sans-serif;
+        display: grid;
+        gap: 1.5rem;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+        align-items: start;
+      }
+      @media (max-width: 900px) { body { grid-template-columns: minmax(0, 1fr); } }
+      h1 { font-size: 1.1rem; margin: 0 0 .25rem; }
+      p { margin: 0 0 1rem; opacity: .75; }
+      button { font: inherit; padding: .5rem .9rem; border-radius: 8px; cursor: pointer; }
+      #log {
+        margin: 0;
+        padding: .75rem;
+        min-height: 320px;
+        max-height: 70vh;
+        overflow: auto;
+        border-radius: 8px;
+        background: rgba(127,127,127,.12);
+        font: 12px/1.45 ui-monospace, monospace;
+        white-space: pre-wrap;
+      }
+      #inline { min-height: 640px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Shield embed harness</h1>
+      <p>
+        Serve this file from a <strong>different origin</strong> than the app
+        (e.g. <code>npx serve -l 8080 packages/embed-sdk/demo</code> against the app on
+        <code>:3000</code>). Same-origin framing would not exercise storage
+        partitioning, third-party cookie policy, or the CSP allowlist.
+      </p>
+      <p>
+        Add this harness origin to <code>EMBED_ALLOWED_ORIGINS</code> in
+        <code>frontend/.env.local</code>, restart the dev server, and the frame renders.
+        Remove it and the frame must go blank with a CSP violation in the console —
+        that is the allowlist working.
+      </p>
+      <button id="open">Open modal</button>
+      <button id="activity">navigate('/activity')</button>
+      <button id="close">Close</button>
+      <div id="inline"></div>
+    </main>
+    <pre id="log"></pre>
+
+    <script src="http://localhost:3000/embed.js"></script>
+    <script>
+      const log = document.getElementById('log')
+      const write = (label, value) => {
+        log.textContent += `${new Date().toISOString().slice(11, 23)}  ${label} ${value ?? ''}\n`
+        log.scrollTop = log.scrollHeight
+      }
+
+      // On window, not just a const: a `const` at script top level is a global
+      // lexical binding, which browser-automation evaluation contexts cannot see.
+      const shield = (window.shield = Shield.create({
+        partnerId: 'harness',
+        mode: 'modal',
+        appUrl: 'http://localhost:3000',
+        defaults: { token: 'USDC', amount: '10' },
+        onEvent: (event) => write(event.type, JSON.stringify(event)),
+      }))
+
+      document.getElementById('open').onclick = () => shield.open()
+      document.getElementById('close').onclick = () => shield.close()
+      document.getElementById('activity').onclick = () => shield.navigate('/activity')
+
+      // Prefill sanity: the frame should open on USDC with 10 already entered.
+      // Mid-transaction (after tx:submitted) Esc and backdrop clicks must be
+      // refused — check that by hand once a deposit is in flight.
+
+      // A message forged from an unrelated origin must never reach the loader's
+      // listeners — nothing should appear in the log from this.
+      window.postMessage({ channel: 'shield-embed', type: 'bridge:success', operationId: 'forged' }, '*')
+      write('harness', 'posted a forged same-window message; it must NOT appear above')
+    </script>
+  </body>
+</html>

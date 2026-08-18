@@ -365,6 +365,103 @@ try {
       </>
     ),
   },
+  {
+    id: 'embed',
+    label: 'Embed Shield',
+    content: (
+      <>
+        <P>
+          Shield also ships as a drop-in widget. The loader injects an iframe pointing at{' '}
+          <Code>shield.human.tech</Code>, so the bridge runs in Shield&apos;s own origin — your page never
+          touches keys, signatures, or recovery data.
+        </P>
+        <CodeBlock lang="html">{`<script src="https://shield.human.tech/embed.js" data-partner="acme" data-auto-open></script>`}</CodeBlock>
+        <P>For control over when it opens and what it reports back, use the API instead:</P>
+        <CodeBlock>{`const shield = Shield.create({
+  partnerId: 'acme',
+  mode: 'modal',                       // 'inline' mounts into \`target\` instead
+  defaults: { token: 'USDC', amount: '100' },
+  onEvent: (event) => console.log(event),
+})
+
+shield.on('bridge:success', ({ operationId, l1TxHash }) => {
+  // credit the user, refresh balances, ...
+})
+
+shield.open()`}</CodeBlock>
+        <P>
+          The same API is on npm as <Code>@human.tech/shield-embed</Code> if you would rather bundle it.
+        </P>
+
+        <P>Options:</P>
+        <Table>
+          <thead>
+            <tr>
+              <Th>Option</Th>
+              <Th>Meaning</Th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><Td><Code>partnerId</Code></Td><Td>Your partner id, issued by human.tech</Td></tr>
+            <tr><Td><Code>mode</Code></Td><Td><Code>&apos;modal&apos;</Code> (default) overlays the page; <Code>&apos;inline&apos;</Code> mounts into <Code>target</Code></Td></tr>
+            <tr><Td><Code>target</Code></Td><Td>Element or CSS selector — required for inline mode</Td></tr>
+            <tr><Td><Code>height</Code></Td><Td>Inline height in px (default 640). Modal fills the overlay.</Td></tr>
+            <tr><Td><Code>defaults</Code></Td><Td>Pre-fill <Code>token</Code> / <Code>amount</Code></Td></tr>
+            <tr><Td><Code>onEvent</Code></Td><Td>Called for every event below</Td></tr>
+          </tbody>
+        </Table>
+
+        <P>Events emitted by the widget:</P>
+        <Table>
+          <thead>
+            <tr>
+              <Th>Event</Th>
+              <Th>Payload</Th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><Td><Code>ready</Code></Td><Td><Code>protocol</Code>, <Code>version</Code> — the frame finished loading</Td></tr>
+            <tr><Td><Code>wallet:connected</Code></Td><Td><Code>address</Code>, <Code>chainId</Code></Td></tr>
+            <tr><Td><Code>wallet:disconnected</Code></Td><Td>—</Td></tr>
+            <tr><Td><Code>state</Code></Td><Td><Code>route</Code> — the user moved within the widget</Td></tr>
+            <tr><Td><Code>tx:submitted</Code></Td><Td><Code>hash</Code>, <Code>chain</Code></Td></tr>
+            <tr><Td><Code>bridge:success</Code></Td><Td><Code>operationId</Code>, <Code>l1TxHash</Code></Td></tr>
+            <tr><Td><Code>error</Code></Td><Td><Code>code</Code>, <Code>message</Code></Td></tr>
+            <tr><Td><Code>close</Code></Td><Td>The widget was dismissed (backdrop, Esc, or your own <Code>close()</Code>)</Td></tr>
+            <tr><Td><Code>support</Code></Td><Td>The user asked for help — route them to your own support</Td></tr>
+          </tbody>
+        </Table>
+        <P>
+          Host-side controls: <Code>open()</Code>, <Code>close()</Code>, <Code>navigate(route)</Code>,{' '}
+          <Code>on(type, fn)</Code>, <Code>destroy()</Code>. In inline mode <Code>close()</Code> is a no-op
+          (the widget lives in your page flow) — use <Code>destroy()</Code> to remove it.
+        </P>
+        <Callout tone="warning">
+          Between <Code>tx:submitted</Code> and its terminal event, Esc and backdrop clicks will not
+          dismiss the modal. A bridge in flight needs the frame to stay open, so do not build your own
+          dismissal on top of it either — wait for <Code>bridge:success</Code> or <Code>error</Code>.
+          Every failure emits <Code>error</Code>, and the lock lifts on its own after 15 minutes (L1) or
+          90 minutes (L2) if the frame goes away without reporting one, so it can never strand the user.
+        </Callout>
+
+        <Callout tone="warning">
+          Embedding is allowlisted. Send us the exact origin(s) you will embed from — a non-approved origin
+          gets a blank frame, because Shield serves{' '}
+          <Code>Content-Security-Policy: frame-ancestors</Code> with the approved list.
+        </Callout>
+        <Callout tone="info">
+          Wallets inside the embed: WaaP email/social sign-in and WalletConnect work. Browser extensions
+          generally do not — most wallet extensions only inject into the top frame, so they are not
+          reachable from a third-party iframe.
+        </Callout>
+        <P>
+          Browsers partition storage per embedding site, so a user&apos;s local Shield history is scoped to
+          your site. This is safe: an operation&apos;s encrypted backup is stored server-side, and its key
+          derives from Shield&apos;s own origin, so recovery works regardless of where the user started.
+        </P>
+      </>
+    ),
+  },
 ]
 
 export default function DevelopersDocsPage() {

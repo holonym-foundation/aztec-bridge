@@ -130,6 +130,8 @@ interface BridgeStoreState extends StepState, BridgeConfigState, TransactionStat
   // Bridge configuration actions
   setDirection: (direction: BridgeDirection) => void
   setBridgeConfig: (config: BridgeState) => void
+  /** Merge-only counterpart to setBridgeConfig, which replaces the whole object. */
+  setAmount: (amount: string) => void
   updateNetwork: (section: 'from' | 'to', network: Network) => void
   updateToken: (section: 'from' | 'to', token: Token) => void
   swapDirection: () => void
@@ -379,6 +381,8 @@ const bridgeStore = create<BridgeStoreState>((set, get) => ({
 
   setBridgeConfig: (config) => set({ bridgeConfig: config }),
 
+  setAmount: (amount) => set((state) => ({ bridgeConfig: { ...state.bridgeConfig, amount } })),
+
   updateNetwork: (section, network) =>
     set((state) => ({
       bridgeConfig: {
@@ -510,6 +514,7 @@ export const useBridgeStore = () =>
       // Bridge configuration actions
       setDirection: state.setDirection,
       setBridgeConfig: state.setBridgeConfig,
+      setAmount: state.setAmount,
       updateNetwork: state.updateNetwork,
       updateToken: state.updateToken,
       swapDirection: state.swapDirection,

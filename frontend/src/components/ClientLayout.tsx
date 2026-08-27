@@ -38,9 +38,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   // read the guides. The interactive chrome (Header/Footer/background/drawers) is gated on
   // `mounted` below so it never blocks the server-rendered docs content — and so the first
   // client render matches the server (no hydration mismatch).
-  if (!isDocs && !mounted) {
-    return <AppLoadingScreen />
-  }
   // Docs is a neutral reading view — keep the light background even when privacy mode is on.
   const showPrivacyBackground = isPrivacyModeEnabled && !isDocs
 
@@ -98,6 +95,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       document.title = original
     }
   }, [isSignaturePending])
+
+  // Must sit BELOW every hook above. React counts hooks per render, so an early
+  // return placed before them runs a shorter hook list on the pre-hydration pass
+  // than on the one after `mounted` flips, and throws "Rendered more hooks than
+  // during the previous render" on every non-docs route.
+  if (!isDocs && !mounted) {
+    return <AppLoadingScreen />
+  }
 
   return (
     <div

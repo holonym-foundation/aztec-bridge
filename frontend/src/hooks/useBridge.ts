@@ -9,10 +9,16 @@ export interface BridgeProviderConfig extends HumanTechBridgeConfig {
   children: React.ReactNode
 }
 
-export function useBridgeInstance(config: HumanTechBridgeConfig): HumanTechBridge {
+// `enabled` gates instantiation to the client: HumanTechBridge resolves its domain from
+// window.location, so constructing it during server render throws. Server render passes a
+// null bridge; only client-gated wallet UI ever reads the context (never the SSR'd docs).
+export function useBridgeInstance(
+  config: HumanTechBridgeConfig,
+  enabled = true,
+): HumanTechBridge | null {
   return useMemo(
-    () => new HumanTechBridge(config),
-    [config.deployment, config.domain, config.apiUrl, config.l1RpcUrl, config.l2NodeUrl],
+    () => (enabled ? new HumanTechBridge(config) : null),
+    [enabled, config.deployment, config.domain, config.apiUrl, config.l1RpcUrl, config.l2NodeUrl],
   )
 }
 

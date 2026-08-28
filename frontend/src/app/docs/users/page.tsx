@@ -5,8 +5,9 @@ import { getBridgeMaxDepositUsd } from '@/lib/attestation'
 const maxDepositUsd = getBridgeMaxDepositUsd()
 
 export const metadata = {
-  title: 'User Guide · Shield',
-  description: 'Risks, limits, tokens, backup, and recovery for the Aztec Token Bridge.',
+  title: 'User Guide',
+  description: 'Risks, limits, tokens, backup, and recovery for bridging with Shield on Aztec.',
+  alternates: { canonical: '/docs/users' },
 }
 
 const sections: DocsSection[] = [

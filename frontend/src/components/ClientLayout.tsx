@@ -10,6 +10,8 @@ import ActivityDrawer from '@/components/ActivityDrawer'
 import NotificationsDrawer from '@/components/NotificationsDrawer'
 import SupportTab from '@/components/SupportTab'
 import HowItWorksModal from '@/components/model/HowItWorksModal'
+import AppLoadingScreen from '@/components/AppLoadingScreen'
+import IrisWidget from '@/components/IrisWidget'
 import { useBridgeStore } from '@/stores/bridgeStore'
 import { useNotificationsStore } from '@/stores/useNotificationsStore'
 import { useWalletStore } from '@/stores/walletStore'
@@ -24,6 +26,18 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   // Docs is a public, neutral reading surface: reachable without the onboarding gate and
   // rendered on a clean near-white background rather than the pink paper-shader field.
   const isDocs = pathname?.startsWith('/docs') ?? false
+
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // The wallet-heavy bridge app is never server-rendered (its tree touches browser-only
+  // wallet/WASM state), so app routes keep a client-only loading screen until hydration.
+  // Docs are pure content: they render on the server so search engines and AI agents can
+  // read the guides. The interactive chrome (Header/Footer/background/drawers) is gated on
+  // `mounted` below so it never blocks the server-rendered docs content — and so the first
+  // client render matches the server (no hydration mismatch).
   // Docs is a neutral reading view — keep the light background even when privacy mode is on.
   const showPrivacyBackground = isPrivacyModeEnabled && !isDocs
 
@@ -81,6 +95,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       document.title = original
     }
   }, [isSignaturePending])
+
+  // Must sit BELOW every hook above. React counts hooks per render, so an early
+  // return placed before them runs a shorter hook list on the pre-hydration pass
+  // than on the one after `mounted` flips, and throws "Rendered more hooks than
+  // during the previous render" on every non-docs route.
+  if (!isDocs && !mounted) {
+    return <AppLoadingScreen />
+  }
 
   return (
     <div
@@ -157,12 +179,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           onboarding splash overlay (z-100) for connected users. See data-ob-splash.
           z-50 keeps the nav (banners + Header) ABOVE the binder dock (z-40) and its
           drawer panels, so an open drawer can never occlude the top nav (#318). The
-          connected-splash elevation to z-130 still wins via `!important`. */}
-      <div className="ob-header-elevate relative z-50 flex flex-col">
-        <BannerAztecTestnet />
-        <BannerAztecNodeError />
-        <Header />
-      </div>
+          connected-splash elevation to z-130 still wins via `!important`. Gated on
+          `mounted` so the wallet chrome hydrates in after the server-rendered docs
+          content rather than blocking or crashing its server render. */}
+      {mounted && (
+        <div className="ob-header-elevate relative z-50 flex flex-col">
+          <BannerAztecTestnet />
+          <BannerAztecNodeError />
+          <Header />
+        </div>
+      )}
       {/* Main content — a flex-grow column between header and footer. It is
           overflow-VISIBLE, not a clipped scroller: the fixed-height card is sized to
           fit this space (RootStyle: h-[min(85vh,100dvh-11rem)]), and each page scrolls
@@ -178,10 +204,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       {/* Footer pinned to the bottom of the fixed shell (shrink-0 so it keeps its
           height). It rests at the bottom edge on every route and can never be clipped:
           when a short viewport can't fit the card, the column above scrolls under this
-          footer rather than pushing it off-screen or forcing a document scroll. */}
-      <div className="relative z-20 shrink-0">
-        <Footer />
-      </div>
+          footer rather than pushing it off-screen or forcing a document scroll. Gated on
+          `mounted` so it hydrates in after the server-rendered docs content. */}
+      {mounted && (
+        <div className="relative z-20 shrink-0">
+          <Footer />
+        </div>
+      )}
       {/* Persistent binder dock: app-shell chrome mounted once, so the Tutorial /
           Activity / Messages tabs are present on EVERY route and navigation never
           drops them (their badges stay live across routes because they read global
@@ -193,26 +222,30 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           Desktop/tablet only (md+): the centered 360px card leaves no gutter on
           phones, so the tab would sit over the card edge — the mobile dock below
           takes over there. */}
-      <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
-        <BridgeStepsRail />
-        <ActivityDrawer />
-        <NotificationsDrawer />
-        {/* Only surface the Support tab once the Iris widget is actually
-            openable; until then the native bubble is the working entry point and
-            a tab that can't open anything would be dead. See shield.human.tech#86. */}
-        {SUPPORT_TAB_ENABLED && hideNativeBubble && <SupportTab />}
-      </div>
+      {mounted && (
+        <div className="pointer-events-none fixed right-0 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-end gap-2 md:flex">
+          <BridgeStepsRail />
+          <ActivityDrawer />
+          <NotificationsDrawer />
+          {/* Only surface the Support tab once the Iris widget is actually
+              openable; until then the native bubble is the working entry point and
+              a tab that can't open anything would be dead. See shield.human.tech#86. */}
+          {SUPPORT_TAB_ENABLED && hideNativeBubble && <SupportTab />}
+        </div>
+      )}
       {/* Below md the centered card leaves no right gutter, so the right-edge
           binder tabs would sit off-screen (#243). Relocate them to a compact,
           tappable dock in the bottom-LEFT corner, clear of the bottom-right
           support chat bubble. Each tab keeps its icon + badge and opens its
           panel as a bottom-anchored sheet. */}
-      <div className="pointer-events-none fixed bottom-4 left-4 z-40 flex items-end gap-2 md:hidden">
-        <BridgeStepsRail variant="dock" />
-        <ActivityDrawer variant="dock" />
-        <NotificationsDrawer variant="dock" />
-        {SUPPORT_TAB_ENABLED && hideNativeBubble && <SupportTab variant="dock" />}
-      </div>
+      {mounted && (
+        <div className="pointer-events-none fixed bottom-4 left-4 z-40 flex items-end gap-2 md:hidden">
+          <BridgeStepsRail variant="dock" />
+          <ActivityDrawer variant="dock" />
+          <NotificationsDrawer variant="dock" />
+          {SUPPORT_TAB_ENABLED && hideNativeBubble && <SupportTab variant="dock" />}
+        </div>
+      )}
       {/* See shield.human.tech#86 — hide the native Iris floating bubble ONLY once
           it's programmatically openable, so the Support tab replaces it without ever
           leaving support unreachable. Until then the native launcher stays visible. */}
@@ -229,7 +262,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           }}
         />
       )}
-      <HowItWorksModal />
+      {mounted && <HowItWorksModal />}
+      {/* Iris chat widget loader — client-side; re-homed out of the (now server) root
+          layout. Self-guards to the top frame and single-load, so rendering it here on
+          every route matches the original always-load behaviour. */}
+      <IrisWidget />
     </div>
   )
 }

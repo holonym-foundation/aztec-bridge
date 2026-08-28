@@ -56,25 +56,39 @@ function InitializePostHog() {
   return null
 }
 
-function BridgeProvider({ children }: { children: ReactNode }) {
+function BridgeProvider({ children, enabled }: { children: ReactNode; enabled: boolean }) {
+  // `enabled` is false during server render / before mount: the SDK resolves its domain
+  // from window.location, so building it on the server throws. Children (incl. the
+  // server-rendered docs) still render on the server; the wallet UI that reads the
+  // bridge is itself client-gated, so it never sees the null server value.
   // apiUrl: '' uses same-origin (relative URLs) since this app hosts the API routes.
   // External SDK consumers don't need to set this — it defaults to https://shield.human.tech
-  const bridge = useBridgeInstance({
-    // Pin the SDK to the same deployment the frontend resolves, so the tx path never
-    // falls back to the SDK bundle's default activeDeploymentId.
-    deployment: DEPLOYMENT_ID,
-    apiUrl: '',
-    l1RpcUrl: L1_RPC_URL ?? '',
-    // Override so the SDK uses the env node URL (carries the API key) instead of the
-    // git-committed deployments.json nodeUrl — keeps the key out of version control.
-    l2NodeUrl: L2_NODE_URL,
-  })
+  const bridge = useBridgeInstance(
+    {
+      // Pin the SDK to the same deployment the frontend resolves, so the tx path never
+      // falls back to the SDK bundle's default activeDeploymentId.
+      deployment: DEPLOYMENT_ID,
+      apiUrl: '',
+      l1RpcUrl: L1_RPC_URL ?? '',
+      // Override so the SDK uses the env node URL (carries the API key) instead of the
+      // git-committed deployments.json nodeUrl — keeps the key out of version control.
+      l2NodeUrl: L2_NODE_URL,
+    },
+    enabled,
+  )
   return (
     <BridgeContext.Provider value={bridge}>{children}</BridgeContext.Provider>
   )
 }
 
 export function Providers({ children }: { children: ReactNode }) {
+  // Gate client-only wallet init to after hydration so the tree can server-render the
+  // /docs content without touching browser-only wallet APIs. See BridgeProvider / AuthSync.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   // Create QueryClient in component to ensure it's created on the client side
   const [queryClient] = useState(
     () =>
@@ -111,12 +125,14 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <>
       <QueryClientProvider client={queryClient}>
-        <BridgeProvider>
+        <BridgeProvider enabled={mounted}>
           <InitializeWaapWallet />
           <InitializeAztecWallet />
           <InitializeDatadog />
           <InitializePostHog />
-          <AuthSync />
+          {/* AuthSync reads the bridge via useBridge(), which throws on the null server
+              value — render it only after mount, once the bridge exists. */}
+          {mounted && <AuthSync />}
 
           {children}
         </BridgeProvider>

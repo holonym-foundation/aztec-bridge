@@ -3,8 +3,9 @@ import DocsLayout, { Callout, Code, P, UL, Table, Th, Td, type DocsSection } fro
 import CodeBlock from '@/components/CodeBlock'
 
 export const metadata = {
-  title: 'Developer Guide · Aztec Bridge Docs',
+  title: 'Developer Guide · Shield',
   description: 'Integrate the @human.tech/clean.sdk into your dapp — API reference and examples.',
+  alternates: { canonical: 'https://support.shield.human.tech/developers' },
 }
 
 const sections: DocsSection[] = [

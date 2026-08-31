@@ -13,6 +13,29 @@ const nextConfig: NextConfig = {
   // Barretenberg WASM) works on localhost without these headers. For
   // production, a different strategy is needed (e.g. service worker proxy
   // or isolating WASM in a cross-origin-isolated iframe).
+  // The in-app /docs pages are retired. Shield docs now live on the single
+  // Nextra subdomain, support.shield.human.tech (Users / Developers / Contracts).
+  // These permanent redirects send the old in-app routes to their subdomain
+  // equivalents. See holonym-foundation/internal-docs#1764.
+  async redirects() {
+    return [
+      {
+        source: '/docs',
+        destination: 'https://support.shield.human.tech/',
+        permanent: true,
+      },
+      {
+        source: '/docs/users',
+        destination: 'https://support.shield.human.tech/getting-started',
+        permanent: true,
+      },
+      {
+        source: '/docs/developers',
+        destination: 'https://support.shield.human.tech/developers',
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {
